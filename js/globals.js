@@ -37,6 +37,7 @@ var dom = {
     btnAddImg: document.getElementById("btnAddImg"),
     addImgInput: document.getElementById("addImgInput"),
     btnSave: document.getElementById("btnSave"),
+    btnClear: document.getElementById("btnClear"),
     btnZoomIn: document.getElementById("btnZoomIn"),
     btnZoomOut: document.getElementById("btnZoomOut"),
     zoomText: document.getElementById("zoomText"),

@@ -228,3 +228,23 @@ function saveFMA() {
         }
     }, 100);
 }
+function resetProject() {
+    if (!confirm("모든 데이터를 지우고 초기화할까요? 이 작업은 되돌릴 수 없습니다.")) return;
+
+    images = [];
+    currentIndex = 0;
+    deletedImages = [];
+
+    renderGallery();
+    renderFavorites();
+
+    if (dom.imageCount) dom.imageCount.innerText = "Images: 0";
+    if (dom.placeholder) dom.placeholder.style.display = "block";
+    if (dom.previewContainer) dom.previewContainer.innerHTML = "";
+    if (dom.previewMeta) dom.previewMeta.style.display = "none";
+    if (dom.zoomInfo) dom.zoomInfo.style.display = "none";
+    if (dom.pageText) dom.pageText.innerText = "0 / 0";
+
+    saveCurrentImagesToDB();
+    alert("초기화되었습니다.");
+}

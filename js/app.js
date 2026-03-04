@@ -36,6 +36,7 @@ function setupEventListeners() {
     dom.btnAddImg.onclick = () => dom.addImgInput.click();
     dom.addImgInput.onchange = (e) => handleAddImages(Array.from(e.target.files));
     dom.btnSave.onclick = saveFMA;
+    dom.btnClear.onclick = resetProject;
     dom.btnZip.onclick = downloadAllAsZIP;
     dom.btnRestoreRemove.onclick = restoreLastDeleted;
     dom.btnRestore.onclick = restoreLastSession;
