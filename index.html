@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FMA Viewer Ultra</title>
+
+    <!-- Project Styles -->
+    <link rel="stylesheet" href="css/styles.css">
+
+    <!-- JSZip CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+
+<body>
+
+    <header>
+        <button id="btnOpen">Open FMA</button>
+        <button id="btnSave" style="background: #252a36; color: #00d1ff; border-color: rgba(0, 209, 255, 0.3);">Save
+            FMA</button>
+        <button id="btnAddImg" style="background: #2e354a; color: #a5ff8a; border-color: rgba(165, 255, 138, 0.3);">Add
+            Image</button>
+        <input type="file" id="addImgInput" accept="image/*" multiple style="display:none">
+
+        <!-- Restoration & Export -->
+        <button id="btnRestore" style="display:none; background: #2e354a; color: #00d1ff;">Restore Last</button>
+        <button id="btnZip">Download ZIP</button>
+
+        <!-- Sorting -->
+        <select id="sortSelect"
+            style="background:#252a36; color:#fff; border:1px solid rgba(255,255,255,.12); border-radius:10px; padding:7px; font-size:12px; cursor:pointer;">
+            <option value="group">Sort: Group</option>
+            <option value="date">Sort: Date</option>
+            <option value="size">Sort: Size</option>
+        </select>
+
+        <button id="btnToggleFavs">★ Favorites</button>
+
+        <!-- Layout Controls -->
+        <div
+            style="display:flex; gap:5px; margin-left:10px; border-left:1px solid #333; padding-left:10px; align-items:center;">
+            <span style="font-size:12px; opacity:0.6; margin-right:5px;">Grid:</span>
+            <button class="btnGrid" data-cols="2">2</button>
+            <button class="btnGrid" data-cols="3">3</button>
+            <button class="btnGrid" data-cols="4">4</button>
+
+            <div style="width:1px; height:20px; background:#333; margin:0 5px;"></div>
+
+            <button id="btnOrientationTop" style="min-width:70px;">Dir: Horz</button>
+
+            <div style="display:flex; gap:2px; background:rgba(255,255,255,0.05); padding:2px; border-radius:8px;">
+                <button id="btnModeSingle" style="padding:4px 8px; font-size:11px;">Single</button>
+                <button id="btnModeTwo" style="padding:4px 8px; font-size:11px;">Two</button>
+            </div>
+
+            <!-- Navigation Step (1 or 2) -->
+            <div id="stepOption"
+                style="display:flex; gap:2px; background:rgba(255,255,255,0.05); padding:2px; border-radius:8px; margin-left:5px;">
+                <span style="font-size:10px; opacity:0.4; align-self:center; margin:0 4px;">Skip:</span>
+                <button id="btnStep1" style="padding:4px 8px; font-size:11px;">1</button>
+                <button id="btnStep2" style="padding:4px 8px; font-size:11px;">2</button>
+            </div>
+
+            <!-- Header Navigation (<< N >>) -->
+            <div id="navMenu"
+                style="display:flex; align-items:center; gap:5px; background:#252a36; border-radius:10px; padding:2px 8px; border:1px solid rgba(255,255,255,.12); margin-left:10px;">
+                <button id="btnPrevMenu"
+                    style="background:transparent; border:none; color:#00d1ff; cursor:pointer; font-size:14px; font-weight:bold; padding:4px;">&lt;&lt;</button>
+                <span id="pageText" style="font-size:11px; min-width:60px; text-align:center; opacity:0.9;">0 / 0</span>
+                <button id="btnNextMenu"
+                    style="background:transparent; border:none; color:#00d1ff; cursor:pointer; font-size:14px; font-weight:bold; padding:4px;">&gt;&gt;</button>
+            </div>
+
+            <!-- Zoom Controls -->
+            <div
+                style="display:flex; align-items:center; background:#252a36; border-radius:10px; padding:2px; padding-right:8px; border:1px solid rgba(255,255,255,.12); margin-left:10px;">
+                <button id="btnZoomOut"
+                    style="background:transparent; border:none; padding:5px 10px; font-size:16px;">-</button>
+                <span id="zoomText"
+                    style="font-size:12px; min-width:35px; text-align:center; font-weight:bold;">100%</span>
+                <button id="btnZoomIn"
+                    style="background:transparent; border:none; padding:5px 10px; font-size:14px;">+</button>
+            </div>
+        </div>
+
+        <span id="imageCount">Images: 0</span>
+        <button id="btnRestoreRemove"
+            style="margin-left:auto; background: #2e354a; color: #ffca28; border-color: rgba(255, 202, 40, 0.3);">Restore
+            Remove</button>
+    </header>
+
+    <div class="layout">
+        <!-- Gallery Panel -->
+        <div class="left" id="leftPanel">
+            <div class="dropzone" id="dropzone">
+                .fma 파일을 드래그하거나 클릭하여 열기
+                <div class="hint">← → : 이전/다음 | 마우스휠 : 스크롤 | Ctrl+휠 : 확대/축소</div>
+                <input type="file" id="fileInput" accept=".fma,application/json" style="display:none">
+            </div>
+            <div class="dropzone" id="dropzoneImg"
+                style="margin-top:2px; padding:15px; border-style:dashed; background:rgba(165,255,138,0.03); color:#a5ff8a; border-color:rgba(165,255,138,0.2); font-size:12px;">
+                이미지 파일을 드래그하여 프로젝트에 추가
+            </div>
+            <div id="gallery"></div>
+        </div>
+
+        <!-- Resizer Bar -->
+        <div class="resizer" id="resizer"></div>
+
+        <!-- Preview Panel -->
+        <div class="right">
+            <div class="previewWrap">
+                <div class="placeholder" id="placeholder">이미지를 클릭하면 오른쪽에서 크게 표시됩니다</div>
+                <div id="previewContainer">
+                    <img id="preview" alt="preview" draggable="false">
+                    <img id="preview2" alt="preview2" style="display:none;" draggable="false">
+                </div>
+                <div class="zoomInfo" id="zoomInfo"></div>
+                <div class="navButtons">
+                    <button id="btnPrev">◀</button>
+                    <button id="btnNext">▶</button>
+                </div>
+                <div class="previewMeta" id="previewMeta">
+                    <div id="metaDynamicArea"
+                        style="display:flex; flex:1; gap:30px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:10px; margin-bottom:10px;">
+                        <!-- Dynamic Info & Fav/Download buttons for each page -->
+                    </div>
+                    <div class="actions" style="display:flex; gap:8px; justify-content: flex-end;">
+                        <button id="btnFullscreen">Fullscreen</button>
+                        <button id="btnResetZoom">Reset Zoom</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Favorites Sidebar -->
+        <div class="fav-sidebar" id="favSidebar">
+            <h3 style="margin-top:0; font-size:14px; border-bottom:1px solid #333; padding-bottom:10px;">★ Favorites
+            </h3>
+            <div id="favList" class="galleryGrid" style="grid-template-columns: 1fr;"></div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:9999; flex-direction:column; align-items:center; justify-content:center; backdrop-filter:blur(5px);">
+        <div
+            style="width:300px; background:#171a21; padding:30px; border-radius:15px; border:1px solid #333; text-align:center;">
+            <div id="loadingTitle" style="font-size:16px; margin-bottom:20px; color:#00d1ff; font-weight:bold;">
+                Processing...</div>
+            <div
+                style="width:100%; height:10px; background:#0b0d12; border-radius:5px; overflow:hidden; margin-bottom:10px;">
+                <div id="progressBar"
+                    style="width:0%; height:100%; background:linear-gradient(90deg, #00d1ff, #a5ff8a); transition:width 0.1s linear;">
+                </div>
+            </div>
+            <div id="progressPercent" style="font-size:14px; color:#fff; font-family:monospace;">0%</div>
+        </div>
+    </div>
+
+    <!-- Project Scripts (Modularized) -->
+    <script src="js/globals.js"></script>
+    <script src="js/database.js"></script>
+    <script src="js/gallery.js"></script>
+    <script src="js/preview.js"></script>
+    <script src="js/fileHandlers.js"></script>
+    <script src="js/interaction.js"></script>
+    <script src="js/app.js"></script>
+</body>
+
+</html>

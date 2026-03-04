@@ -1,0 +1,350 @@
+/* =======================================================
+   FMA Viewer CSS (Modularized)
+   ======================================================= */
+
+body {
+    margin: 0;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    background: #0f1116;
+    color: #fff;
+    overflow: hidden;
+}
+
+header {
+    height: 50px;
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    background: #171a21;
+    border-bottom: 1px solid #333;
+    gap: 10px;
+}
+
+header button {
+    background: #252a36;
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, .12);
+    border-radius: 10px;
+    padding: 8px 10px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 12px;
+}
+
+header button:hover {
+    border-color: rgba(255, 255, 255, .25);
+}
+
+header button.active {
+    border-color: #555;
+    background: #343b4d;
+    color: #00d1ff;
+}
+
+#imageCount {
+    opacity: .85;
+    font-size: 12px;
+    margin-left: auto;
+}
+
+.layout {
+    display: flex;
+    height: calc(100vh - 50px);
+}
+
+.left {
+    width: 380px;
+    border-right: 1px solid #333;
+    overflow: auto;
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+}
+
+.fav-sidebar {
+    width: 0;
+    border-left: 1px solid #333;
+    background: #171a21;
+    overflow: auto;
+    padding: 0;
+    transition: width 0.3s;
+}
+
+.fav-sidebar.open {
+    width: 250px;
+    padding: 15px;
+}
+
+.right {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #0b0d12;
+    position: relative;
+    overflow: hidden;
+}
+
+.dropzone {
+    border: 2px dashed #555;
+    padding: 18px;
+    text-align: center;
+    border-radius: 12px;
+    margin-bottom: 14px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.dropzone:hover,
+.dropzone.drag-over {
+    border-color: rgba(0, 209, 255, 0.4);
+    background: rgba(0, 209, 255, 0.05);
+}
+
+#navMenu,
+#stepOption {
+    flex-shrink: 0;
+}
+
+
+#dropzoneImg.drag-over {
+    border-color: rgba(165, 255, 138, 0.5) !important;
+    background: rgba(165, 255, 138, 0.1) !important;
+}
+
+.groupTitle {
+    margin-top: 14px;
+    margin-bottom: 6px;
+    font-size: 13px;
+    opacity: .75;
+    font-weight: 700;
+}
+
+.galleryGrid {
+    display: grid;
+    grid-template-columns: repeat(var(--grid-cols, 2), 1fr);
+    gap: 10px;
+}
+
+/* contain: content를 사용하여 렌더링 성능 최적화 */
+.thumb {
+    background: #1a1e26;
+    border-radius: 10px;
+    overflow: hidden;
+    cursor: pointer;
+    border: 1px solid rgba(255, 255, 255, .08);
+    position: relative;
+    contain: content;
+}
+
+.thumb:hover {
+    border-color: rgba(255, 255, 255, .22);
+}
+
+.thumb-overlay {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 40px;
+    background: rgba(0, 0, 0, 0.75);
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    opacity: 0;
+    transition: opacity 0.2s;
+    backdrop-filter: blur(2px);
+}
+
+.thumb:hover .thumb-overlay {
+    opacity: 1;
+}
+
+.overlay-btn {
+    background: rgba(45, 52, 70, 0.9) !important;
+    padding: 5px 8px !important;
+    font-size: 11px !important;
+}
+
+.overlay-btn.delete {
+    color: #ff6b6b !important;
+}
+
+.overlay-btn.fav {
+    color: #ffd700 !important;
+}
+
+.thumb.is-fav {
+    border-color: #ffd700 !important;
+}
+
+.thumb.is-fav::after {
+    content: "★";
+    position: absolute;
+    top: 5px;
+    left: 5px;
+    color: #ffd700;
+    font-size: 14px;
+    text-shadow: 0 0 3px black;
+}
+
+.thumb img {
+    width: 100%;
+    height: 160px;
+    object-fit: cover;
+    display: block;
+    background: #0b0d12;
+    /* content-visibility를 활용한 성능 최적화 */
+}
+
+.placeholder {
+    opacity: .55;
+    font-size: 14px;
+}
+
+.previewWrap {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    /* 가로 모드에서 스크롤 방지 */
+}
+
+#previewContainer {
+    display: flex;
+    flex-direction: row;
+    /* 좌우 배치 강제 */
+    width: 100%;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+}
+
+#preview,
+#preview2 {
+    max-width: 100%;
+    max-height: 95%;
+    transform-origin: center;
+    transition: transform 0.08s;
+    display: none;
+    border-radius: 14px;
+    box-shadow: 0 0 50px rgba(0, 0, 0, 0.65);
+    background: #0b0d12;
+    flex-shrink: 0;
+    margin: 10px 0;
+}
+
+.dual-view #preview,
+.dual-view #preview2 {
+    max-width: 48%;
+}
+
+/* 세로 모드 스타일 */
+.vertical-mode .previewWrap {
+    display: block !important;
+    overflow-y: auto !important;
+}
+
+.vertical-mode #previewContainer {
+    flex-direction: column !important;
+    display: flex !important;
+    align-items: center !important;
+    padding: 40px 0;
+    height: auto !important;
+}
+
+.vertical-mode .vert-img {
+    max-width: 90%;
+    display: block;
+    margin-bottom: 40px;
+    border-radius: 14px;
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+    background: #0b0d12;
+}
+
+.navButtons {
+    position: absolute;
+    top: 50%;
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    pointer-events: none;
+    transform: translateY(-50%);
+    padding: 0 10px;
+    box-sizing: border-box;
+}
+
+.navButtons button {
+    pointer-events: auto;
+    font-size: 26px;
+    background: rgba(0, 0, 0, 0.45);
+    border: 1px solid rgba(255, 255, 255, .14);
+    color: #fff;
+    padding: 10px 16px;
+    cursor: pointer;
+    border-radius: 14px;
+}
+
+.zoomInfo {
+    position: absolute;
+    top: 10px;
+    right: 16px;
+    font-size: 12px;
+    opacity: .75;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, .10);
+    padding: 6px 10px;
+    border-radius: 999px;
+    display: none;
+}
+
+.previewMeta {
+    position: absolute;
+    bottom: 16px;
+    left: 16px;
+    right: 16px;
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255, 255, 255, .10);
+    padding: 10px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    display: none;
+}
+
+.previewMeta .path {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    opacity: .9;
+    word-break: break-all;
+    margin-bottom: 8px;
+}
+
+.previewMeta .actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.hint {
+    margin-top: 10px;
+    opacity: .6;
+    font-size: 12px;
+}
+
+.resizer {
+    width: 6px;
+    cursor: col-resize;
+    background: #1b1f28;
+}
+
+.resizer:hover {
+    background: #555;
+}
+
+#preview {
+    cursor: grab;
+}
