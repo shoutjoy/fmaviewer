@@ -211,8 +211,24 @@ header button.active {
     align-items: center;
     justify-content: center;
     overflow: hidden;
-    /* 가로 모드에서 스크롤 방지 */
 }
+
+.previewWrap:fullscreen {
+    background: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* 웹킼/모질라 호환성 */
+.previewWrap:-webkit-full-screen {
+    background: #000;
+}
+
+.previewWrap:-ms-fullscreen {
+    background: #000;
+}
+
 
 #previewContainer {
     display: flex;
