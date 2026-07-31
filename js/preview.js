@@ -2,15 +2,25 @@
    Preview & Display Logic
    ======================================================= */
 
-function showImage(i) {
+async function showImage(i) {
     if (images.length === 0) return;
     if (i < 0) i = 0;
     if (i >= images.length) i = images.length - 1;
     currentIndex = i;
+    if (typeof ensureImageOriginalLoaded === "function") {
+        try {
+            await ensureImageOriginalLoaded(i);
+        } catch (error) {
+            console.error("Lazy original load failed:", error);
+            alert("선택한 이미지 원본을 불러오지 못했습니다: " + error.message);
+        }
+    }
     const displayPosition = getImageDisplayPosition(i);
 
     if (orientation === 'vert') {
         const target = dom.previewContainer.children[displayPosition];
+        const targetMedia = target?.querySelector("img, video");
+        if (targetMedia) targetMedia.src = images[i].src;
         if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
         renderDynamicMeta(i);
         updatePreviewPageText();
@@ -25,6 +35,9 @@ function showImage(i) {
 
     const secondIndex = getSecondVisibleImageIndex(i);
     if (secondIndex >= 0) {
+        if (typeof ensureImageOriginalLoaded === "function") {
+            await ensureImageOriginalLoaded(secondIndex);
+        }
         const secondSlot = createPreviewImageSlot(secondIndex, "preview2");
         dom.previewContainer.appendChild(secondSlot);
     }
@@ -41,22 +54,30 @@ function createPreviewImageSlot(index, imageId) {
     const slot = document.createElement("div");
     slot.className = "preview-image-slot";
 
-    const image = document.createElement("img");
-    image.id = imageId;
-    image.alt = images[index].metadata?.title || `preview ${index + 1}`;
-    image.draggable = false;
-    image.src = images[index].src;
-    image.style.display = "block";
+    const item = images[index];
+    const media = document.createElement(isVideoMedia(item) ? "video" : "img");
+    media.id = imageId;
+    media.draggable = false;
+    media.src = item.src;
+    media.style.display = "block";
+    if (media.tagName === "VIDEO") {
+        media.controls = true;
+        media.playsInline = true;
+        media.preload = "metadata";
+        media.setAttribute("aria-label", item.metadata?.title || `video ${index + 1}`);
+    } else {
+        media.alt = item.metadata?.title || `preview ${index + 1}`;
+    }
 
-    slot.appendChild(image);
-    slot.appendChild(createImageMetadataCard(index, image));
+    slot.appendChild(media);
+    slot.appendChild(createImageMetadataCard(index, media));
     return slot;
 }
 
 function getSecondVisibleImageIndex(firstIndex) {
     if (viewMode !== 2) return -1;
     const nextPosition = getImageDisplayPosition(firstIndex) + 1;
-    return nextPosition < images.length ? getImageIndexAtDisplayPosition(nextPosition) : -1;
+    return nextPosition < getActiveImageOrder().length ? getImageIndexAtDisplayPosition(nextPosition) : -1;
 }
 
 function updatePreviewPageText() {
@@ -65,7 +86,10 @@ function updatePreviewPageText() {
         dom.pageText.innerText = "0 / 0";
         return;
     }
-    dom.pageText.innerText = `${getImageDisplayPosition(currentIndex) + 1} / ${images.length}`;
+    const order = getActiveImageOrder();
+    dom.pageText.innerText = order.length
+        ? `${getImageDisplayPosition(currentIndex) + 1} / ${order.length}`
+        : "0 / 0";
 }
 
 function renderDynamicMeta(i) {
@@ -79,19 +103,10 @@ function renderDynamicMeta(i) {
         container.style.flex = "1";
         container.style.minWidth = "0";
 
-        const pathDiv = document.createElement("div");
-        pathDiv.className = "path";
-        pathDiv.style.fontSize = "11px";
-        pathDiv.style.marginBottom = "8px";
-        pathDiv.style.opacity = "0.8";
-        pathDiv.style.wordBreak = "break-all";
-        pathDiv.innerText = item.path;
-        container.appendChild(pathDiv);
-
         const actionsDiv = document.createElement("div");
         actionsDiv.className = "actions meta-item-actions";
         actionsDiv.style.display = "flex";
-        actionsDiv.style.gap = "8px";
+        actionsDiv.style.gap = "5px";
 
         const favBtn = document.createElement("button");
         favBtn.innerText = item.isFav ? "★ Favorited" : "☆ Favorite";
@@ -103,12 +118,13 @@ function renderDynamicMeta(i) {
         };
 
         const downBtn = document.createElement("button");
-        downBtn.innerText = "Download Image";
+        const videoItem = isVideoMedia(item);
+        downBtn.innerText = videoItem ? "Download Video" : "Download Image";
         downBtn.className = "meta-action-button meta-download-button";
         downBtn.onclick = () => {
             const a = document.createElement("a");
             a.href = item.src;
-            a.download = `image_${idx}.png`;
+            a.download = videoItem ? `video_${idx}.${getMediaFileExtension(item)}` : `image_${idx}.${getMediaFileExtension(item)}`;
             a.click();
         };
 
@@ -134,11 +150,13 @@ function renderDynamicMeta(i) {
 
         actionsDiv.appendChild(favBtn);
         actionsDiv.appendChild(downBtn);
-        actionsDiv.appendChild(editBtn);
-        actionsDiv.appendChild(cropBtn);
-        actionsDiv.appendChild(bgRemoveBtn);
+        if (!videoItem) {
+            actionsDiv.appendChild(editBtn);
+            actionsDiv.appendChild(cropBtn);
+            actionsDiv.appendChild(bgRemoveBtn);
+        }
 
-        if (typeof isAiBackgroundRemoveEnabled === "function" && isAiBackgroundRemoveEnabled()) {
+        if (!videoItem && typeof isAiBackgroundRemoveEnabled === "function" && isAiBackgroundRemoveEnabled()) {
             const aiBgRemoveBtn = document.createElement("button");
             aiBgRemoveBtn.innerText = "AI BG Remove";
             aiBgRemoveBtn.className = "meta-action-button meta-ai-bg-remove-button";
@@ -146,7 +164,7 @@ function renderDynamicMeta(i) {
             actionsDiv.appendChild(aiBgRemoveBtn);
         }
 
-        actionsDiv.appendChild(upscaleBtn);
+        if (!videoItem) actionsDiv.appendChild(upscaleBtn);
 
         const aiJenaBtn = document.createElement("button");
         aiJenaBtn.className = "meta-action-button ai-jena-header-button ai-jena-image-button";
@@ -161,9 +179,9 @@ function renderDynamicMeta(i) {
         aiJenaBtn.title = aiJenaReady
             ? "이 이미지로 AI Jena 열기"
             : "Settings에서 AI Studio 키를 설정하세요.";
-        actionsDiv.appendChild(aiJenaBtn);
+        if (!videoItem) actionsDiv.appendChild(aiJenaBtn);
 
-        if (typeof isAiUpscaleEnabled === "function" && isAiUpscaleEnabled()) {
+        if (!videoItem && typeof isAiUpscaleEnabled === "function" && isAiUpscaleEnabled()) {
             const aiUpscaleBtn = document.createElement("button");
             aiUpscaleBtn.innerText = "AI Upscale";
             aiUpscaleBtn.className = "meta-action-button meta-ai-upscale-button";
@@ -216,15 +234,19 @@ function renderVerticalPreview() {
         const img = images[idx];
         const item = document.createElement("div");
         item.className = "vertical-preview-item";
-        const el = document.createElement('img');
-        el.src = img.src;
+        const el = document.createElement(isVideoMedia(img) ? 'video' : 'img');
+        el.src = img.thumbnailSrc || img.src;
         if (idx === currentIndex) el.id = "preview";
         el.className = "vert-img";
         el.setAttribute('draggable', 'false');
-        el.onclick = () => {
-            currentIndex = idx;
-            dom.metaDynamicArea && renderDynamicMeta(idx);
-            updatePreviewPageText();
+        if (el.tagName === "VIDEO") {
+            el.controls = true;
+            el.playsInline = true;
+            el.preload = "metadata";
+        }
+        el.onclick = async () => {
+            await showImage(idx);
+            if (orientation === "vert") renderVerticalPreview();
         };
         item.appendChild(el);
         item.appendChild(createImageMetadataCard(idx, el));
@@ -238,4 +260,10 @@ function renderVerticalPreview() {
         const target = document.getElementById("preview");
         if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 100);
+}
+
+function getMediaFileExtension(item) {
+    const subtype = String(item?.mimeType || "").split("/")[1]?.split(";")[0];
+    if (subtype) return subtype.replace("quicktime", "mov").replace("jpeg", "jpg");
+    return isVideoMedia(item) ? "mp4" : "png";
 }

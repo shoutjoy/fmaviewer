@@ -23,6 +23,8 @@ var maskEditorState = {
     lastPoint: null,
     panStart: null,
     polygonPoints: [],
+    polygonHoverPoint: null,
+    polygonNearStart: false,
     lastPolygonPoints: [],
     hasSelection: false,
     originalCanvas: null,
@@ -89,6 +91,11 @@ function initBackgroundMaskEditor() {
     dom.maskEditorStage.addEventListener("pointercancel", handleMaskEditorPointerUp);
     dom.maskEditorStage.addEventListener("pointerleave", event => {
         dom.maskEditorCursor.style.display = "none";
+        if (maskEditorState.tool === "polygon") {
+            maskEditorState.polygonHoverPoint = null;
+            maskEditorState.polygonNearStart = false;
+            renderMaskPolygonGuide();
+        }
         if (maskEditorState.drawing || maskEditorState.textInteraction) {
             handleMaskEditorPointerUp(event);
         }
@@ -127,7 +134,11 @@ async function openBackgroundMaskEditor(options) {
     maskEditorState.height = height;
     maskEditorState.onApply = options.onApply || null;
     maskEditorState.onCancel = options.onCancel || null;
+    dom.btnMaskApply.innerText = options.applyLabel || "갤러리에 추가";
+    dom.btnMaskSkip.innerText = options.skipLabel || "보정 없이 사용";
     maskEditorState.polygonPoints = [];
+    maskEditorState.polygonHoverPoint = null;
+    maskEditorState.polygonNearStart = false;
     maskEditorState.lastPolygonPoints = [];
     maskEditorState.hasSelection = false;
     maskEditorState.undoHistory = [];
@@ -181,6 +192,8 @@ function hideBackgroundMaskEditor() {
     maskEditorState.undoHistory = [];
     updateMaskUndoButton();
     dom.bgMaskEditorModal.style.display = "none";
+    dom.btnMaskApply.innerText = "갤러리에 추가";
+    dom.btnMaskSkip.innerText = "보정 없이 사용";
     dom.maskEditorCursor.style.display = "none";
     if (document.fullscreenElement === dom.bgMaskEditorDialog) {
         document.exitFullscreen().catch(() => {});
@@ -214,6 +227,8 @@ function setMaskEditorTool(tool) {
     const allowed = ["brush", "paint-select", "polygon", "text"];
     maskEditorState.tool = allowed.includes(tool) ? tool : "brush";
     maskEditorState.polygonPoints = [];
+    maskEditorState.polygonHoverPoint = null;
+    maskEditorState.polygonNearStart = false;
     clearMaskGuideCanvas();
 
     document.querySelectorAll(".mask-tool").forEach(button => {
@@ -345,7 +360,15 @@ function handleMaskEditorPointerDown(event) {
     }
 
     if (maskEditorState.tool === "polygon") {
+        const first = maskEditorState.polygonPoints[0];
+        const closeDistance = 14 / Math.max(.001, getMaskEditorScale());
+        if (first && maskEditorState.polygonPoints.length >= 3 &&
+            Math.hypot(point.x - first.x, point.y - first.y) <= closeDistance) {
+            finalizeMaskPolygonSelection();
+            return;
+        }
         maskEditorState.polygonPoints.push({ x: point.x, y: point.y });
+        maskEditorState.polygonHoverPoint = point;
         renderMaskPolygonGuide();
         updateMaskUndoButton();
         if (event.detail >= 2 && maskEditorState.polygonPoints.length >= 3) {
@@ -379,6 +402,23 @@ function handleMaskEditorPointerMove(event) {
     }
     if (maskEditorState.tool === "text") {
         continueMaskTextInteraction(event);
+        return;
+    }
+    if (maskEditorState.tool === "polygon") {
+        const point = getMaskEditorPoint(event);
+        maskEditorState.polygonHoverPoint = point.inside ? point : null;
+        const first = maskEditorState.polygonPoints[0];
+        const closeDistance = 14 / Math.max(.001, getMaskEditorScale());
+        maskEditorState.polygonNearStart = Boolean(
+            first && point.inside && maskEditorState.polygonPoints.length >= 3 &&
+            Math.hypot(point.x - first.x, point.y - first.y) <= closeDistance
+        );
+        renderMaskPolygonGuide();
+        if (maskEditorState.polygonNearStart) {
+            updateMaskEditorStatus("시작점에 연결됩니다 · 클릭하면 다각형 선택이 완성됩니다.");
+        } else if (maskEditorState.polygonPoints.length) {
+            updateMaskEditorStatus(`${maskEditorState.polygonPoints.length + 1}번 점 위치 · 선이 현재 위치까지 연결됩니다.`);
+        }
         return;
     }
     if (!maskEditorState.drawing) return;
@@ -517,6 +557,8 @@ function finalizeMaskPolygonSelection() {
     paintMaskPolygonSelection(points);
     maskEditorState.lastPolygonPoints = points;
     maskEditorState.polygonPoints = [];
+    maskEditorState.polygonHoverPoint = null;
+    maskEditorState.polygonNearStart = false;
     clearMaskGuideCanvas();
     updateMaskUndoButton();
     updateMaskEditorStatus("다각형 선택 완료 · 선택영역 적용을 누르세요.");
@@ -655,21 +697,65 @@ function renderMaskPolygonGuide() {
 
     const context = dom.maskGuideCanvas.getContext("2d");
     const visualScale = Math.max(.001, getMaskEditorScale());
-    context.strokeStyle = maskEditorState.action === "erase" ? "#ff5d72" : "#77f5d1";
-    context.fillStyle = context.strokeStyle;
+    const color = maskEditorState.action === "erase" ? "#ff5d72" : "#77f5d1";
+    context.strokeStyle = color;
+    context.fillStyle = color;
     context.lineWidth = 2 / visualScale;
     context.setLineDash([7 / visualScale, 5 / visualScale]);
     context.beginPath();
     context.moveTo(maskEditorState.polygonPoints[0].x, maskEditorState.polygonPoints[0].y);
     maskEditorState.polygonPoints.slice(1).forEach(point => context.lineTo(point.x, point.y));
+    if (maskEditorState.polygonHoverPoint) {
+        const target = maskEditorState.polygonNearStart
+            ? maskEditorState.polygonPoints[0]
+            : maskEditorState.polygonHoverPoint;
+        context.lineTo(target.x, target.y);
+    }
     context.stroke();
     context.setLineDash([]);
 
-    maskEditorState.polygonPoints.forEach(point => {
+    if (maskEditorState.polygonPoints.length >= 3) {
+        context.save();
+        context.fillStyle = maskEditorState.action === "erase"
+            ? "rgba(255, 67, 100, .18)"
+            : "rgba(82, 241, 186, .18)";
         context.beginPath();
-        context.arc(point.x, point.y, 4 / visualScale, 0, Math.PI * 2);
+        context.moveTo(maskEditorState.polygonPoints[0].x, maskEditorState.polygonPoints[0].y);
+        maskEditorState.polygonPoints.slice(1).forEach(point => context.lineTo(point.x, point.y));
+        if (maskEditorState.polygonNearStart) context.closePath();
         context.fill();
+        context.restore();
+    }
+
+    maskEditorState.polygonPoints.forEach((point, index) => {
+        context.beginPath();
+        context.arc(point.x, point.y,
+            (index === 0 && maskEditorState.polygonNearStart ? 8 : 5) / visualScale,
+            0, Math.PI * 2);
+        context.fill();
+        context.save();
+        context.font = `bold ${11 / visualScale}px sans-serif`;
+        context.textAlign = "center";
+        context.textBaseline = "middle";
+        context.lineWidth = 3 / visualScale;
+        context.strokeStyle = "rgba(5, 9, 14, .95)";
+        context.fillStyle = "#ffffff";
+        const labelY = point.y - 13 / visualScale;
+        context.strokeText(String(index + 1), point.x, labelY);
+        context.fillText(String(index + 1), point.x, labelY);
+        context.restore();
     });
+
+    if (maskEditorState.polygonNearStart) {
+        const first = maskEditorState.polygonPoints[0];
+        context.save();
+        context.strokeStyle = "#fff36f";
+        context.lineWidth = 3 / visualScale;
+        context.beginPath();
+        context.arc(first.x, first.y, 13 / visualScale, 0, Math.PI * 2);
+        context.stroke();
+        context.restore();
+    }
 }
 
 function clearMaskGuideCanvas() {
@@ -683,6 +769,8 @@ function clearMaskSelection() {
         .clearRect(0, 0, maskEditorState.width, maskEditorState.height);
     maskEditorState.hasSelection = false;
     maskEditorState.polygonPoints = [];
+    maskEditorState.polygonHoverPoint = null;
+    maskEditorState.polygonNearStart = false;
     clearMaskGuideCanvas();
     updateMaskUndoButton();
     updateMaskEditorStatus();

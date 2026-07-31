@@ -3,6 +3,8 @@
    ======================================================= */
 
 var metadataEditorIndex = -1;
+var metadataEditorWindow = null;
+var metadataPopupPayload = null;
 
 function initImageMetadataFeature() {
     if (!dom.imageMetadataModal) return;
@@ -13,6 +15,7 @@ function initImageMetadataFeature() {
     dom.imageMetadataModal.addEventListener("mousedown", event => {
         if (event.target === dom.imageMetadataModal) closeImageMetadataEditor();
     });
+    window.addEventListener("message", handleMetadataWindowMessage);
 }
 
 function createImageMetadataCard(index, imageElement) {
@@ -44,6 +47,14 @@ function createImageMetadataCard(index, imageElement) {
     };
     if (imageElement) {
         imageElement.addEventListener("load", refresh, { once: true });
+        imageElement.addEventListener("loadedmetadata", () => {
+            if (imageElement.videoWidth) {
+                item.width = imageElement.videoWidth;
+                item.height = imageElement.videoHeight;
+                item.duration = Number(imageElement.duration) || item.duration || 0;
+            }
+            renderImageMetadataSummary(content, item);
+        }, { once: true });
     }
     refresh();
     return card;
@@ -63,6 +74,9 @@ function renderImageMetadataSummary(container, item) {
         ["생성일", formatMetadataDate(item.date)],
         ["그룹", item.group || "미지정"]
     ];
+    if (isVideoMedia(item) && Number(item.duration) > 0) {
+        values.splice(4, 0, ["재생시간", `${Number(item.duration).toFixed(1)}초`]);
+    }
 
     values.forEach(([label, value]) => {
         const chip = document.createElement("span");
@@ -92,6 +106,19 @@ async function openImageMetadataEditor(index) {
     if (!item) return;
     metadataEditorIndex = index;
 
+    // Open synchronously from the click handler so browsers do not block the
+    // movable editor while image dimensions/EXIF are being read asynchronously.
+    const popup = window.open(
+        "metadata_window.html?v=20260731-1",
+        "fmaMetadataEditor",
+        "popup=yes,width=980,height=820,resizable=yes,scrollbars=yes"
+    );
+    if (popup) {
+        metadataEditorWindow = popup;
+        metadataPopupPayload = buildMetadataPopupPayload(item, index);
+        popup.focus();
+    }
+
     if (!item.width || !item.height) {
         try {
             const image = await loadUpscaleImage(item.src);
@@ -102,6 +129,15 @@ async function openImageMetadataEditor(index) {
         }
     }
 
+    if (popup) {
+        metadataPopupPayload = buildMetadataPopupPayload(item, index);
+        await loadEmbeddedImageMetadata(item);
+        metadataPopupPayload = buildMetadataPopupPayload(item, index);
+        sendMetadataPopupPayload();
+        return;
+    }
+
+    // Pop-up blocking fallback: retain the in-page editor.
     const metadata = item.metadata || {};
     dom.metadataPath.value = item.path || "";
     dom.metadataGroup.value = item.group || "";
@@ -124,6 +160,69 @@ async function openImageMetadataEditor(index) {
     dom.imageMetadataModal.style.display = "flex";
     dom.metadataTitleField.focus();
     await loadEmbeddedImageMetadata(item);
+}
+
+function buildMetadataPopupPayload(item, index) {
+    const width = Number(item.width) || 0;
+    const height = Number(item.height) || 0;
+    return {
+        index,
+        token: item.dbRecordId || `${item.path || "image"}|${item.date || 0}`,
+        item: {
+            path: item.path || "",
+            group: item.group || "",
+            createdAt: toMetadataDateTimeLocal(item.date),
+            metadata: typeof structuredClone === "function"
+                ? structuredClone(item.metadata || {})
+                : JSON.parse(JSON.stringify(item.metadata || {}))
+        },
+        technical: [
+            ["파일 형식", item.mimeType || getImageTypeLabel(item)],
+            ["파일 용량", formatMetadataBytes(item.size || estimateDataUrlBytes(item.src))],
+            ["픽셀 크기", width && height ? `${width} × ${height}px` : "알 수 없음"],
+            ["화면 비율", width && height ? formatMetadataRatio(width, height) : "알 수 없음"],
+            ["즐겨찾기", item.isFav ? "예" : "아니오"],
+            ["처리 이력", getImageProcessingLabel(item)]
+        ],
+        embeddedText: item.embeddedMetadata && Object.keys(item.embeddedMetadata).length
+            ? JSON.stringify(item.embeddedMetadata, null, 2)
+            : "이 이미지에 읽을 수 있는 EXIF · XMP · IPTC 정보가 없습니다."
+    };
+}
+
+function sendMetadataPopupPayload() {
+    if (!metadataEditorWindow || metadataEditorWindow.closed || !metadataPopupPayload) return;
+    metadataEditorWindow.postMessage(
+        { type: "fma-metadata-data", payload: metadataPopupPayload },
+        window.location.origin === "null" ? "*" : window.location.origin
+    );
+}
+
+function handleMetadataWindowMessage(event) {
+    if (event.source !== metadataEditorWindow) return;
+    const data = event.data || {};
+    if (data.type === "fma-metadata-ready") {
+        sendMetadataPopupPayload();
+        return;
+    }
+    if (data.type !== "fma-metadata-save") return;
+    let index = images.findIndex(item =>
+        (item.dbRecordId || `${item.path || "image"}|${item.date || 0}`) === data.token
+    );
+    if (index < 0) index = Number(data.index);
+    const item = images[index];
+    if (!item) return;
+    const values = data.values || {};
+    const parsedDate = Date.parse(values.createdAt);
+    item.path = values.path || item.path;
+    item.group = values.group || "added";
+    if (Number.isFinite(parsedDate)) item.date = parsedDate;
+    item.modifiedAt = Date.now();
+    item.metadata = values.metadata || {};
+    renderGallery();
+    renderFavorites();
+    saveCurrentImagesToDB();
+    showImage(index);
 }
 
 function closeImageMetadataEditor() {

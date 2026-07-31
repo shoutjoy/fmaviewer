@@ -14,7 +14,9 @@ var cropState = {
     moveOffsetY: 0,
     selectionCanMove: false,
     aspectRatio: null,
-    previewSrc: ""
+    previewSrc: "",
+    layerApplyCallback: null,
+    layerMode: false
 };
 
 function initCropEditor() {
@@ -75,10 +77,38 @@ function initCropEditor() {
 function openCropEditor(index) {
     const item = images[index];
     if (!item || !dom.cropModal) return;
+    cropState.layerApplyCallback = null;
+    setCropEditorLayerMode(false);
+    openCropEditorFromSource(item.src, index);
+}
 
+function openCropEditorForLayer(src, onApply) {
+    if (!src || typeof onApply !== "function" || !dom.cropModal) return;
+    cropState.layerApplyCallback = onApply;
+    setCropEditorLayerMode(true);
+    openCropEditorFromSource(src, -1);
+}
+
+function setCropEditorLayerMode(enabled) {
+    cropState.layerMode = Boolean(enabled);
+    dom.cropModal?.classList.toggle("editor-child-workspace", cropState.layerMode);
+    if (dom.btnCropCreate) {
+        dom.btnCropCreate.innerText = cropState.layerMode
+            ? "이미지 편집으로 보내기"
+            : "Crop 적용";
+    }
+    const note = dom.cropModal?.querySelector(".crop-note");
+    if (note) {
+        note.innerText = cropState.layerMode
+            ? "Crop 결과는 갤러리가 아닌 현재 이미지 편집 레이어에 적용됩니다."
+            : "적용 후 원본 대체 또는 새 이미지 생성을 선택할 수 있습니다.";
+    }
+}
+
+function openCropEditorFromSource(src, imageIndex) {
     const sourceImage = new Image();
     sourceImage.onload = () => {
-        cropState.imageIndex = index;
+        cropState.imageIndex = imageIndex;
         cropState.image = sourceImage;
         cropState.aspectRatio = null;
         cropState.selection = null;
@@ -98,7 +128,7 @@ function openCropEditor(index) {
         dom.btnCropCreate.focus();
     };
     sourceImage.onerror = () => alert("Crop할 이미지를 불러올 수 없습니다.");
-    sourceImage.src = item.src;
+    sourceImage.src = src;
 }
 
 function sizeCropCanvas(image) {
@@ -120,6 +150,8 @@ function closeCropEditor() {
     cropState.dragMode = null;
     cropState.selectionCanMove = false;
     cropState.previewSrc = "";
+    cropState.layerApplyCallback = null;
+    setCropEditorLayerMode(false);
     closeCropSaveChoice();
 }
 
@@ -421,11 +453,24 @@ function applyCropSizeFromInputs() {
 function promptCropSaveChoice() {
     const sourceRect = getSourceCropRect();
     const sourceItem = images[cropState.imageIndex];
-    if (!sourceRect || !sourceItem || sourceRect.width < 1 || sourceRect.height < 1) {
+    if (!sourceRect || (!sourceItem && !cropState.layerApplyCallback) ||
+        sourceRect.width < 1 || sourceRect.height < 1) {
         alert("Crop할 영역을 선택하세요.");
         return;
     }
     cropState.previewSrc = buildCroppedImageSource(sourceRect);
+    if (cropState.layerApplyCallback) {
+        const callback = cropState.layerApplyCallback;
+        const result = cropState.previewSrc;
+        cropState.layerApplyCallback = null;
+        Promise.resolve(callback(result, sourceRect))
+            .then(closeCropEditor)
+            .catch(error => {
+                console.error("Layer crop apply failed:", error);
+                alert("레이어 Crop 결과를 적용하지 못했습니다: " + error.message);
+            });
+        return;
+    }
     dom.cropResultPreview.src = cropState.previewSrc;
     dom.cropResultDimensions.innerText = `${sourceRect.width} × ${sourceRect.height}px`;
     dom.cropSaveChoice.style.display = "flex";

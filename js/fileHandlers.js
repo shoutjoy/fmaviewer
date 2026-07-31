@@ -21,7 +21,7 @@ async function processFMAData(data) {
     showLoading("Extracting Data...");
     try {
         const exportedImages = Array.isArray(data?.images)
-            ? data.images.filter(item => item && typeof item.src === "string" && item.src.startsWith("data:image"))
+            ? data.images.filter(item => item && typeof item.src === "string" && /^data:(image|video)\//.test(item.src))
             : [];
 
         if (exportedImages.length > 0) {
@@ -33,6 +33,7 @@ async function processFMAData(data) {
                 date: item.date || fallbackDate,
                 size: item.size || item.src.length,
                 mimeType: item.mimeType || String(item.src).match(/^data:([^;,]+)/)?.[1] || "",
+                mediaType: item.mediaType || (String(item.mimeType || item.src).includes("video/") ? "video" : "image"),
                 isFav: Boolean(item.isFav),
                 width: item.width,
                 height: item.height,
@@ -51,7 +52,8 @@ async function processFMAData(data) {
                 imageEditParentPath: item.imageEditParentPath,
                 imageEditSourceSrc: item.imageEditSourceSrc,
                 imageEditConfig: item.imageEditConfig,
-                imageEditInfo: item.imageEditInfo
+                imageEditInfo: item.imageEditInfo,
+                fmeProject: item.fmeProject
             }));
         } else {
             await walkAsync(data, "$");
@@ -64,9 +66,11 @@ async function processFMAData(data) {
                 renderGallery();
                 if (dom.imageCount) dom.imageCount.innerText = "Images: " + images.length;
                 if (dom.btnRestore) dom.btnRestore.style.display = "inline-block";
-                if (typeof showImage === 'function') showImage(0);
+                const latestIndex = typeof getLatestVisibleMediaIndex === "function"
+                    ? getLatestVisibleMediaIndex() : 0;
+                if (typeof showImage === 'function' && latestIndex >= 0) showImage(latestIndex);
             } else {
-                alert("이미지 데이터를 찾을 수 없습니다.");
+                alert("이미지 또는 영상 데이터를 찾을 수 없습니다.");
             }
         } catch (uiErr) {
             console.error("UI Update error:", uiErr);
@@ -88,14 +92,16 @@ async function walkAsync(obj, path) {
             if (o == null) continue;
 
             if (typeof o === "string") {
-                if (o.startsWith("data:image")) {
+                if (/^data:(image|video)\//.test(o)) {
+                    const mimeType = String(o).match(/^data:([^;,]+)/)?.[1] || "";
                     images.push({
                         src: o,
                         path: p,
                         group: groupFromPath(p),
                         date: Date.now(),
                         size: o.length,
-                        mimeType: String(o).match(/^data:([^;,]+)/)?.[1] || "",
+                        mimeType,
+                        mediaType: mimeType.startsWith("video/") ? "video" : "image",
                         isFav: false
                     });
                 }
@@ -135,15 +141,31 @@ function groupFromPath(p) {
 }
 
 async function handleAddImages(files) {
-    files = files.filter(isImageFile);
+    files = files.filter(isMediaFile);
     if (files.length === 0) return;
 
     const total = files.length;
     let current = 0;
-    showLoading(`Importing ${total} Images...`);
+    showLoading(`Importing ${total} Media...`);
 
     const readers = files.map(file => {
         return new Promise((resolve) => {
+            if (isVideoFile(file)) {
+                images.push({
+                    src: URL.createObjectURL(file),
+                    path: "$.added." + file.name,
+                    group: "added-video",
+                    date: file.lastModified || Date.now(),
+                    size: file.size,
+                    mimeType: file.type || getMimeTypeFromName(file.name),
+                    mediaType: "video",
+                    isFav: false
+                });
+                current++;
+                updateLoading((current / total) * 100);
+                resolve();
+                return;
+            }
             const reader = new FileReader();
             reader.onload = (e) => {
                 images.push({
@@ -153,6 +175,7 @@ async function handleAddImages(files) {
                     date: file.lastModified || Date.now(),
                     size: file.size,
                     mimeType: file.type,
+                    mediaType: isVideoFile(file) ? "video" : "image",
                     isFav: false
                 });
                 current++;
@@ -164,14 +187,15 @@ async function handleAddImages(files) {
     });
     await Promise.all(readers);
     renderGallery();
-    dom.imageCount.innerText = "Images: " + images.length;
-    saveCurrentImagesToDB();
-    updateImportStatus(`${total}개 이미지를 추가했습니다.`);
+    dom.imageCount.innerText = "Media: " + images.length;
+    await saveCurrentImagesToDB(true);
+    const videoCount = files.filter(isVideoFile).length;
+    updateImportStatus(`${total - videoCount}개 이미지 · ${videoCount}개 영상을 추가했습니다.`);
     hideLoading();
 }
 
 async function handleImportFiles(files) {
-    const imageFiles = files.filter(isImageFile);
+    const imageFiles = files.filter(isMediaFile);
     const zipFiles = files.filter(file =>
         file.name.toLowerCase().endsWith(".zip") ||
         file.type === "application/zip" ||
@@ -182,7 +206,7 @@ async function handleImportFiles(files) {
     for (const zipFile of zipFiles) await handleAddZip(zipFile);
 
     if (imageFiles.length === 0 && zipFiles.length === 0) {
-        updateImportStatus("지원되는 이미지 또는 ZIP 파일이 아닙니다.", true);
+        updateImportStatus("지원되는 이미지, 영상 또는 ZIP 파일이 아닙니다.", true);
     }
 }
 
@@ -191,6 +215,17 @@ function isImageFile(file) {
         String(file.type || "").startsWith("image/") ||
         /\.(png|jpe?g|webp|gif|bmp|svg|avif)$/i.test(file.name || "")
     );
+}
+
+function isVideoFile(file) {
+    return Boolean(file) && (
+        String(file.type || "").startsWith("video/") ||
+        /\.(mp4|webm|mov|m4v|ogv)$/i.test(file.name || "")
+    );
+}
+
+function isMediaFile(file) {
+    return isImageFile(file) || isVideoFile(file);
 }
 
 async function handleAddZip(file) {
@@ -203,11 +238,11 @@ async function handleAddZip(file) {
     try {
         const zip = await JSZip.loadAsync(file);
         const imageEntries = Object.values(zip.files).filter(entry =>
-            !entry.dir && /\.(png|jpe?g|webp|gif|bmp|svg|avif)$/i.test(entry.name)
+            !entry.dir && /\.(png|jpe?g|webp|gif|bmp|svg|avif|mp4|webm|mov|m4v|ogv)$/i.test(entry.name)
         );
 
         if (imageEntries.length === 0) {
-            updateImportStatus(`${file.name}에 이미지가 없습니다.`, true);
+            updateImportStatus(`${file.name}에 지원되는 이미지나 영상이 없습니다.`, true);
             return;
         }
 
@@ -224,7 +259,8 @@ async function handleAddZip(file) {
         }
 
         await handleAddImages(extractedFiles);
-        updateImportStatus(`${file.name}에서 ${extractedFiles.length}개 이미지를 추가했습니다.`);
+        const videoCount = extractedFiles.filter(isVideoFile).length;
+        updateImportStatus(`${file.name}에서 ${extractedFiles.length - videoCount}개 이미지 · ${videoCount}개 영상을 추가했습니다.`);
     } catch (error) {
         console.error("ZIP import error:", error);
         updateImportStatus("ZIP 파일을 열 수 없습니다.", true);
@@ -244,7 +280,12 @@ function getMimeTypeFromName(name) {
         gif: "image/gif",
         bmp: "image/bmp",
         svg: "image/svg+xml",
-        avif: "image/avif"
+        avif: "image/avif",
+        mp4: "video/mp4",
+        webm: "video/webm",
+        mov: "video/quicktime",
+        m4v: "video/x-m4v",
+        ogv: "video/ogg"
     };
     return mimeTypes[extension] || "application/octet-stream";
 }
@@ -299,16 +340,23 @@ function updateImportStatus(message, isError) {
     dom.importStatus.classList.toggle("error", Boolean(isError));
 }
 
-function openExternal(src) {
+function openExternal(src, item) {
     const win = window.open();
-    win.document.write(`<img src="${src}" style="max-width:100%">`);
+    if (!win) return;
+    const video = item ? isVideoMedia(item) : /^(?:data|blob):video\//i.test(String(src));
+    win.document.write(video
+        ? `<video src="${src}" controls autoplay style="max-width:100%;max-height:100vh"></video>`
+        : `<img src="${src}" style="max-width:100%;max-height:100vh">`);
 }
 
 function downloadCurrentImage() {
     if (!images[currentIndex]) return;
+    const item = images[currentIndex];
     const a = document.createElement("a");
-    a.href = images[currentIndex].src;
-    a.download = `image_${currentIndex}.png`;
+    a.href = item.src;
+    const extension = typeof getMediaFileExtension === "function"
+        ? getMediaFileExtension(item) : (isVideoMedia(item) ? "mp4" : "png");
+    a.download = `${isVideoMedia(item) ? "video" : "image"}_${currentIndex}.${extension}`;
     a.click();
 }
 
@@ -322,10 +370,14 @@ async function downloadAllAsZIP() {
         const zip = new JSZip();
         for (let i = 0; i < total; i++) {
             const img = images[i];
-            const parts = img.src.split(",");
+            if (typeof ensureImageOriginalLoaded === "function") await ensureImageOriginalLoaded(img);
+            const portable = await imageSourceToPortableDataUrl(img.src);
+            const parts = portable.split(",");
             if (parts.length > 1) {
                 const base64 = parts[1];
-                zip.file(`image_${i}.png`, base64, { base64: true });
+                const extension = typeof getMediaFileExtension === "function"
+                    ? getMediaFileExtension(img) : (isVideoMedia(img) ? "mp4" : "png");
+                zip.file(`${isVideoMedia(img) ? "video" : "image"}_${i}.${extension}`, base64, { base64: true });
             }
 
             if (i % 20 === 0) {
@@ -352,7 +404,7 @@ async function downloadAllAsZIP() {
     }
 }
 
-function saveFMA() {
+async function saveFMA() {
     if (images.length === 0) {
         alert("저장할 데이터가 없습니다.");
         return;
@@ -360,19 +412,26 @@ function saveFMA() {
 
     showLoading("FMA 파일 생성 중...");
 
-    // 대용량 처리를 위해 타임아웃을 주어 UI 업데이트 허용
-    setTimeout(() => {
-        try {
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    try {
+            const exportedSources = [];
+            for (let index = 0; index < images.length; index++) {
+                await ensureImageOriginalLoaded?.(images[index]);
+                exportedSources.push(await imageSourceToPortableDataUrl(images[index].src));
+                updateLoading(Math.min(45, 5 + ((index + 1) / images.length) * 40));
+                if (index % 3 === 2) await new Promise(resolve => requestAnimationFrame(resolve));
+            }
             const output = {
                 version: "2.0_Exported",
                 timestamp: new Date().toISOString(),
-                images: images.map(img => ({
+                images: images.map((img, index) => ({
                     path: img.path,
-                    src: img.src,
+                    src: exportedSources[index],
                     group: img.group,
                     date: img.date,
                     size: img.size,
                     mimeType: img.mimeType,
+                    mediaType: isVideoMedia(img) ? "video" : "image",
                     isFav: img.isFav,
                     width: img.width,
                     height: img.height,
@@ -391,11 +450,12 @@ function saveFMA() {
                     imageEditParentPath: img.imageEditParentPath,
                     imageEditSourceSrc: img.imageEditSourceSrc,
                     imageEditConfig: img.imageEditConfig,
-                    imageEditInfo: img.imageEditInfo
+                    imageEditInfo: img.imageEditInfo,
+                    fmeProject: img.fmeProject
                 }))
             };
 
-            updateLoading(50);
+            updateLoading(55);
 
             const json = JSON.stringify(output);
             const blob = new Blob([json], { type: "application/json" });
@@ -412,13 +472,25 @@ function saveFMA() {
 
             URL.revokeObjectURL(url);
             updateLoading(100);
-        } catch (err) {
+    } catch (err) {
             console.error("Save error:", err);
             alert("저장 중 오류가 발생했습니다: " + err.message);
-        } finally {
+    } finally {
             setTimeout(hideLoading, 500);
-        }
-    }, 100);
+    }
+}
+
+async function imageSourceToPortableDataUrl(src) {
+    if (/^data:(image|video)\//.test(String(src || ""))) return src;
+    const response = await fetch(src);
+    if (!response.ok) throw new Error("FMA 내보내기용 이미지 원본을 읽지 못했습니다.");
+    const blob = await response.blob();
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(reader.error || new Error("이미지를 Data URL로 변환하지 못했습니다."));
+        reader.readAsDataURL(blob);
+    });
 }
 function resetProject() {
     if (!confirm("모든 데이터를 지우고 초기화할까요? 이 작업은 되돌릴 수 없습니다.")) return;

@@ -16,6 +16,8 @@ const REMBG_MODEL_STORE_NAME = "models";
 const REMBG_MODEL_DB_KEY = "u2net_human_seg.onnx";
 const REMBG_MIN_MODEL_BYTES = 100000000;
 const BG_REMOVE_ENGINE_STORAGE = "fma_bg_remove_local_engine";
+const BG_REMOVE_CUSTOM_BACKGROUND_STORAGE = "fma_bg_remove_custom_background";
+const BG_REMOVE_BOUNDARY_STORAGE = "fma_bg_remove_boundary_strength";
 const MEDIAPIPE_SELFIE_SEGMENTATION_SCRIPT =
     "https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js";
 const MEDIAPIPE_SELFIE_SEGMENTATION_ASSET_ROOT =
@@ -31,16 +33,21 @@ var rembgModelDownloadPromise = null;
 var mediaPipeScriptPromise = null;
 var mediaPipeSessionPromise = null;
 var mediaPipePendingResult = null;
+var customBackgroundRenderToken = 0;
 var bgRemoveState = {
     imageIndex: -1,
     mode: "local",
     resultSrc: null,
+    transparentResultSrc: null,
     resultWidth: 0,
     resultHeight: 0,
     processing: false,
     abortController: null,
     prompt: "",
-    localEngine: "webgl"
+    localEngine: "webgl",
+    boundaryStrength: 50,
+    customBackgroundEnabled: false,
+    customBackgroundColor: "#3197a3"
 };
 
 function initBackgroundRemoveFeature() {
@@ -51,6 +58,9 @@ function initBackgroundRemoveFeature() {
     dom.btnRunBgRemove.onclick = runBackgroundRemoval;
     dom.btnBgEngineWebgl.onclick = () => setBackgroundRemoveLocalEngine("webgl");
     dom.btnBgEngineOnnx.onclick = () => setBackgroundRemoveLocalEngine("onnx");
+    dom.bgBoundaryStrength.oninput = handleBackgroundBoundaryChange;
+    dom.bgCustomBackgroundEnabled.onchange = handleCustomBackgroundSettingChange;
+    dom.bgCustomBackgroundColor.oninput = handleCustomBackgroundSettingChange;
     dom.btnPrepareBgModel.onclick = prepareBackgroundRemoveModel;
     dom.btnSelectBgModel.onclick = () => dom.bgModelFileInput.click();
     dom.bgModelFileInput.onchange = handleBackgroundModelFileSelection;
@@ -100,7 +110,10 @@ function openBackgroundRemoveEditor(index, mode) {
     bgRemoveState.mode = mode === "ai" ? "ai" : "local";
     bgRemoveState.localEngine = readBackgroundRemoveLocalEngine();
     bgRemoveState.resultSrc = null;
+    bgRemoveState.transparentResultSrc = null;
     bgRemoveState.processing = false;
+    readBackgroundBoundarySetting();
+    readCustomBackgroundSettings();
 
     const isAI = bgRemoveState.mode === "ai";
     dom.bgRemoveTitle.innerText = isAI ? "AI Studio 배경 제거" : "이미지 배경 제거";
@@ -122,10 +135,72 @@ function openBackgroundRemoveEditor(index, mode) {
     dom.btnRunBgRemove.innerText = isAI ? "AI 배경 제거 실행" : "배경 제거 실행";
     dom.btnRunBgRemove.disabled = false;
     updateBackgroundRemoveEngineUi(false);
+    updateBackgroundBoundaryControl();
+    updateCustomBackgroundControls();
     closeBgRemoveSaveChoice();
     setBgRemoveProgress(0, "실행 준비");
     dom.bgRemoveModal.style.display = "flex";
     dom.btnRunBgRemove.focus();
+}
+
+function readBackgroundBoundarySetting() {
+    try {
+        const saved = Number(localStorage.getItem(BG_REMOVE_BOUNDARY_STORAGE));
+        bgRemoveState.boundaryStrength = Number.isFinite(saved)
+            ? Math.max(0, Math.min(100, saved))
+            : 50;
+    } catch (error) {
+        bgRemoveState.boundaryStrength = 50;
+    }
+}
+
+function updateBackgroundBoundaryControl() {
+    dom.bgBoundaryStrength.value = String(bgRemoveState.boundaryStrength);
+    dom.bgBoundaryStrengthValue.innerText = `${Math.round(bgRemoveState.boundaryStrength)}%`;
+}
+
+function handleBackgroundBoundaryChange() {
+    bgRemoveState.boundaryStrength = Math.max(0, Math.min(100,
+        Number(dom.bgBoundaryStrength.value) || 0
+    ));
+    dom.bgBoundaryStrengthValue.innerText = `${Math.round(bgRemoveState.boundaryStrength)}%`;
+    try {
+        localStorage.setItem(BG_REMOVE_BOUNDARY_STORAGE, String(bgRemoveState.boundaryStrength));
+    } catch (error) {
+        console.warn("Background boundary setting could not be saved:", error);
+    }
+}
+
+async function applyBackgroundBoundaryStrength(src, strength = bgRemoveState.boundaryStrength) {
+    const amount = Math.max(0, Math.min(100, Number(strength) || 0));
+    if (Math.abs(amount - 50) < .5) return src;
+    const image = await loadUpscaleImage(src);
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    context.drawImage(image, 0, 0);
+    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+    const pixels = imageData.data;
+    const bias = (amount - 50) / 50;
+    for (let index = 0; index < pixels.length; index += 4) {
+        const normalized = pixels[index + 3] / 255;
+        let adjusted;
+        if (bias >= 0) {
+            const cutoff = bias * .48;
+            adjusted = normalized <= cutoff ? 0 : (normalized - cutoff) / (1 - cutoff);
+            adjusted = Math.pow(Math.max(0, Math.min(1, adjusted)), 1 + bias * .65);
+        } else if (normalized > 0) {
+            const expansion = -bias * .48;
+            adjusted = normalized + (1 - normalized) * expansion;
+            adjusted = Math.pow(Math.max(0, Math.min(1, adjusted)), 1 + bias * .35);
+        } else {
+            adjusted = 0;
+        }
+        pixels[index + 3] = Math.round(Math.max(0, Math.min(1, adjusted)) * 255);
+    }
+    context.putImageData(imageData, 0, 0);
+    return canvas.toDataURL("image/png");
 }
 
 function resetAiBackgroundRemovePrompt() {
@@ -139,6 +214,7 @@ function closeBackgroundRemoveEditor() {
     closeBgRemoveSaveChoice();
     bgRemoveState.imageIndex = -1;
     bgRemoveState.resultSrc = null;
+    bgRemoveState.transparentResultSrc = null;
 }
 
 function readBackgroundRemoveLocalEngine() {
@@ -186,6 +262,88 @@ function updateBackgroundRemoveEngineUi(checkOnnxModel) {
             console.warn("ONNX model location check failed:", error);
         });
     }
+}
+
+function readCustomBackgroundSettings() {
+    try {
+        const saved = JSON.parse(
+            localStorage.getItem(BG_REMOVE_CUSTOM_BACKGROUND_STORAGE) || "null"
+        );
+        bgRemoveState.customBackgroundEnabled = saved?.enabled === true;
+        bgRemoveState.customBackgroundColor = /^#[0-9a-f]{6}$/i.test(saved?.color || "")
+            ? saved.color.toLowerCase()
+            : "#3197a3";
+    } catch (error) {
+        bgRemoveState.customBackgroundEnabled = false;
+        bgRemoveState.customBackgroundColor = "#3197a3";
+    }
+}
+
+function updateCustomBackgroundControls() {
+    if (!dom.bgCustomBackgroundEnabled) return;
+    dom.bgCustomBackgroundEnabled.checked = bgRemoveState.customBackgroundEnabled;
+    dom.bgCustomBackgroundColor.value = bgRemoveState.customBackgroundColor;
+    dom.bgCustomBackgroundColor.disabled = !bgRemoveState.customBackgroundEnabled;
+    dom.bgCustomBackgroundColorValue.value =
+        bgRemoveState.customBackgroundColor.toUpperCase();
+    dom.bgCustomBackgroundColorValue.innerText =
+        bgRemoveState.customBackgroundColor.toUpperCase();
+}
+
+function handleCustomBackgroundSettingChange() {
+    bgRemoveState.customBackgroundEnabled = dom.bgCustomBackgroundEnabled.checked;
+    bgRemoveState.customBackgroundColor = /^#[0-9a-f]{6}$/i.test(
+        dom.bgCustomBackgroundColor.value
+    ) ? dom.bgCustomBackgroundColor.value.toLowerCase() : "#3197a3";
+    updateCustomBackgroundControls();
+    try {
+        localStorage.setItem(
+            BG_REMOVE_CUSTOM_BACKGROUND_STORAGE,
+            JSON.stringify({
+                enabled: bgRemoveState.customBackgroundEnabled,
+                color: bgRemoveState.customBackgroundColor
+            })
+        );
+    } catch (error) {
+        console.warn("Custom background setting could not be saved:", error);
+    }
+    if (bgRemoveState.transparentResultSrc && !bgRemoveState.processing) {
+        refreshCustomBackgroundPreview();
+    }
+}
+
+async function refreshCustomBackgroundPreview() {
+    const transparentSrc = bgRemoveState.transparentResultSrc;
+    if (!transparentSrc) return;
+    const token = ++customBackgroundRenderToken;
+    try {
+        const resultSrc = await applyCustomBackgroundToResult(transparentSrc);
+        if (token !== customBackgroundRenderToken) return;
+        bgRemoveState.resultSrc = resultSrc;
+        dom.bgRemovePreview.src = resultSrc;
+        setBgRemoveProgress(
+            100,
+            bgRemoveState.customBackgroundEnabled
+                ? `커스텀 배경 ${bgRemoveState.customBackgroundColor.toUpperCase()} 적용 완료`
+                : "투명 배경 결과"
+        );
+    } catch (error) {
+        console.warn("Custom background preview failed:", error);
+    }
+}
+
+async function applyCustomBackgroundToResult(transparentSrc) {
+    if (!bgRemoveState.customBackgroundEnabled) return transparentSrc;
+    const image = await loadUpscaleImage(transparentSrc);
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth || image.width;
+    canvas.height = image.naturalHeight || image.height;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("커스텀 배경을 합성할 Canvas를 만들 수 없습니다.");
+    context.fillStyle = bgRemoveState.customBackgroundColor;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/png");
 }
 
 function loadMediaPipeSelfieSegmentationScript() {
@@ -853,6 +1011,11 @@ async function runBackgroundRemoval() {
             }
         }
 
+        setBgRemoveProgress(96, `경계 밀착도 ${Math.round(bgRemoveState.boundaryStrength)}% 적용 중`);
+        bgRemoveState.resultSrc = await applyBackgroundBoundaryStrength(
+            bgRemoveState.resultSrc,
+            bgRemoveState.boundaryStrength
+        );
         const resultImage = await loadUpscaleImage(bgRemoveState.resultSrc);
         bgRemoveState.resultWidth = resultImage.naturalWidth;
         bgRemoveState.resultHeight = resultImage.naturalHeight;
@@ -882,9 +1045,15 @@ async function runBackgroundRemoval() {
 }
 
 async function acceptBackgroundMaskResult(resultSrc) {
-    bgRemoveState.resultSrc = resultSrc;
+    bgRemoveState.transparentResultSrc = resultSrc;
+    bgRemoveState.resultSrc = await applyCustomBackgroundToResult(resultSrc);
     dom.bgRemovePreview.src = bgRemoveState.resultSrc;
-    setBgRemoveProgress(100, "배경 제거 완료");
+    setBgRemoveProgress(
+        100,
+        bgRemoveState.customBackgroundEnabled
+            ? `배경 제거 및 ${bgRemoveState.customBackgroundColor.toUpperCase()} 배경 합성 완료`
+            : "배경 제거 완료"
+    );
     try {
         const resultImage = await loadUpscaleImage(bgRemoveState.resultSrc);
         bgRemoveState.resultWidth = resultImage.naturalWidth;
@@ -994,6 +1163,10 @@ function saveBackgroundRemoveResult(saveMode) {
         sourceItem.backgroundRemoveInfo = {
             method: method,
             engine: bgRemoveState.localEngine,
+            customBackground: bgRemoveState.customBackgroundEnabled
+                ? bgRemoveState.customBackgroundColor
+                : null,
+            boundaryStrength: bgRemoveState.boundaryStrength,
             width: bgRemoveState.resultWidth,
             height: bgRemoveState.resultHeight,
             prompt: bgRemoveState.prompt || undefined
@@ -1029,6 +1202,10 @@ function saveBackgroundRemoveResult(saveMode) {
             backgroundRemoveInfo: {
                 method: method,
                 engine: bgRemoveState.localEngine,
+                customBackground: bgRemoveState.customBackgroundEnabled
+                    ? bgRemoveState.customBackgroundColor
+                    : null,
+                boundaryStrength: bgRemoveState.boundaryStrength,
                 width: bgRemoveState.resultWidth,
                 height: bgRemoveState.resultHeight,
                 prompt: bgRemoveState.prompt || undefined

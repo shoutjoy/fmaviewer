@@ -25,9 +25,13 @@ function initThemeMode() {
     } catch (error) {}
     applyThemeMode(theme, false);
     dom.btnThemeToggle.onclick = () => {
-        const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
-        applyThemeMode(next, true);
+        toggleThemeMode();
     };
+}
+
+function toggleThemeMode() {
+    const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+    applyThemeMode(next, true);
 }
 
 function applyThemeMode(theme, persist) {
@@ -190,6 +194,18 @@ function setupEventListeners() {
     dom.btnZoomOut.onclick = () => { zoom /= 1.2; updateZoom(); };
     dom.btnCenterPreview.onclick = centerPreviewImage;
     dom.btnResetZoom.onclick = resetZoom;
+    const setPreviewMenuCollapsed = collapsed => {
+        dom.previewMeta.classList.toggle("menu-collapsed", collapsed);
+        dom.btnTogglePreviewMenu.innerText = collapsed ? "⌄" : "⌃";
+        dom.btnTogglePreviewMenu.title = collapsed ? "이미지 작업 메뉴 펼치기" : "이미지 작업 메뉴 접기";
+        dom.btnTogglePreviewMenu.setAttribute("aria-label", dom.btnTogglePreviewMenu.title);
+        dom.btnTogglePreviewMenu.setAttribute("aria-expanded", String(!collapsed));
+        localStorage.setItem("fmaPreviewMenuCollapsed", collapsed ? "1" : "0");
+    };
+    setPreviewMenuCollapsed(localStorage.getItem("fmaPreviewMenuCollapsed") === "1");
+    dom.btnTogglePreviewMenu.onclick = () => {
+        setPreviewMenuCollapsed(!dom.previewMeta.classList.contains("menu-collapsed"));
+    };
 
     // Navigation
     dom.btnPrev.onclick = () => navigateSortedImages(-navStep);
@@ -203,8 +219,33 @@ function setupEventListeners() {
         updateStepButtons();
     };
 
+    dom.mediaFilterSelect.onchange = (event) => {
+        mediaFilter = ["all", "image", "video"].includes(event.target.value)
+            ? event.target.value : "all";
+        renderGallery();
+        const order = getActiveImageOrder();
+        if (order.length) {
+            currentIndex = order.includes(currentIndex) ? currentIndex : order[0];
+            if (orientation === "vert") renderVerticalPreview();
+            else showImage(currentIndex);
+        } else {
+            dom.previewContainer.innerHTML = "";
+            dom.placeholder.style.display = "block";
+            dom.previewMeta.style.display = "none";
+            dom.zoomInfo.style.display = "none";
+            updatePreviewPageText();
+        }
+        renderFavorites();
+        saveCurrentImagesToDB();
+    };
+
     // Keyboard
     document.addEventListener("keydown", e => {
+        if (e.altKey && (e.key === "4" || e.code === "Digit4" || e.code === "Numpad4")) {
+            e.preventDefault();
+            toggleThemeMode();
+            return;
+        }
         if (dom.cropModal && dom.cropModal.style.display !== "none") return;
         if (dom.upscaleModal && dom.upscaleModal.style.display !== "none") return;
         if (dom.bgRemoveModal && dom.bgRemoveModal.style.display !== "none") return;

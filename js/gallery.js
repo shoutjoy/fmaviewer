@@ -4,7 +4,11 @@
 
 function renderGallery() {
     const fragment = document.createDocumentFragment();
-    let sortedImages = [...images];
+    let sortedImages = images.filter(item => {
+        if (mediaFilter === "video") return isVideoMedia(item);
+        if (mediaFilter === "image") return !isVideoMedia(item);
+        return true;
+    });
     if (sortMode === 'latest') sortedImages.sort((a, b) => (b.date || 0) - (a.date || 0));
     else if (sortMode === 'oldest') sortedImages.sort((a, b) => (a.date || 0) - (b.date || 0));
     else if (sortMode === 'size') sortedImages.sort((a, b) => (b.size || 0) - (a.size || 0));
@@ -17,11 +21,12 @@ function renderGallery() {
 
     const groups = {};
     sortedImages.forEach(img => {
+        const mediaName = isVideoMedia(img) ? "영상" : "이미지";
         const groupName = sortMode === 'group'
-            ? img.group
+            ? `${mediaName} · ${img.group || "other"}`
             : sortMode === 'type'
                 ? getImageTypeLabel(img)
-                : 'All Images';
+                : mediaName;
         if (!groups[groupName]) groups[groupName] = [];
         groups[groupName].push({ ...img, realIndex: images.indexOf(img) });
     });
@@ -40,8 +45,8 @@ function renderGallery() {
         const title = document.createElement("div");
         title.className = "groupTitle";
         const sortTitles = {
-            latest: "최신 이미지",
-            oldest: "오래된 이미지",
+            latest: mediaFilter === "video" ? "최신 영상" : mediaFilter === "image" ? "최신 이미지" : "최신 미디어",
+            oldest: mediaFilter === "video" ? "오래된 영상" : mediaFilter === "image" ? "오래된 이미지" : "오래된 미디어",
             size: "파일 크기순"
         };
         title.innerText = (sortMode === 'group' || sortMode === 'type')
@@ -55,17 +60,25 @@ function renderGallery() {
         groups[g].forEach(img => {
             const div = document.createElement("div");
             div.className = "thumb" + (img.isFav ? " is-fav" : "");
-            div.innerHTML = `
-                <img src="${img.src}" loading="lazy">
-                <div class="thumb-overlay">
-                    <button class="overlay-btn fav">★</button>
-                    <button class="overlay-btn ext" data-src="${img.src}">Ext</button>
-                    <button class="overlay-btn del">Del</button>
-                </div>
-            `;
+            const media = createGalleryMediaElement(img);
+            div.appendChild(media);
+            const badge = document.createElement("span");
+            badge.className = `thumb-media-badge ${isVideoMedia(img) ? "video" : "image"}`;
+            badge.innerText = isVideoMedia(img) ? "▶ VIDEO" : "IMAGE";
+            div.appendChild(badge);
+            const overlay = document.createElement("div");
+            overlay.className = "thumb-overlay";
+            overlay.innerHTML = `<button class="overlay-btn fav">★</button><button class="overlay-btn ext">Ext</button><button class="overlay-btn del">Del</button>`;
+            div.appendChild(overlay);
             div.onclick = () => showImage(img.realIndex);
             div.querySelector('.fav').onclick = (e) => { e.stopPropagation(); toggleFav(img.realIndex); };
-            div.querySelector('.ext').onclick = (e) => { e.stopPropagation(); openExternal(img.src); };
+            div.querySelector('.ext').onclick = async (e) => {
+                e.stopPropagation();
+                if (typeof ensureImageOriginalLoaded === "function") {
+                    await ensureImageOriginalLoaded(img.realIndex);
+                }
+                openExternal(images[img.realIndex].src, images[img.realIndex]);
+            };
             div.querySelector('.del').onclick = (e) => { e.stopPropagation(); removeImage(img.realIndex); };
             grid.appendChild(div);
         });
@@ -78,10 +91,23 @@ function renderGallery() {
 }
 
 function getActiveImageOrder() {
-    const isValid = sortedImageOrder.length === images.length &&
+    const expected = images.map((item, index) => ({ item, index }))
+        .filter(({ item }) => mediaFilter === "all" || (mediaFilter === "video") === isVideoMedia(item))
+        .map(({ index }) => index);
+    const isValid = sortedImageOrder.length === expected.length &&
         sortedImageOrder.every(index => Number.isInteger(index) && index >= 0 && index < images.length) &&
-        new Set(sortedImageOrder).size === images.length;
-    return isValid ? sortedImageOrder : images.map((_, index) => index);
+        new Set(sortedImageOrder).size === expected.length &&
+        sortedImageOrder.every(index => expected.includes(index));
+    return isValid ? sortedImageOrder : expected;
+}
+
+function getLatestVisibleMediaIndex() {
+    const visible = images.map((item, index) => ({ item, index }))
+        .filter(({ item }) => mediaFilter === "all" ||
+            (mediaFilter === "video") === isVideoMedia(item));
+    if (!visible.length) return -1;
+    visible.sort((a, b) => (Number(b.item.date) || 0) - (Number(a.item.date) || 0));
+    return visible[0].index;
 }
 
 function getImageDisplayPosition(rawIndex) {
@@ -101,8 +127,31 @@ function getAdjacentSortedImageIndex(rawIndex, offset) {
 }
 
 function navigateSortedImages(offset) {
-    if (images.length === 0) return;
+    if (getActiveImageOrder().length === 0) return;
     showImage(getAdjacentSortedImageIndex(currentIndex, offset));
+}
+
+function isVideoMedia(item) {
+    const mime = String(item?.mimeType || "").toLowerCase();
+    return item?.mediaType === "video" || mime.startsWith("video/") ||
+        /\.(mp4|webm|mov|m4v|ogv)(?:$|[?#])/i.test(String(item?.path || ""));
+}
+
+function createGalleryMediaElement(item) {
+    if (isVideoMedia(item) && !item.thumbnailSrc) {
+        const video = document.createElement("video");
+        video.src = item.src;
+        video.muted = true;
+        video.playsInline = true;
+        video.preload = "metadata";
+        video.setAttribute("aria-label", item.metadata?.title || item.path || "영상");
+        return video;
+    }
+    const image = document.createElement("img");
+    image.src = item.thumbnailSrc || item.src;
+    image.loading = "lazy";
+    image.alt = item.metadata?.title || item.path || "이미지";
+    return image;
 }
 
 function getImageTypeLabel(image) {
@@ -126,12 +175,18 @@ function toggleFav(i) {
 
 function renderFavorites() {
     const fragment = document.createDocumentFragment();
-    const favs = images.filter(img => img.isFav);
+    const favs = images.filter(img => img.isFav && (
+        mediaFilter === "all" || (mediaFilter === "video") === isVideoMedia(img)
+    ));
     favs.forEach(img => {
         const realIdx = images.indexOf(img);
         const div = document.createElement("div");
         div.className = "thumb is-fav";
-        div.innerHTML = `<img src="${img.src}"><div class="thumb-overlay"><button class="overlay-btn fav">Clear</button></div>`;
+        div.appendChild(createGalleryMediaElement(img));
+        const overlay = document.createElement("div");
+        overlay.className = "thumb-overlay";
+        overlay.innerHTML = `<button class="overlay-btn fav">Clear</button>`;
+        div.appendChild(overlay);
         div.onclick = () => showImage(realIdx);
         div.querySelector('.fav').onclick = (e) => { e.stopPropagation(); toggleFav(realIdx); };
         fragment.appendChild(div);
@@ -141,7 +196,7 @@ function renderFavorites() {
 }
 
 function removeImage(i) {
-    if (confirm("이 이미지를 프로젝트에서 제거할까요?")) {
+    if (confirm(`이 ${isVideoMedia(images[i]) ? "영상" : "이미지"}을 프로젝트에서 제거할까요?`)) {
         const removedItem = images.splice(i, 1)[0];
         deletedImages.push({ index: i, item: removedItem });
         if (currentIndex >= images.length) currentIndex = Math.max(0, images.length - 1);

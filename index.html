@@ -7,7 +7,7 @@
     <title>FMA Viewer Ultra</title>
 
     <!-- Project Styles -->
-    <link rel="stylesheet" href="css/styles.css?v=20260731-51">
+    <link rel="stylesheet" href="css/styles.css?v=20260731-72">
 
     <!-- JSZip CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -60,7 +60,7 @@
             <span id="themeToggleIcon" aria-hidden="true">☀</span>
             <span class="sr-only">다크·라이트 모드 전환</span>
         </button>
-        <input type="file" id="addImgInput" accept="image/*" multiple style="display:none">
+        <input type="file" id="addImgInput" accept="image/*,video/*,.mp4,.webm,.mov,.m4v,.ogv" multiple style="display:none">
         <input type="file" id="zipImgInput" accept=".zip,application/zip" multiple style="display:none">
 
         <!-- Restoration -->
@@ -75,6 +75,11 @@
             <option value="size">정렬: 크기순</option>
             <option value="type">정렬: 종류별</option>
             <option value="group">정렬: 그룹별</option>
+        </select>
+        <select id="mediaFilterSelect" class="media-filter-select" title="갤러리 미디어 구분">
+            <option value="all">미디어: 전체</option>
+            <option value="image">이미지만</option>
+            <option value="video">영상만</option>
         </select>
 
         <button id="btnToggleFavs">★ Favorites</button>
@@ -107,7 +112,7 @@
             </div>
 
             <!-- Zoom Controls -->
-            <div
+            <div id="zoomMenu"
                 style="display:flex; align-items:center; background:#252a36; border-radius:10px; padding:2px; padding-right:8px; border:1px solid rgba(255,255,255,.12); margin-left:10px;">
                 <button id="btnZoomOut"
                     style="background:transparent; border:none; padding:5px 10px; font-size:16px;">-</button>
@@ -155,8 +160,7 @@
                 <div id="importPanelContent" class="import-panel-content">
                     <div class="fma-import-row">
                         <div class="dropzone" id="dropzone">
-                            .fma 파일을 드래그하거나 클릭하여 열기
-                            <div class="hint">← → 또는 중앙 마우스휠 : 이전/다음 | Ctrl+휠 : 확대/축소</div>
+                            .fam drag and drop &amp; import
                             <input type="file" id="fileInput" accept=".fma,application/json" style="display:none">
                         </div>
                         <button id="btnSaveFmaPanel" class="save-fma-square" type="button"
@@ -168,11 +172,11 @@
                     </div>
                     <div class="image-import-panel" id="dropzoneImg">
                         <div class="import-icon" aria-hidden="true">＋</div>
-                        <h2>이미지 파일 추가</h2>
-                        <p>이미지 또는 ZIP 파일을 이곳에 드래그하세요</p>
+                        <h2>이미지·영상 파일 추가</h2>
+                        <p>이미지, MP4/WebM/MOV 또는 ZIP 파일을 이곳에 드래그하세요</p>
                         <div class="import-actions">
                             <button id="btnImportImages" class="import-button import-images" type="button">
-                                <span>▧</span> 이미지 선택
+                                <span>▧</span> 이미지·영상 선택
                             </button>
                             <button id="btnImportZip" class="import-button import-zip" type="button">
                                 <span>ZIP</span> ZIP 추가
@@ -181,7 +185,7 @@
                                 <span>⌘</span> 붙여넣기
                             </button>
                         </div>
-                        <div id="importStatus" class="import-status">Ctrl+V로 클립보드 이미지를 바로 추가할 수도 있습니다</div>
+                        <div id="importStatus" class="import-status">영상은 MP4, WebM, MOV 형식을 지원합니다 · Ctrl+V 이미지 붙여넣기</div>
                     </div>
                 </div>
             </section>
@@ -195,6 +199,19 @@
         <div class="right">
             <div class="previewWrap">
                 <div class="placeholder" id="placeholder">이미지를 클릭하면 오른쪽에서 크게 표시됩니다</div>
+                <div class="previewMeta" id="previewMeta">
+                    <div id="metaDynamicArea"><!-- Dynamic image action buttons --></div>
+                    <div class="actions preview-global-actions">
+                        <button id="btnTogglePreviewMenu" class="view-icon-button" type="button"
+                            title="이미지 작업 메뉴 접기" aria-label="이미지 작업 메뉴 접기"
+                            aria-expanded="true">⌃</button>
+                        <button id="btnFullscreen" class="view-icon-button" title="전체화면" aria-label="전체화면">⛶</button>
+                        <button id="btnCenterPreview" class="view-icon-button"
+                            title="현재 배율을 유지하고 이미지를 가운데로 이동" aria-label="이미지 원위치">⌖</button>
+                        <button id="btnResetZoom" class="view-icon-button" title="확대·축소 초기화"
+                            aria-label="확대·축소 초기화">↺</button>
+                    </div>
+                </div>
                 <div id="previewContainer">
                     <img id="preview" alt="preview" draggable="false">
                     <img id="preview2" alt="preview2" style="display:none;" draggable="false">
@@ -203,16 +220,6 @@
                 <div class="navButtons">
                     <button id="btnPrev">◀</button>
                     <button id="btnNext">▶</button>
-                </div>
-                <div class="previewMeta" id="previewMeta">
-                    <div id="metaDynamicArea">
-                        <!-- Dynamic Info & Fav/Download buttons for each page -->
-                    </div>
-                    <div class="actions preview-global-actions">
-                        <button id="btnFullscreen">Fullscreen</button>
-                        <button id="btnCenterPreview" title="현재 배율을 유지하고 이미지를 가운데로 이동">⌖ 원위치</button>
-                        <button id="btnResetZoom">Reset Zoom</button>
-                    </div>
                 </div>
             </div>
         </div>
@@ -624,6 +631,31 @@
                         </div>
                     </div>
 
+                    <div class="bg-boundary-control">
+                        <div>
+                            <span><strong>경계 밀착도</strong><small>낮게: 잔털·넓은 경계 · 높게: 피사체에 더 밀착</small></span>
+                            <output id="bgBoundaryStrengthValue">50%</output>
+                        </div>
+                        <input id="bgBoundaryStrength" type="range" min="0" max="100" value="50"
+                            aria-label="배경 제거 경계 밀착도">
+                        <div class="bg-boundary-scale"><span>부드럽고 넓게</span><span>기본</span><span>강하게 밀착</span></div>
+                    </div>
+
+                    <div class="bg-custom-background">
+                        <label class="bg-custom-background-toggle">
+                            <input id="bgCustomBackgroundEnabled" type="checkbox">
+                            <span>
+                                <strong>커스텀 단색 배경</strong>
+                                <small>배경 제거 결과의 투명 영역에 선택한 색을 합성합니다.</small>
+                            </span>
+                        </label>
+                        <label class="bg-custom-background-color">
+                            <span>배경색</span>
+                            <input id="bgCustomBackgroundColor" type="color" value="#3197a3" disabled>
+                            <output id="bgCustomBackgroundColorValue">#3197A3</output>
+                        </label>
+                    </div>
+
                     <div class="bg-remove-progress">
                         <div class="bg-remove-progress-track">
                             <div id="bgRemoveProgressBar"></div>
@@ -852,12 +884,18 @@
     <div id="aiJenaModal" class="ai-jena-modal" role="dialog" aria-modal="true"
         aria-labelledby="aiJenaTitle" style="display:none;">
         <div class="ai-jena-dialog">
+            <div id="aiJenaNotice" class="ai-jena-notice" role="status" aria-live="polite"></div>
             <header class="ai-jena-header">
                 <div>
                     <h2 id="aiJenaTitle">AI Jena · 이미지 채팅 편집</h2>
                     <p>프롬프트, 선택영역 붓, 포즈 변경 또는 새 이미지 생성으로 작업합니다.</p>
                 </div>
                 <div>
+                    <div class="ai-jena-font-control" aria-label="AI Jena 글자 크기 조절">
+                        <button id="btnAiJenaFontSmaller" type="button" title="글자 작게">−</button>
+                        <span id="aiJenaFontSizeValue">12px</span>
+                        <button id="btnAiJenaFontLarger" type="button" title="글자 크게">＋</button>
+                    </div>
                     <span id="aiJenaKeyStatus">AI Studio 키 확인 중</span>
                     <button id="btnAiJenaClose" type="button" aria-label="AI Jena 닫기">×</button>
                 </div>
@@ -869,8 +907,83 @@
                         <button class="ai-jena-mode active" data-jena-mode="edit" type="button">이미지 수정</button>
                         <button class="ai-jena-mode" data-jena-mode="clothes" type="button">선택영역 수정</button>
                         <button class="ai-jena-mode" data-jena-mode="pose" type="button">전체 포즈 변경</button>
+                        <button class="ai-jena-mode" data-jena-mode="tryon" type="button">Try-on</button>
                         <button class="ai-jena-mode" data-jena-mode="generate" type="button">새 이미지 생성</button>
+                        <button class="ai-jena-mode ai-jena-video-mode" data-jena-mode="video" type="button">▶ 영상 생성</button>
                     </div>
+                    <section id="aiJenaVideoOptions" class="ai-jena-video-options" style="display:none;">
+                        <div><b>Veo 영상 설정</b><small>Google AI Studio</small></div>
+                        <label><span>모델</span><select id="aiJenaVideoModel">
+                            <option value="veo-3.1-generate-preview">Veo 3.1 Preview</option>
+                            <option value="veo-3.1-fast-generate-preview">Veo 3.1 Fast Preview</option>
+                            <option value="veo-3.1-lite-generate-preview">Veo 3.1 Lite Preview</option>
+                        </select></label>
+                        <label><span>화면비</span><select id="aiJenaVideoAspect">
+                            <option value="16:9">16:9 가로</option>
+                            <option value="9:16">9:16 세로</option>
+                        </select></label>
+                        <label class="ai-jena-video-source"><input id="aiJenaVideoUseSource" type="checkbox" checked>
+                            <span>현재 이미지를 첫 프레임으로 사용</span></label>
+                        <small>Veo는 유료 API 사용 권한이 필요할 수 있으며 생성에 수 분이 걸릴 수 있습니다.</small>
+                    </section>
+                    <section id="aiJenaPoseLibrary" class="ai-jena-pose-library" style="display:none;">
+                        <div><b>포즈 라이브러리</b><small id="aiJenaPoseCount">100가지</small></div>
+                        <label><span>주제</span><select id="aiJenaPoseCategory"></select></label>
+                        <label><span>자세</span><select id="aiJenaPosePreset"></select></label>
+                        <button id="btnApplyAiJenaPose" type="button">선택 포즈를 프롬프트에 적용</button>
+                        <details id="aiJenaPoseManager" class="ai-jena-pose-manager">
+                            <summary>사용자 포즈 추가·저장</summary>
+                            <div class="ai-jena-pose-manager-body">
+                                <label><span>주제</span><input id="aiJenaCustomPoseCategory" type="text" maxlength="50" placeholder="기존 또는 새 주제"></label>
+                                <label><span>자세</span><textarea id="aiJenaCustomPoseText" rows="3" maxlength="500" placeholder="추가할 자세를 자세히 설명하세요."></textarea></label>
+                                <div class="ai-jena-pose-manager-actions">
+                                    <button id="btnAddAiJenaPose" type="button">＋ 포즈 추가·DB 저장</button>
+                                    <button id="btnDeleteAiJenaPose" class="danger-subtle" type="button">선택 사용자 포즈 삭제</button>
+                                </div>
+                                <div class="ai-jena-pose-manager-actions">
+                                    <button id="btnExportAiJenaPoses" type="button">JSON 내보내기</button>
+                                    <button id="btnImportAiJenaPoses" type="button">JSON 불러오기</button>
+                                    <input id="aiJenaPoseFileInput" type="file" accept=".json,application/json" hidden>
+                                </div>
+                                <small id="aiJenaPoseManagerStatus" aria-live="polite">추가한 포즈는 IndexedDB에 자동 저장됩니다.</small>
+                            </div>
+                        </details>
+                    </section>
+                    <section class="ai-jena-reference-panel">
+                        <div class="ai-jena-reference-heading">
+                            <b>참고 이미지</b><small>얼굴 · 옷 · 배경 · 자세</small>
+                        </div>
+                        <div class="ai-jena-reference-grid">
+                            <div data-jena-reference="face" tabindex="0"><span>얼굴</span><img alt="얼굴 참고 미리보기"><em>PC · FMA · 붙여넣기</em><div class="ai-jena-reference-sources"><section><button data-jena-ref-pc type="button"><b>▧ PC</b><small>파일 선택</small></button><button data-jena-ref-paste type="button">▣ 붙여넣기</button></section><button data-jena-ref-fma type="button"><b>◉ FMA</b><small>갤러리 선택</small></button></div><div class="ai-jena-reference-actions"><button data-jena-ref-view type="button">↗ 새창 보기</button><button data-jena-ref-remove type="button">× 제거</button></div><input type="file" accept="image/*" hidden></div>
+                            <div data-jena-reference="clothing" tabindex="0"><span>옷</span><img alt="의상 참고 미리보기"><em>PC · FMA · 붙여넣기</em><div class="ai-jena-reference-sources"><section><button data-jena-ref-pc type="button"><b>▧ PC</b><small>파일 선택</small></button><button data-jena-ref-paste type="button">▣ 붙여넣기</button></section><button data-jena-ref-fma type="button"><b>◉ FMA</b><small>갤러리 선택</small></button></div><div class="ai-jena-reference-actions"><button data-jena-ref-view type="button">↗ 새창 보기</button><button data-jena-ref-remove type="button">× 제거</button></div><input type="file" accept="image/*" hidden></div>
+                            <div data-jena-reference="background" tabindex="0"><span>배경</span><img alt="배경 참고 미리보기"><em>PC · FMA · 붙여넣기</em><div class="ai-jena-reference-sources"><section><button data-jena-ref-pc type="button"><b>▧ PC</b><small>파일 선택</small></button><button data-jena-ref-paste type="button">▣ 붙여넣기</button></section><button data-jena-ref-fma type="button"><b>◉ FMA</b><small>갤러리 선택</small></button></div><div class="ai-jena-reference-actions"><button data-jena-ref-view type="button">↗ 새창 보기</button><button data-jena-ref-remove type="button">× 제거</button></div><input type="file" accept="image/*" hidden></div>
+                            <div data-jena-reference="pose" tabindex="0"><span>자세</span><img alt="자세 참고 미리보기"><em>PC · FMA · 붙여넣기</em><div class="ai-jena-reference-sources"><section><button data-jena-ref-pc type="button"><b>▧ PC</b><small>파일 선택</small></button><button data-jena-ref-paste type="button">▣ 붙여넣기</button></section><button data-jena-ref-fma type="button"><b>◉ FMA</b><small>갤러리 선택</small></button></div><div class="ai-jena-reference-actions"><button data-jena-ref-view type="button">↗ 새창 보기</button><button data-jena-ref-remove type="button">× 제거</button></div><input type="file" accept="image/*" hidden></div>
+                        </div>
+                        <p class="ai-jena-reference-help">카드를 선택한 뒤 Ctrl+V를 눌러도 해당 칸에만 붙여넣습니다.</p>
+                        <button id="btnClearAiJenaReferences" type="button">참고 이미지 전체 다시 세팅</button>
+                        <details id="aiJenaReferenceStorage" class="ai-jena-reference-storage">
+                            <summary>참고 세팅 저장·불러오기</summary>
+                            <div class="ai-jena-reference-storage-body">
+                                <label><span>세팅 이름</span><input id="aiJenaReferencePresetName" type="text"
+                                        maxlength="80" placeholder="예: 봄 패션 Try-on"></label>
+                                <div class="ai-jena-reference-storage-actions">
+                                    <button id="btnExportAiJenaReferences" type="button">JSON 내보내기</button>
+                                    <button id="btnImportAiJenaReferences" type="button">JSON 불러오기</button>
+                                    <input id="aiJenaReferenceFileInput" type="file"
+                                        accept=".json,application/json" hidden>
+                                </div>
+                                <label><span>IndexedDB 세팅</span><select id="aiJenaReferencePresetList">
+                                        <option value="">저장된 세팅 없음</option>
+                                    </select></label>
+                                <div class="ai-jena-reference-storage-actions three">
+                                    <button id="btnSaveAiJenaReferencesDb" type="button">DB 저장</button>
+                                    <button id="btnLoadAiJenaReferencesDb" type="button">DB 불러오기</button>
+                                    <button id="btnDeleteAiJenaReferencesDb" class="danger-subtle" type="button">삭제</button>
+                                </div>
+                                <small id="aiJenaReferenceStorageStatus" aria-live="polite">패널을 열어 세팅을 관리하세요.</small>
+                            </div>
+                        </details>
+                    </section>
                     <div id="aiJenaBrushControls" class="ai-jena-brush-controls">
                         <span class="ai-jena-label">부분 선택</span>
                         <div class="ai-jena-selection-tools">
@@ -911,13 +1024,17 @@
                         <canvas id="aiJenaMaskCanvas"></canvas>
                     </div>
                     <img id="aiJenaResultPreview" alt="AI Jena 결과" style="display:none;">
+                    <video id="aiJenaVideoPreview" class="ai-jena-video-preview" controls playsinline loop style="display:none;"></video>
                     <aside id="aiJenaHistoryPanel" class="ai-jena-history-panel" aria-label="AI 생성 히스토리">
+                        <div id="aiJenaHistoryResizer" class="ai-jena-history-resizer" role="separator"
+                            aria-orientation="vertical" aria-label="히스토리 창 너비 조절" tabindex="0"></div>
                         <div class="ai-jena-history-title">
                             <strong>히스토리</strong>
                             <span id="aiJenaHistoryCount">0</span>
                         </div>
                         <div id="aiJenaHistoryList" class="ai-jena-history-list"></div>
                         <div class="ai-jena-history-footer">
+                            <button id="btnSendAllAiJenaHistory" class="history-send-all" type="button">히스토리 전체 넣기</button>
                             <button id="btnClearAiJenaHistory" type="button">히스토리 전체 지우기</button>
                         </div>
                     </aside>
@@ -945,9 +1062,36 @@
                         <button id="btnStopAiJena" class="danger-subtle" type="button" style="display:none;">■ 정지</button>
                         <button id="btnRunAiJena" class="primary-action" type="button"
                             title="AI 실행 (Ctrl+Enter)">AI 실행</button>
+                        <button id="btnRunAiJenaVideo" class="ai-jena-video-action" type="button"
+                            title="Veo 영상 생성 (작업 모드를 영상 생성으로 전환)">▶ Veo 영상</button>
                         <button id="btnAddAiJenaResult" type="button" disabled>갤러리로 보내기</button>
+                        <button id="btnDownloadAiJenaVideo" type="button" style="display:none;">↓ 영상 다운로드</button>
                     </div>
                 </aside>
+            </div>
+            <div id="aiJenaFmaPicker" class="editor-fma-picker-modal ai-jena-fma-picker" role="dialog" aria-modal="true"
+                aria-labelledby="aiJenaFmaPickerTitle" style="display:none;">
+                <div class="editor-fma-picker-dialog">
+                    <header>
+                        <div><h2 id="aiJenaFmaPickerTitle">FMA 갤러리에서 참고 이미지 선택</h2><p>얼굴, 옷, 배경 또는 자세에 사용할 이미지를 선택하세요.</p></div>
+                        <button id="btnCloseAiJenaFmaPicker" type="button" aria-label="참고 이미지 선택 닫기">×</button>
+                    </header>
+                    <div id="aiJenaFmaPickerGrid" class="editor-fma-picker-grid"></div>
+                    <footer>
+                        <span id="aiJenaFmaPickerStatus">이미지를 선택하세요.</span>
+                        <div><button id="btnCancelAiJenaFmaPicker" type="button">취소</button><button id="btnApplyAiJenaFmaPicker" class="primary-action" type="button" disabled>참고 이미지로 사용</button></div>
+                    </footer>
+                </div>
+            </div>
+            <div id="aiJenaReferencePreview" class="ai-jena-reference-preview" role="dialog" aria-modal="true"
+                aria-labelledby="aiJenaReferencePreviewTitle" style="display:none;">
+                <section id="aiJenaReferencePreviewDialog" class="ai-jena-reference-preview-dialog">
+                    <header id="aiJenaReferencePreviewHandle">
+                        <div><h2 id="aiJenaReferencePreviewTitle">참고 이미지 보기</h2><p id="aiJenaReferencePreviewName"></p></div>
+                        <button id="btnCloseAiJenaReferencePreview" type="button" aria-label="참고 이미지 보기 닫기">×</button>
+                    </header>
+                    <div class="ai-jena-reference-preview-body"><img id="aiJenaReferencePreviewImage" alt="입력된 참고 이미지"></div>
+                </section>
             </div>
             <div id="aiJenaSaveChoice" class="upscale-save-choice" role="alertdialog" aria-modal="true"
                 aria-labelledby="aiJenaSaveTitle" style="display:none;">
@@ -972,7 +1116,6 @@
             <header class="image-editor-header">
                 <div>
                     <h2 id="imageEditorTitle">이미지 편집</h2>
-                    <p>색감과 분위기를 보정하고 여러 개의 텍스트 레이어로 꾸며보세요.</p>
                 </div>
                 <div class="image-editor-header-actions">
                     <label class="editor-ui-font-control" title="이미지 편집 메뉴의 글자 크기">
@@ -986,6 +1129,10 @@
                     <button id="btnImageEditorResetZoom" type="button" title="화면 맞춤으로 돌아가기">
                         확대 <span id="imageEditorZoomValue">100%</span>
                     </button>
+                    <button id="btnExportImageEditorProject" type="button" title="현재 편집 프로젝트를 .fme로 내보내기">FME 저장</button>
+                    <button id="btnImportImageEditorProject" type="button" title=".fme 편집 프로젝트 불러오기">FME 불러오기</button>
+                    <input id="imageEditorProjectFileInput" type="file" accept=".fme,application/json"
+                        hidden>
                     <button id="btnImageEditorReset" type="button">전체 초기화</button>
                     <button id="btnImageEditorClose" class="utility-close" type="button"
                         aria-label="이미지 편집 닫기">×</button>
@@ -1104,12 +1251,14 @@
                     </section>
                 </aside>
 
+                <div id="imageEditorLeftResizer" class="image-editor-resizer" role="separator" aria-orientation="vertical" title="드래그하여 왼쪽 패널 너비 조절"></div>
                 <main id="imageEditorStage" class="image-editor-stage">
                     <div id="imageEditorCanvasWrap" class="image-editor-canvas-wrap">
                         <canvas id="imageEditorCanvas"></canvas>
                         <canvas id="imageEditorDrawingCanvas" aria-label="이미지 그리기 레이어"></canvas>
                     </div>
                     <div id="imageEditorTextQuickControls" class="editor-text-quick-controls" style="display:none;">
+                        <span class="quick-controls-drag-handle" title="드래그하여 위치 이동 · 더블클릭하면 원위치">⠿</span>
                         <button id="btnQuickTextSmaller" type="button" title="텍스트 작게">A−</button>
                         <button id="btnQuickTextLarger" type="button" title="텍스트 크게">A＋</button>
                         <span id="quickTextSizeValue">64px</span>
@@ -1117,24 +1266,30 @@
                         <button id="btnQuickTextRotateRight" type="button" title="오른쪽으로 5° 회전">↷</button>
                         <span id="quickTextRotationValue">0°</span>
                     </div>
-                    <div class="image-editor-stage-hint">Alt+휠 확대·축소 · Alt+드래그 이동 · 그리기 또는 텍스트·레이어 편집</div>
                 </main>
-
+                <div id="imageEditorRightResizer" class="image-editor-resizer" role="separator" aria-orientation="vertical" title="드래그하여 오른쪽 패널 너비 조절"></div>
                 <aside class="image-editor-layers">
                     <div class="editor-sidebar-tabs" role="tablist" aria-label="편집 레이어 종류">
                         <button id="btnEditorLayerTab" class="active" type="button" role="tab"
                             aria-selected="true">레이어</button>
                         <button id="btnEditorTextTab" type="button" role="tab"
                             aria-selected="false">Text</button>
+                        <button id="btnEditorShapeTab" type="button" role="tab"
+                            aria-selected="false">도형</button>
                     </div>
                     <div id="editorLayerTabPanel" class="editor-tab-panel">
                         <section class="editor-panel layer-panel">
                             <div class="editor-panel-title">
-                                <span>이미지 레이어</span>
+                                <span>통합 레이어</span>
                                 <button id="btnAddImageLayer" class="editor-add-layer" type="button">＋ 레이어</button>
                                 <input id="imageLayerFileInput" type="file" accept="image/*" multiple style="display:none;">
                             </div>
                             <div id="imageLayerList" class="editor-layer-list"></div>
+                            <div class="editor-layer-content-actions">
+                                <button id="btnPutImageInLayer" type="button">▣ PC 이미지</button>
+                                <button id="btnPutFmaImageInLayer" type="button">▦ FMA 이미지</button>
+                                <button id="btnPutTextInLayer" type="button">T 텍스트 넣기</button>
+                            </div>
                             <div class="editor-layer-actions">
                                 <button id="btnImageLayerUp" type="button" title="레이어 위로">↑</button>
                                 <button id="btnImageLayerDown" type="button" title="레이어 아래로">↓</button>
@@ -1143,7 +1298,17 @@
                             </div>
                         </section>
                         <section id="imageLayerInspector" class="editor-panel text-inspector" style="display:none;">
-                            <div class="editor-panel-title"><span>레이어 속성</span></div>
+                            <div class="editor-panel-title">
+                                <span>레이어 속성</span>
+                                <span class="image-layer-edit-actions">
+                                    <button id="btnCropImageLayer" type="button">Crop</button>
+                                    <button id="btnBgRemoveImageLayer" type="button">BG Remove</button>
+                                </span>
+                            </div>
+                            <div class="image-layer-segmentation-actions">
+                                <button id="btnDuplicateImageAlpha" type="button">◐ 알파 복제</button>
+                                <button id="btnDuplicateImageMask" type="button">◩ 마스크 복제</button>
+                            </div>
                             <div class="text-inspector-grid">
                                 <label><span>Alpha(%)</span><input id="imageLayerOpacity" type="number"
                                         min="0" max="100" value="100"></label>
@@ -1157,14 +1322,31 @@
                                         min="1"></label>
                             </div>
                         </section>
+                        <section class="editor-panel base-layer-controls">
+                            <div class="editor-panel-title"><span>베이스 이미지</span><em>잠금</em></div>
+                            <label class="editor-check">
+                                <input id="baseImageLayerVisible" type="checkbox" checked>
+                                베이스 이미지 보이기
+                            </label>
+                            <label class="base-layer-opacity">
+                                <span>Alpha</span>
+                                <input id="baseImageLayerOpacity" type="range" min="0" max="100" value="100">
+                                <output id="baseImageLayerOpacityValue">100%</output>
+                            </label>
+                            <div class="base-layer-copy-actions">
+                                <button id="btnDuplicateBaseLayer" type="button">▣ 베이스 복제</button>
+                                <button id="btnDuplicateBaseAlpha" type="button">◐ 알파 레이어 복제</button>
+                                <button id="btnDuplicateBaseMask" type="button">◩ 마스크 복제</button>
+                            </div>
+                        </section>
                         <div id="imageLayerEmpty" class="text-layer-empty">
-                            ＋ 레이어를 눌러 PNG/JPG 이미지를 겹쳐 꾸밀 수 있습니다.
+                            ＋ 레이어를 먼저 만든 뒤 이미지 또는 텍스트를 넣으세요.
                         </div>
                     </div>
                     <div id="editorTextTabPanel" class="editor-tab-panel" style="display:none;">
                     <section class="editor-panel layer-panel">
                         <div class="editor-panel-title">
-                            <span>텍스트 레이어</span>
+                            <span>통합 레이어 · 텍스트 편집</span>
                             <button id="btnAddTextLayer" class="editor-add-layer" type="button">＋ Text</button>
                         </div>
                         <div id="imageEditorLayerList" class="editor-layer-list"></div>
@@ -1226,7 +1408,7 @@
                                     min="10" max="1000" step="1" value="100"></label>
                         </div>
                         <label class="editor-check">
-                            <input id="editorTextShadowEnabled" type="checkbox" checked>
+                            <input id="editorTextShadowEnabled" type="checkbox">
                             <span>그림자 표시</span>
                         </label>
                         <div class="text-inspector-grid shadow-grid">
@@ -1245,6 +1427,60 @@
                     <div id="textLayerEmpty" class="text-layer-empty">
                         ＋ Text를 눌러 여러 개의 텍스트 레이어를 추가하세요.
                     </div>
+                    </div>
+                    <div id="editorShapeTabPanel" class="editor-tab-panel" style="display:none;">
+                        <section class="editor-panel">
+                            <div class="editor-panel-title">
+                                <span>도형 넣기</span>
+                                <em>새 레이어로 추가</em>
+                            </div>
+                            <div class="editor-shape-palette">
+                                <button type="button" data-editor-shape="rectangle">▭ 사각형</button>
+                                <button type="button" data-editor-shape="roundedRectangle">▢ 둥근 사각형</button>
+                                <button type="button" data-editor-shape="ellipse">○ 원·타원</button>
+                                <button type="button" data-editor-shape="triangle">△ 삼각형</button>
+                                <button type="button" data-editor-shape="semicircle">◒ 반원</button>
+                                <button type="button" data-editor-shape="diamond">◇ 마름모</button>
+                                <button type="button" data-editor-shape="band">▬ 띠</button>
+                                <button type="button" data-editor-shape="arrow">➜ 화살표</button>
+                            </div>
+                        </section>
+                        <section id="shapeLayerInspector" class="editor-panel text-inspector" style="display:none;">
+                            <div class="editor-panel-title"><span>도형 레이어 편집</span></div>
+                            <div class="text-inspector-grid">
+                                <label><span>도형</span><select id="editorShapeType">
+                                    <option value="rectangle">사각형</option>
+                                    <option value="roundedRectangle">둥근 사각형</option>
+                                    <option value="ellipse">원·타원</option>
+                                    <option value="triangle">삼각형</option>
+                                    <option value="semicircle">반원</option>
+                                    <option value="diamond">마름모</option>
+                                    <option value="band">띠</option>
+                                    <option value="arrow">화살표</option>
+                                </select></label>
+                                <label><span>전체 Alpha(%)</span><input id="editorShapeOpacity" type="number" min="0" max="100" value="100"></label>
+                                <label><span>채우기 색</span><input id="editorShapeFillColor" type="color" value="#57e6c1"></label>
+                                <label><span>채우기 Alpha(%)</span><input id="editorShapeFillOpacity" type="number" min="0" max="100" value="80"></label>
+                                <label><span>테두리 색</span><input id="editorShapeStrokeColor" type="color" value="#ffffff"></label>
+                                <label><span>테두리 두께(px)</span><input id="editorShapeStrokeWidth" type="number" min="0" max="100" value="4"></label>
+                                <label><span>X</span><input id="editorShapeX" type="number"></label>
+                                <label><span>Y</span><input id="editorShapeY" type="number"></label>
+                                <label><span>가로(px)</span><input id="editorShapeWidth" type="number" min="1"></label>
+                                <label><span>세로(px)</span><input id="editorShapeHeight" type="number" min="1"></label>
+                                <label><span>회전(°)</span><input id="editorShapeRotation" type="number" min="-180" max="180" value="0"></label>
+                            </div>
+                        </section>
+                        <section class="editor-panel">
+                            <div class="editor-panel-title"><span>캔버스 배경</span><em>기본 투명</em></div>
+                            <label class="editor-check"><input id="editorCanvasBackgroundEnabled" type="checkbox">배경색 사용</label>
+                            <label class="base-layer-opacity"><span>색상</span>
+                                <input id="editorCanvasBackgroundColor" type="color" value="#ffffff">
+                            </label>
+                            <label class="base-layer-opacity"><span>Alpha</span>
+                                <input id="editorCanvasBackgroundOpacity" type="range" min="0" max="100" value="100">
+                                <output id="editorCanvasBackgroundOpacityValue">100%</output>
+                            </label>
+                        </section>
                     </div>
                 </aside>
             </div>
@@ -1303,7 +1539,7 @@
                             <option value="700" selected>Bold</option>
                             <option value="900">Black</option>
                         </select></label>
-                        <label class="editor-check"><input id="defaultTextShadow" type="checkbox" checked>
+                        <label class="editor-check"><input id="defaultTextShadow" type="checkbox">
                             <span>새 텍스트 그림자 사용</span>
                         </label>
                     </div>
@@ -1312,6 +1548,27 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <div id="imageEditorFmaPicker" class="editor-fma-picker-modal" role="dialog" aria-modal="true"
+        aria-labelledby="imageEditorFmaPickerTitle" style="display:none;">
+        <div class="editor-fma-picker-dialog">
+            <header>
+                <div>
+                    <h2 id="imageEditorFmaPickerTitle">FMA 이미지에서 레이어 추가</h2>
+                    <p>FMA 갤러리 이미지를 선택하여 현재 편집 작업에 레이어로 넣습니다.</p>
+                </div>
+                <button id="btnCloseImageEditorFmaPicker" type="button" aria-label="FMA 이미지 선택 닫기">×</button>
+            </header>
+            <div id="imageEditorFmaPickerGrid" class="editor-fma-picker-grid"></div>
+            <footer>
+                <span id="imageEditorFmaPickerStatus">이미지를 선택하세요.</span>
+                <div>
+                    <button id="btnCancelImageEditorFmaPicker" type="button">취소</button>
+                    <button id="btnApplyImageEditorFmaPicker" class="primary-action" type="button" disabled>선택 이미지 넣기</button>
+                </div>
+            </footer>
         </div>
     </div>
 
@@ -1396,6 +1653,21 @@
     </div>
 
     <!-- Loading Overlay -->
+    <div id="dbHistoryModal" class="db-history-internal-modal" role="dialog" aria-modal="true"
+        aria-labelledby="dbHistoryModalTitle" style="display:none;">
+        <div class="db-history-internal-dialog">
+            <header>
+                <div>
+                    <h2 id="dbHistoryModalTitle">SaveDB 히스토리</h2>
+                    <p>FMA Viewer 내부에서 저장본을 관리하고 불러옵니다.</p>
+                </div>
+                <button id="btnCloseDbHistoryModal" type="button" aria-label="DB 히스토리 닫기">×</button>
+            </header>
+            <iframe id="dbHistoryFrame" title="SaveDB 히스토리"></iframe>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
     <div id="loadingOverlay"
         style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:10100; flex-direction:column; align-items:center; justify-content:center; backdrop-filter:blur(5px);">
         <div
@@ -1413,21 +1685,21 @@
     </div>
 
     <!-- Project Scripts (Modularized) -->
-    <script src="js/globals.js?v=20260731-51"></script>
-    <script src="js/database.js?v=20260731-46"></script>
-    <script src="js/gallery.js?v=20260731-42"></script>
-    <script src="js/imageMetadata.js?v=20260731-42"></script>
-    <script src="js/preview.js?v=20260731-48"></script>
-    <script src="js/crop.js?v=20260731-42"></script>
+    <script src="js/globals.js?v=20260731-66"></script>
+    <script src="js/database.js?v=20260731-50"></script>
+    <script src="js/gallery.js?v=20260731-45"></script>
+    <script src="js/imageMetadata.js?v=20260731-45"></script>
+    <script src="js/preview.js?v=20260731-51"></script>
+    <script src="js/crop.js?v=20260731-44"></script>
     <script src="js/imageUpscale.js?v=20260731-42"></script>
-    <script src="js/aiJena.js?v=20260731-47"></script>
-    <script src="js/imageEditor.js?v=20260731-42"></script>
-    <script src="js/backgroundMaskEditor.js?v=20260731-42"></script>
-    <script src="js/backgroundRemove.js?v=20260731-51"></script>
-    <script src="js/fileHandlers.js?v=20260731-42"></script>
+    <script src="js/aiJena.js?v=20260731-62"></script>
+    <script src="js/imageEditor.js?v=20260731-51"></script>
+    <script src="js/backgroundMaskEditor.js?v=20260731-44"></script>
+    <script src="js/backgroundRemove.js?v=20260731-53"></script>
+    <script src="js/fileHandlers.js?v=20260731-46"></script>
     <script src="js/externalApps.js?v=20260731-49"></script>
     <script src="js/interaction.js?v=20260731-48"></script>
-    <script src="js/app.js?v=20260731-48"></script>
+    <script src="js/app.js?v=20260731-51"></script>
 </body>
 
 </html>

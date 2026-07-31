@@ -1,8 +1,11 @@
-/* FMA Viewer SaveDB history manager */
+/* FMA Viewer internal SaveDB history manager (schema v4) */
 
 const FMA_DB_NAME = "FMADatabase";
-const FMA_DB_VERSION = 2;
-const FMA_HISTORY_STORE = "fma_history";
+const FMA_DB_VERSION = 4;
+const SNAPSHOT_STORE = "snapshots";
+const METADATA_STORE = "image_metadata";
+const BLOB_STORE = "image_blobs";
+const LEGACY_HISTORY_STORE = "fma_history";
 
 const historyDom = {
     list: document.getElementById("historyList"),
@@ -27,9 +30,20 @@ function openHistoryDatabase() {
         request.onupgradeneeded = event => {
             const db = event.target.result;
             if (!db.objectStoreNames.contains("fma_store")) db.createObjectStore("fma_store");
-            if (!db.objectStoreNames.contains(FMA_HISTORY_STORE)) {
-                const store = db.createObjectStore(FMA_HISTORY_STORE, { keyPath: "id" });
-                store.createIndex("savedAt", "savedAt");
+            if (!db.objectStoreNames.contains(LEGACY_HISTORY_STORE)) {
+                const legacy = db.createObjectStore(LEGACY_HISTORY_STORE, { keyPath: "id" });
+                legacy.createIndex("savedAt", "savedAt");
+            }
+            if (!db.objectStoreNames.contains(BLOB_STORE)) {
+                db.createObjectStore(BLOB_STORE, { keyPath: "imageId" });
+            }
+            if (!db.objectStoreNames.contains(METADATA_STORE)) {
+                const metadata = db.createObjectStore(METADATA_STORE, { keyPath: "imageId" });
+                metadata.createIndex("modifiedAt", "modifiedAt");
+            }
+            if (!db.objectStoreNames.contains(SNAPSHOT_STORE)) {
+                const snapshots = db.createObjectStore(SNAPSHOT_STORE, { keyPath: "id" });
+                snapshots.createIndex("savedAt", "savedAt");
             }
         };
         request.onsuccess = () => resolve(request.result);
@@ -39,37 +53,90 @@ function openHistoryDatabase() {
 
 async function getHistorySnapshots() {
     const db = await openHistoryDatabase();
-    const records = await new Promise((resolve, reject) => {
-        const transaction = db.transaction(FMA_HISTORY_STORE, "readonly");
-        const request = transaction.objectStore(FMA_HISTORY_STORE).openCursor();
-        const summaries = [];
+    try {
+        const snapshots = await readAllSnapshotSummaries(db);
+        const legacyKeys = await readLegacySnapshotKeys(db);
+        legacyKeys.forEach(id => {
+            if (!snapshots.some(record => record.id === id)) {
+                snapshots.push({
+                    id,
+                    name: "기존 SaveDB 저장본",
+                    savedAt: "",
+                    imageCount: 0,
+                    approximateBytes: 0,
+                    state: {},
+                    legacy: true
+                });
+            }
+        });
+        return snapshots.sort((a, b) => String(b.savedAt).localeCompare(String(a.savedAt)));
+    } finally {
+        db.close();
+    }
+}
+
+function readAllSnapshotSummaries(db) {
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(SNAPSHOT_STORE, "readonly");
+        const request = transaction.objectStore(SNAPSHOT_STORE).openCursor();
+        const output = [];
         request.onsuccess = () => {
             const cursor = request.result;
-            if (!cursor) {
-                resolve(summaries);
-                return;
-            }
+            if (!cursor) return resolve(output);
             const record = cursor.value || {};
-            summaries.push({
+            if (record.id !== "last_fma") output.push({
                 id: record.id,
                 name: record.name,
                 savedAt: record.savedAt,
-                imageCount: record.imageCount || record.images?.length || 0,
+                imageCount: record.imageCount || record.imageIds?.length || 0,
                 approximateBytes: record.approximateBytes || 0,
                 state: record.state || {},
-                previewSrc: record.images?.[0]?.src || ""
+                previewImageId: record.previewImageId || record.imageIds?.[0] || ""
             });
             cursor.continue();
         };
         request.onerror = () => reject(request.error);
     });
-    db.close();
-    return records.sort((a, b) => String(b.savedAt).localeCompare(String(a.savedAt)));
+}
+
+function readLegacySnapshotKeys(db) {
+    if (!db.objectStoreNames.contains(LEGACY_HISTORY_STORE)) return Promise.resolve([]);
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(LEGACY_HISTORY_STORE, "readonly");
+        const request = transaction.objectStore(LEGACY_HISTORY_STORE).openKeyCursor();
+        const keys = [];
+        request.onsuccess = () => {
+            const cursor = request.result;
+            if (!cursor) return resolve(keys);
+            keys.push(cursor.primaryKey);
+            cursor.continue();
+        };
+        request.onerror = () => reject(request.error);
+    });
+}
+
+async function loadSnapshotPreview(record) {
+    if (!record.previewImageId) return "";
+    const db = await openHistoryDatabase();
+    try {
+        return await new Promise((resolve, reject) => {
+            const tx = db.transaction(METADATA_STORE, "readonly");
+            const request = tx.objectStore(METADATA_STORE).get(record.previewImageId);
+            request.onsuccess = () => resolve(
+                request.result?.thumbnailBlob
+                    ? URL.createObjectURL(request.result.thumbnailBlob)
+                    : ""
+            );
+            request.onerror = () => reject(request.error);
+        });
+    } finally {
+        db.close();
+    }
 }
 
 async function renderHistorySnapshots() {
     historyDom.status.style.display = "block";
-    historyDom.status.innerText = "DB 히스토리를 불러오는 중…";
+    historyDom.status.innerText = "스냅샷 목록과 메타정보를 불러오는 중…";
     historyDom.list.innerHTML = "";
     try {
         const records = await getHistorySnapshots();
@@ -84,6 +151,16 @@ async function renderHistorySnapshots() {
         }
         historyDom.status.style.display = "none";
         records.forEach(record => historyDom.list.appendChild(createHistoryItem(record)));
+        for (const record of records.filter(item => !item.legacy)) {
+            const article = historyDom.list.querySelector(`[data-history-id="${CSS.escape(record.id)}"]`);
+            const preview = await loadSnapshotPreview(record);
+            if (article && preview) {
+                const image = document.createElement("img");
+                image.src = preview;
+                image.alt = "저장 상태 썸네일";
+                article.querySelector(".db-history-thumb").replaceChildren(image);
+            }
+        }
     } catch (error) {
         console.error("DB history load failed:", error);
         historyDom.status.innerText = "DB 히스토리를 불러오지 못했습니다: " + error.message;
@@ -95,19 +172,11 @@ function createHistoryItem(record) {
     const article = fragment.querySelector(".db-history-item");
     article.dataset.historyId = record.id;
     fragment.querySelector("h2").innerText = record.name || "FMA SaveDB";
-    fragment.querySelector(".saved-at").innerText =
-        new Date(record.savedAt).toLocaleString("ko-KR");
-
-    const firstImage = record.previewSrc;
-    if (typeof firstImage === "string" && firstImage.startsWith("data:image")) {
-        const image = document.createElement("img");
-        image.src = firstImage;
-        image.alt = "저장 상태 첫 이미지";
-        fragment.querySelector(".db-history-thumb").replaceChildren(image);
-    }
-
+    fragment.querySelector(".saved-at").innerText = record.legacy
+        ? "기존 저장 형식 · 복원 후 v4로 변환됩니다."
+        : new Date(record.savedAt).toLocaleString("ko-KR");
     const state = record.state || {};
-    const badges = [
+    const badges = record.legacy ? ["Legacy", "1회 변환 필요"] : [
         `${record.imageCount || 0} images`,
         formatHistoryBytes(record.approximateBytes || 0),
         `Grid ${state.gridColumns || 2}`,
@@ -120,45 +189,35 @@ function createHistoryItem(record) {
         badge.innerText = text;
         badgeWrap.appendChild(badge);
     });
-
     fragment.querySelector(".restore-history").onclick = () => restoreHistorySnapshot(record);
     fragment.querySelector(".delete-history").onclick = () => deleteHistorySnapshot(record);
     return fragment;
 }
 
 async function restoreHistorySnapshot(record) {
-    if (!window.opener || window.opener.closed) {
-        alert("FMA Viewer 창이 닫혀 있습니다. FMA Viewer의 SaveDB 메뉴에서 이 창을 다시 여세요.");
-        return;
-    }
+    const hostWindow = getHistoryHostWindow();
+    if (!hostWindow) return alert("FMA Viewer 내부 창에 연결하지 못했습니다.");
     activeRestoreId = record.id;
     setHistoryRestoreButtonsDisabled(true);
-    showHistoryRestoreProgress(
-        4,
-        "저장본 정보를 확인하고 있습니다.",
-        `${record.imageCount || 0}개 이미지 · ${formatHistoryBytes(record.approximateBytes || 0)}`
-    );
-    await waitForHistoryPaint();
-    setHistoryRestoreProgress(12, "FMA Viewer에 저장본 불러오기를 요청하고 있습니다.");
-    await waitForHistoryPaint();
-    try {
-        window.opener.postMessage({
-            type: "fma-db-history-restore",
-            snapshotId: record.id
-        }, getHistoryMessageOrigin());
-        setHistoryRestoreProgress(24, "FMA Viewer가 IndexedDB 저장본을 직접 읽고 있습니다.");
-        window.opener.focus();
-    } catch (error) {
-        finishHistoryRestoreProgress(false, "저장본을 FMA Viewer로 전달하지 못했습니다: " + error.message);
-    }
+    showHistoryRestoreProgress(5, record.legacy
+        ? "기존 저장본을 한 번 변환하여 불러옵니다."
+        : "스냅샷 ID와 화면 설정을 읽는 중입니다.");
+    hostWindow.postMessage({
+        type: "fma-db-history-restore",
+        snapshotId: record.id,
+        legacy: record.legacy === true
+    }, getHistoryMessageOrigin());
+    setHistoryRestoreProgress(18, "FMA Viewer가 메타정보와 썸네일을 읽고 있습니다.");
+}
+
+function getHistoryHostWindow() {
+    if (window.parent && window.parent !== window) return window.parent;
+    if (window.opener && !window.opener.closed) return window.opener;
+    return null;
 }
 
 function getHistoryMessageOrigin() {
     return window.location.origin === "null" ? "*" : window.location.origin;
-}
-
-function waitForHistoryPaint() {
-    return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 }
 
 function showHistoryRestoreProgress(percent, message, detail = "") {
@@ -209,21 +268,18 @@ function handleHistoryRestoreMessage(event) {
     const data = event.data || {};
     if (data.type !== "fma-db-history-restore-progress") return;
     if (activeRestoreId && data.snapshotId && data.snapshotId !== activeRestoreId) return;
-    if (data.status === "complete") {
-        finishHistoryRestoreProgress(true, data.message);
-    } else if (data.status === "error") {
-        finishHistoryRestoreProgress(false, data.message);
-    } else {
-        setHistoryRestoreProgress(data.percent, data.message, data.detail);
-    }
+    if (data.status === "complete") finishHistoryRestoreProgress(true, data.message);
+    else if (data.status === "error") finishHistoryRestoreProgress(false, data.message);
+    else setHistoryRestoreProgress(data.percent, data.message, data.detail);
 }
 
 async function deleteHistorySnapshot(record) {
     if (!confirm(`“${record.name || "FMA SaveDB"}” 저장본을 삭제할까요?`)) return;
     const db = await openHistoryDatabase();
+    const storeName = record.legacy ? LEGACY_HISTORY_STORE : SNAPSHOT_STORE;
     await new Promise((resolve, reject) => {
-        const transaction = db.transaction(FMA_HISTORY_STORE, "readwrite");
-        transaction.objectStore(FMA_HISTORY_STORE).delete(record.id);
+        const transaction = db.transaction(storeName, "readwrite");
+        transaction.objectStore(storeName).delete(record.id);
         transaction.oncomplete = resolve;
         transaction.onerror = () => reject(transaction.error);
     });
@@ -234,9 +290,10 @@ async function deleteHistorySnapshot(record) {
 async function deleteAllHistorySnapshots() {
     if (!confirm("SaveDB 히스토리를 모두 삭제할까요? 이 작업은 되돌릴 수 없습니다.")) return;
     const db = await openHistoryDatabase();
+    const stores = [SNAPSHOT_STORE, LEGACY_HISTORY_STORE].filter(name => db.objectStoreNames.contains(name));
     await new Promise((resolve, reject) => {
-        const transaction = db.transaction(FMA_HISTORY_STORE, "readwrite");
-        transaction.objectStore(FMA_HISTORY_STORE).clear();
+        const transaction = db.transaction(stores, "readwrite");
+        stores.forEach(name => transaction.objectStore(name).clear());
         transaction.oncomplete = resolve;
         transaction.onerror = () => reject(transaction.error);
     });
@@ -245,13 +302,7 @@ async function deleteAllHistorySnapshots() {
 }
 
 function historySortLabel(value) {
-    return {
-        latest: "최신순",
-        oldest: "오래된순",
-        size: "크기순",
-        type: "종류별",
-        group: "그룹별"
-    }[value] || "최신순";
+    return ({ latest: "최신순", oldest: "오래된순", size: "크기순", type: "종류별", group: "그룹별" })[value] || "최신순";
 }
 
 function formatHistoryBytes(bytes) {
@@ -265,4 +316,4 @@ function formatHistoryBytes(bytes) {
 historyDom.refresh.onclick = renderHistorySnapshots;
 historyDom.deleteAll.onclick = deleteAllHistorySnapshots;
 window.addEventListener("message", handleHistoryRestoreMessage);
-document.addEventListener("DOMContentLoaded", renderHistorySnapshots);
+window.addEventListener("DOMContentLoaded", renderHistorySnapshots);
