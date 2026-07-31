@@ -94,6 +94,9 @@
                     <button id="uploadBtn" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition-all">
                         <i data-lucide="folder-plus" class="w-4 h-4 text-indigo-400"></i> 이미지 추가
                     </button>
+                    <button id="importFromFmaBtn" class="px-4 py-2 bg-cyan-950/50 hover:bg-cyan-900/60 text-cyan-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 border border-cyan-700/60 transition-all">
+                        <i data-lucide="image-down" class="w-4 h-4 text-cyan-400"></i> FMA 현재 이미지
+                    </button>
                     <button id="clearAllDbBtn" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 hover:text-rose-400 text-slate-400 rounded-xl text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition-all">
                         <i data-lucide="trash-2" class="w-4 h-4"></i> 모두 지우기
                     </button>
@@ -389,6 +392,9 @@
                         </button>
                     </div>
                     <div class="flex items-center gap-2">
+                        <button id="saveToFmaGalleryBtn" class="flex items-center gap-1.5 px-3.5 py-2.5 bg-emerald-950/60 hover:bg-emerald-900/70 text-emerald-200 text-xs font-bold rounded-xl border border-emerald-700/60 transition-all">
+                            <i data-lucide="images" class="w-4 h-4 text-emerald-400"></i> FMA 갤러리에 저장
+                        </button>
                         <button id="downloadCutoutBtn" class="flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-semibold rounded-xl border border-slate-800 transition-all">
                             <i data-lucide="file-down" class="w-4 h-4 text-indigo-400"></i> 투명 원본 PNG 저장
                         </button>
@@ -454,6 +460,7 @@
         // DOM 객체 바인딩
         const imageInput = document.getElementById('imageInput');
         const uploadBtn = document.getElementById('uploadBtn');
+        const importFromFmaBtn = document.getElementById('importFromFmaBtn');
         const clearAllDbBtn = document.getElementById('clearAllDbBtn');
         const dropZone = document.getElementById('dropZone');
         const imageGalleryGrid = document.getElementById('imageGalleryGrid');
@@ -504,6 +511,7 @@
         
         const downloadCutoutBtn = document.getElementById('downloadCutoutBtn');
         const downloadCompositeBtn = document.getElementById('downloadCompositeBtn');
+        const saveToFmaGalleryBtn = document.getElementById('saveToFmaGalleryBtn');
         
         const loadingOverlay = document.getElementById('loadingOverlay');
         const loadingText = document.getElementById('loadingText');
@@ -756,6 +764,7 @@
 
         function initEventListeners() {
             uploadBtn.addEventListener('click', () => imageInput.click());
+            importFromFmaBtn.addEventListener('click', requestCurrentFmaImage);
             dropZone.addEventListener('click', () => imageInput.click());
             imageInput.addEventListener('change', handleFileSelection);
 
@@ -854,6 +863,7 @@
 
             downloadCutoutBtn.addEventListener('click', downloadTransparentCutout);
             downloadCompositeBtn.addEventListener('click', downloadFullComposite);
+            saveToFmaGalleryBtn.addEventListener('click', saveCurrentResultToFmaGallery);
 
             ['Transparent', 'Color', 'Gradient', 'Custom'].forEach(tab => {
                 document.getElementById(`tab${tab}`).addEventListener('click', (e) => switchTab(tab.toLowerCase(), e.target));
@@ -1549,6 +1559,87 @@
         }
 
         // FMA Viewer iframe bridge
+        let activeFmaSourceRequestId = '';
+
+        function requestCurrentFmaImage() {
+            if (window.parent === window) {
+                showToast('FMA 연결 필요', 'FMA Viewer 안에서 BG Remover 앱을 열어 사용하세요.', 'error');
+                return;
+            }
+            activeFmaSourceRequestId =
+                `bg-source-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+            importFromFmaBtn.disabled = true;
+            importFromFmaBtn.classList.add('opacity-50', 'cursor-wait');
+            window.parent.postMessage({
+                type: 'fma-app-request-source-images',
+                app: 'bg',
+                mode: 'current',
+                requestId: activeFmaSourceRequestId
+            }, '*');
+            window.parent.postMessage({
+                type: 'fma-app-progress',
+                app: 'bg',
+                percent: 18,
+                message: 'FMA Viewer의 현재 이미지를 가져오는 중…'
+            }, '*');
+            window.setTimeout(() => {
+                if (!activeFmaSourceRequestId) return;
+                activeFmaSourceRequestId = '';
+                setFmaImportButtonReady();
+                showToast('FMA 응답 지연', 'FMA Viewer에서 이미지를 받지 못했습니다. 다시 시도하세요.', 'error');
+            }, 10000);
+        }
+
+        function setFmaImportButtonReady() {
+            importFromFmaBtn.disabled = false;
+            importFromFmaBtn.classList.remove('opacity-50', 'cursor-wait');
+        }
+
+        async function importFmaSourceImages(payload, requestId) {
+            if (activeFmaSourceRequestId && requestId &&
+                requestId !== activeFmaSourceRequestId) return;
+            const entries = Array.isArray(payload) ? payload : [];
+            if (!entries.length) {
+                activeFmaSourceRequestId = '';
+                setFmaImportButtonReady();
+                showToast('가져오기 실패', 'FMA Viewer에 선택된 이미지가 없습니다.', 'error');
+                return;
+            }
+            const imported = [];
+            for (let index = 0; index < entries.length; index++) {
+                const entry = entries[index] || {};
+                const dataUrl = entry.dataUrl || entry.src;
+                if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image')) continue;
+                const imageRecord = {
+                    id: `fma_${Date.now()}_${index}_${Math.floor(Math.random() * 1000)}`,
+                    name: entry.name || `FMA_Image_${index + 1}.png`,
+                    size: Math.max(1, Math.round(dataUrl.length * 0.75 / 1024)),
+                    dataUrl,
+                    maskDataUrl: null,
+                    cutoutUrl: null,
+                    sourceApp: 'FMA Viewer'
+                };
+                await saveImageToDB(imageRecord);
+                state.images.push(imageRecord);
+                imported.push(imageRecord);
+            }
+            activeFmaSourceRequestId = '';
+            setFmaImportButtonReady();
+            renderGallery();
+            if (imported[0]) await selectImageTarget(imported[0].id);
+            window.parent.postMessage({
+                type: 'fma-app-progress',
+                app: 'bg',
+                percent: 100,
+                message: `${imported.length}개 FMA 이미지를 BG Remover에 추가했습니다.`
+            }, '*');
+            showToast(
+                'FMA 이미지 가져오기',
+                `${imported.length}개 이미지를 보관소와 작업 대상으로 추가했습니다.`,
+                'success'
+            );
+        }
+
         function getBgRemoverCurrentResult() {
             if (state.cleanCutoutCanvas) return state.cleanCutoutCanvas.toDataURL('image/png');
             const active = state.images.find(item => item.id === state.selectedImageId);
@@ -1578,6 +1669,22 @@
                 images,
                 message: images.length ? undefined : 'BG Remover에 가져올 이미지가 없습니다.'
             }, '*');
+        }
+
+        function saveCurrentResultToFmaGallery() {
+            const active = state.images.find(item => item.id === state.selectedImageId);
+            if (!state.cleanCutoutCanvas && !active?.cutoutUrl) {
+                showToast('저장할 결과 없음', '먼저 BG Remove 실행을 완료하세요.', 'error');
+                return;
+            }
+            if (window.parent === window) {
+                showToast('FMA 연결 필요', 'FMA Viewer 안에서 BG Remover 앱을 열어 사용하세요.', 'error');
+                return;
+            }
+            const requestId =
+                `bg-gallery-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+            sendBgRemoverImagesToFma('current', requestId);
+            showToast('FMA 갤러리 전송', '현재 누끼 결과를 FMA Viewer 갤러리로 보냈습니다.', 'success');
         }
 
         const FMA_SHARED_API_KEY_STORAGE = 'fma_ai_studio_api_key';
@@ -1610,6 +1717,10 @@
 
         window.addEventListener('message', event => {
             const data = event.data || {};
+            if (data.type === 'fma-app-source-images' && data.app === 'bg') {
+                importFmaSourceImages(data.images, data.requestId);
+                return;
+            }
             if (data.type === 'fma-app-shared-api-key-updated') {
                 hostSharedApiKey = String(data.key || '').trim();
                 bgAiUsageEnabled = data.enabled !== false;

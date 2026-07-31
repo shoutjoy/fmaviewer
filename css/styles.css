@@ -2807,6 +2807,68 @@ html[data-theme="light"] .ai-jena-history-empty {
     line-height: 1.7;
 }
 
+.bg-engine-selector {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 9px;
+    margin-bottom: 12px;
+}
+
+.bg-engine-selector button {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+    padding: 12px;
+    text-align: left;
+    border-color: rgba(255, 255, 255, .12);
+    background: rgba(20, 25, 34, .8);
+}
+
+.bg-engine-selector button strong {
+    font-size: 11px;
+}
+
+.bg-engine-selector button small {
+    color: rgba(255, 255, 255, .45);
+    font-size: 9px;
+    font-weight: 500;
+    line-height: 1.45;
+}
+
+.bg-engine-selector button.active {
+    color: #d8f5ff;
+    border-color: rgba(127, 221, 255, .65);
+    background: linear-gradient(135deg, rgba(62, 66, 155, .34), rgba(38, 170, 195, .18));
+    box-shadow: 0 0 0 2px rgba(127, 221, 255, .08);
+}
+
+.bg-engine-selector button.active small {
+    color: rgba(216, 245, 255, .68);
+}
+
+@media (max-width: 700px) {
+    .bg-engine-selector {
+        grid-template-columns: 1fr;
+    }
+}
+
+.bg-engine-info,
+.onnx-bg-remove-settings {
+    margin-top: 5px;
+}
+
+.settings-warning.webgl-ready {
+    color: rgba(170, 247, 231, .78);
+    border-color: rgba(65, 225, 180, .25);
+    background: rgba(30, 160, 125, .07);
+}
+
+.settings-warning.webgl-ready strong {
+    color: #77f5d1;
+}
+
 .bg-model-actions {
     display: flex;
     align-items: center;

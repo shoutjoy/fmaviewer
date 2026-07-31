@@ -7,7 +7,7 @@
     <title>FMA Viewer Ultra</title>
 
     <!-- Project Styles -->
-    <link rel="stylesheet" href="css/styles.css?v=20260731-47">
+    <link rel="stylesheet" href="css/styles.css?v=20260731-50">
 
     <!-- JSZip CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -567,27 +567,48 @@
                 <div class="bg-remove-details">
                     <div id="localBgRemoveInfo">
                         <h3>브라우저 로컬 배경 제거</h3>
-                        <p>U²-Net 사람 전용 모델이 이미지의 전경을 분리하고 투명 PNG를 생성합니다.</p>
-                        <div class="settings-warning">
-                            앱 폴더의 <code>image_model/u2net_human_seg.onnx</code> 파일을 우선 사용합니다.
-                            파일이 없으면 원본 서버에서 약 176MB 모델을 내려받아 브라우저 저장소에 자동 연결합니다.
-                            자동 연결이 실패한 경우에만 ONNX 파일을 수동 선택하세요. 이미지는 외부 처리 서버로 전송되지 않습니다.
+                        <p>기본 WebGL 엔진은 별도의 176MB ONNX 모델 다운로드 없이 사람 전경을 분리합니다.</p>
+                        <div class="bg-engine-selector" role="radiogroup" aria-label="로컬 배경 제거 엔진">
+                            <button id="btnBgEngineWebgl" class="active" type="button" role="radio"
+                                aria-checked="true">
+                                <strong>⚡ WebGL 엔진 우선</strong>
+                                <small>BG Remover와 같은 MediaPipe 로컬 엔진 · 별도 모델 다운로드 없음</small>
+                            </button>
+                            <button id="btnBgEngineOnnx" type="button" role="radio" aria-checked="false">
+                                <strong>▣ ONNX 모델 적용</strong>
+                                <small>U²-Net Human Seg 모델을 직접 연결하여 사용</small>
+                            </button>
                         </div>
-                        <div class="bg-model-actions">
-                            <button id="btnPrepareBgModel" type="button">↓ 모델 자동 다운로드 · 연결</button>
-                            <button id="btnSelectBgModel" class="bg-model-select" type="button">▣ ONNX 수동 선택</button>
-                            <input id="bgModelFileInput" type="file" accept=".onnx,application/octet-stream"
-                                style="display:none;">
-                            <a href="https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net_human_seg.onnx"
-                                target="_blank" rel="noopener noreferrer" download="u2net_human_seg.onnx">수동 다운로드 링크 ↗</a>
+                        <div id="webglBgRemoveInfo" class="bg-engine-info">
+                            <div class="settings-warning webgl-ready">
+                                <strong>기본값 · WebGL 로컬 처리</strong><br>
+                                BG Remover 앱의 MediaPipe Selfie Segmentation 방식을 사용합니다.
+                                최초 실행 시 경량 런타임을 불러오며 이미지는 외부 처리 서버로 전송되지 않습니다.
+                            </div>
                         </div>
-                        <div id="bgModelLocation" class="bg-model-location">
-                            자동 확인: <code>image_model/</code>, <code>Image_model/</code>, 브라우저 저장 모델
+                        <div id="onnxBgRemoveSettings" class="onnx-bg-remove-settings" style="display:none;">
+                            <div class="settings-warning">
+                                앱 폴더의 <code>image_model/u2net_human_seg.onnx</code> 파일을 우선 사용합니다.
+                                파일이 없으면 원본 서버에서 약 176MB 모델을 내려받아 브라우저 저장소에 자동 연결합니다.
+                                자동 연결이 실패한 경우에만 ONNX 파일을 수동 선택하세요. 이미지는 외부 처리 서버로 전송되지 않습니다.
+                            </div>
+                            <div class="bg-model-actions">
+                                <button id="btnPrepareBgModel" type="button">↓ 모델 자동 다운로드 · 연결</button>
+                                <button id="btnSelectBgModel" class="bg-model-select" type="button">▣ ONNX 수동 선택</button>
+                                <input id="bgModelFileInput" type="file" accept=".onnx,application/octet-stream"
+                                    style="display:none;">
+                                <a href="https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net_human_seg.onnx"
+                                    target="_blank" rel="noopener noreferrer"
+                                    download="u2net_human_seg.onnx">수동 다운로드 링크 ↗</a>
+                            </div>
+                            <div id="bgModelLocation" class="bg-model-location">
+                                자동 확인: <code>image_model/</code>, <code>Image_model/</code>, 브라우저 저장 모델
+                            </div>
                         </div>
                     </div>
                     <div id="aiBgRemoveInfo" style="display:none;">
                         <h3>Google AI Studio 배경 제거</h3>
-                        <p>Gemini가 배경을 단순화한 JPEG를 생성한 뒤 로컬 분리 모델이 투명 PNG로 마무리합니다.</p>
+                        <p>Gemini가 배경을 단순화한 JPEG를 생성한 뒤 선택한 로컬 엔진이 투명 PNG로 마무리합니다.</p>
                         <label class="ai-prompt-field">
                             <span>
                                 AI 배경 제거 프롬프트
@@ -598,7 +619,7 @@
                             <small>남길 피사체와 유지해야 할 세부 요소를 구체적으로 조절할 수 있습니다.</small>
                         </label>
                         <div class="settings-warning">
-                            Gemini 출력은 JPEG만 지원하므로 로컬 U²-Net 후처리로 투명도를 생성합니다. 생성형 처리 및 API
+                            Gemini 출력은 JPEG만 지원하므로 선택한 WebGL 또는 ONNX 후처리로 투명도를 생성합니다. 생성형 처리 및 API
                             사용량이 발생할 수 있습니다.
                         </div>
                     </div>
@@ -1392,7 +1413,7 @@
     </div>
 
     <!-- Project Scripts (Modularized) -->
-    <script src="js/globals.js?v=20260731-48"></script>
+    <script src="js/globals.js?v=20260731-50"></script>
     <script src="js/database.js?v=20260731-46"></script>
     <script src="js/gallery.js?v=20260731-42"></script>
     <script src="js/imageMetadata.js?v=20260731-42"></script>
@@ -1402,9 +1423,9 @@
     <script src="js/aiJena.js?v=20260731-47"></script>
     <script src="js/imageEditor.js?v=20260731-42"></script>
     <script src="js/backgroundMaskEditor.js?v=20260731-42"></script>
-    <script src="js/backgroundRemove.js?v=20260731-42"></script>
+    <script src="js/backgroundRemove.js?v=20260731-50"></script>
     <script src="js/fileHandlers.js?v=20260731-42"></script>
-    <script src="js/externalApps.js?v=20260731-42"></script>
+    <script src="js/externalApps.js?v=20260731-49"></script>
     <script src="js/interaction.js?v=20260731-48"></script>
     <script src="js/app.js?v=20260731-48"></script>
 </body>

@@ -15,6 +15,11 @@ const REMBG_MODEL_DB_NAME = "FMAModelDatabase";
 const REMBG_MODEL_STORE_NAME = "models";
 const REMBG_MODEL_DB_KEY = "u2net_human_seg.onnx";
 const REMBG_MIN_MODEL_BYTES = 100000000;
+const BG_REMOVE_ENGINE_STORAGE = "fma_bg_remove_local_engine";
+const MEDIAPIPE_SELFIE_SEGMENTATION_SCRIPT =
+    "https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js";
+const MEDIAPIPE_SELFIE_SEGMENTATION_ASSET_ROOT =
+    "https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/";
 
 var rembgModulePromise = null;
 var rembgHumanSessionPromise = null;
@@ -23,6 +28,9 @@ var rembgResolvedModelSource = "unknown";
 var rembgSelectedModelObjectUrl = null;
 var rembgSelectedModelSource = null;
 var rembgModelDownloadPromise = null;
+var mediaPipeScriptPromise = null;
+var mediaPipeSessionPromise = null;
+var mediaPipePendingResult = null;
 var bgRemoveState = {
     imageIndex: -1,
     mode: "local",
@@ -31,7 +39,8 @@ var bgRemoveState = {
     resultHeight: 0,
     processing: false,
     abortController: null,
-    prompt: ""
+    prompt: "",
+    localEngine: "webgl"
 };
 
 function initBackgroundRemoveFeature() {
@@ -40,6 +49,8 @@ function initBackgroundRemoveFeature() {
     dom.btnBgRemoveClose.onclick = closeBackgroundRemoveEditor;
     dom.btnBgRemoveCancel.onclick = closeBackgroundRemoveEditor;
     dom.btnRunBgRemove.onclick = runBackgroundRemoval;
+    dom.btnBgEngineWebgl.onclick = () => setBackgroundRemoveLocalEngine("webgl");
+    dom.btnBgEngineOnnx.onclick = () => setBackgroundRemoveLocalEngine("onnx");
     dom.btnPrepareBgModel.onclick = prepareBackgroundRemoveModel;
     dom.btnSelectBgModel.onclick = () => dom.bgModelFileInput.click();
     dom.bgModelFileInput.onchange = handleBackgroundModelFileSelection;
@@ -87,6 +98,7 @@ function openBackgroundRemoveEditor(index, mode) {
 
     bgRemoveState.imageIndex = index;
     bgRemoveState.mode = mode === "ai" ? "ai" : "local";
+    bgRemoveState.localEngine = readBackgroundRemoveLocalEngine();
     bgRemoveState.resultSrc = null;
     bgRemoveState.processing = false;
 
@@ -98,7 +110,9 @@ function openBackgroundRemoveEditor(index, mode) {
     dom.bgRemovePreview.src = item.src;
     dom.bgRemoveModeBadge.innerText = isAI
         ? `Google AI Studio · ${getAiUpscaleResolution()}`
-        : "Local · U²-Net Human Seg";
+        : bgRemoveState.localEngine === "onnx"
+            ? "Local · U²-Net ONNX"
+            : "Local · MediaPipe WebGL";
     dom.localBgRemoveInfo.style.display = isAI ? "none" : "block";
     dom.aiBgRemoveInfo.style.display = isAI ? "block" : "none";
     dom.aiBgRemovePrompt.value = getAiBackgroundRemovePrompt();
@@ -107,7 +121,7 @@ function openBackgroundRemoveEditor(index, mode) {
         : "모든 이미지 처리는 현재 브라우저에서 실행됩니다.";
     dom.btnRunBgRemove.innerText = isAI ? "AI 배경 제거 실행" : "배경 제거 실행";
     dom.btnRunBgRemove.disabled = false;
-    if (!isAI) updateBackgroundModelLocation();
+    updateBackgroundRemoveEngineUi(false);
     closeBgRemoveSaveChoice();
     setBgRemoveProgress(0, "실행 준비");
     dom.bgRemoveModal.style.display = "flex";
@@ -125,6 +139,193 @@ function closeBackgroundRemoveEditor() {
     closeBgRemoveSaveChoice();
     bgRemoveState.imageIndex = -1;
     bgRemoveState.resultSrc = null;
+}
+
+function readBackgroundRemoveLocalEngine() {
+    try {
+        return localStorage.getItem(BG_REMOVE_ENGINE_STORAGE) === "onnx"
+            ? "onnx"
+            : "webgl";
+    } catch (error) {
+        return "webgl";
+    }
+}
+
+function setBackgroundRemoveLocalEngine(engine) {
+    if (bgRemoveState.processing) return;
+    bgRemoveState.localEngine = engine === "onnx" ? "onnx" : "webgl";
+    try {
+        localStorage.setItem(BG_REMOVE_ENGINE_STORAGE, bgRemoveState.localEngine);
+    } catch (error) {
+        console.warn("Background removal engine preference could not be saved:", error);
+    }
+    updateBackgroundRemoveEngineUi(true);
+}
+
+function updateBackgroundRemoveEngineUi(checkOnnxModel) {
+    const useOnnx = bgRemoveState.localEngine === "onnx";
+
+    dom.btnBgEngineWebgl?.classList.toggle("active", !useOnnx);
+    dom.btnBgEngineWebgl?.setAttribute("aria-checked", String(!useOnnx));
+    dom.btnBgEngineOnnx?.classList.toggle("active", useOnnx);
+    dom.btnBgEngineOnnx?.setAttribute("aria-checked", String(useOnnx));
+    if (dom.webglBgRemoveInfo) {
+        dom.webglBgRemoveInfo.style.display = useOnnx ? "none" : "block";
+    }
+    if (dom.onnxBgRemoveSettings) {
+        dom.onnxBgRemoveSettings.style.display = useOnnx ? "block" : "none";
+    }
+
+    if (bgRemoveState.mode === "local" && dom.bgRemoveModeBadge) {
+        dom.bgRemoveModeBadge.innerText = useOnnx
+            ? "Local · U²-Net ONNX"
+            : "Local · MediaPipe WebGL";
+    }
+    if (useOnnx && checkOnnxModel) {
+        updateBackgroundModelLocation().catch(error => {
+            console.warn("ONNX model location check failed:", error);
+        });
+    }
+}
+
+function loadMediaPipeSelfieSegmentationScript() {
+    if (window.SelfieSegmentation) {
+        return Promise.resolve(window.SelfieSegmentation);
+    }
+    if (!mediaPipeScriptPromise) {
+        mediaPipeScriptPromise = new Promise((resolve, reject) => {
+            const existing = document.querySelector(
+                `script[src="${MEDIAPIPE_SELFIE_SEGMENTATION_SCRIPT}"]`
+            );
+            const script = existing || document.createElement("script");
+            const handleLoad = () => {
+                if (window.SelfieSegmentation) {
+                    resolve(window.SelfieSegmentation);
+                } else {
+                    reject(new Error("MediaPipe Selfie Segmentation을 초기화할 수 없습니다."));
+                }
+            };
+            const handleError = () => reject(
+                new Error("MediaPipe WebGL 엔진 파일을 불러오지 못했습니다.")
+            );
+
+            script.addEventListener("load", handleLoad, { once: true });
+            script.addEventListener("error", handleError, { once: true });
+            if (!existing) {
+                script.src = MEDIAPIPE_SELFIE_SEGMENTATION_SCRIPT;
+                script.crossOrigin = "anonymous";
+                document.head.appendChild(script);
+            }
+        }).catch(error => {
+            mediaPipeScriptPromise = null;
+            throw error;
+        });
+    }
+    return mediaPipeScriptPromise;
+}
+
+async function getMediaPipeSegmentationSession() {
+    if (!mediaPipeSessionPromise) {
+        mediaPipeSessionPromise = loadMediaPipeSelfieSegmentationScript()
+            .then(SelfieSegmentation => {
+                const session = new SelfieSegmentation({
+                    locateFile: file => MEDIAPIPE_SELFIE_SEGMENTATION_ASSET_ROOT + file
+                });
+                session.setOptions({ modelSelection: 1 });
+                session.onResults(results => {
+                    const pending = mediaPipePendingResult;
+                    mediaPipePendingResult = null;
+                    pending?.resolve(results);
+                });
+                return session;
+            })
+            .catch(error => {
+                mediaPipeSessionPromise = null;
+                throw error;
+            });
+    }
+    return mediaPipeSessionPromise;
+}
+
+function requestMediaPipeSegmentation(session, image, signal) {
+    if (mediaPipePendingResult) {
+        return Promise.reject(new Error("이미 다른 WebGL 배경 제거 작업이 진행 중입니다."));
+    }
+
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        const finish = callback => value => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeoutId);
+            signal?.removeEventListener("abort", handleAbort);
+            if (mediaPipePendingResult?.resolve === resolveResult) {
+                mediaPipePendingResult = null;
+            }
+            callback(value);
+        };
+        const resolveResult = finish(resolve);
+        const rejectResult = finish(reject);
+        const handleAbort = () => rejectResult(
+            new DOMException("사용자가 처리를 정지했습니다.", "AbortError")
+        );
+        const timeoutId = setTimeout(() => {
+            rejectResult(new Error("MediaPipe WebGL 분석 시간이 초과되었습니다."));
+        }, 60000);
+
+        mediaPipePendingResult = { resolve: resolveResult, reject: rejectResult };
+        signal?.addEventListener("abort", handleAbort, { once: true });
+        if (signal?.aborted) {
+            handleAbort();
+            return;
+        }
+
+        Promise.resolve(session.send({ image })).catch(rejectResult);
+    });
+}
+
+async function runWebGlBackgroundRemoval(src, signal, startPercent, endPercent) {
+    const start = Number.isFinite(startPercent) ? startPercent : 4;
+    const end = Number.isFinite(endPercent) ? endPercent : 94;
+    const image = await loadUpscaleImage(src);
+    if (signal?.aborted) {
+        throw new DOMException("사용자가 처리를 정지했습니다.", "AbortError");
+    }
+
+    setBgRemoveProgress(start, "MediaPipe WebGL 엔진 불러오는 중");
+    const session = await getMediaPipeSegmentationSession();
+    setBgRemoveProgress(start + (end - start) * .3, "WebGL로 전경과 배경 분석 중");
+    const results = await requestMediaPipeSegmentation(session, image, signal);
+    if (!results?.segmentationMask) {
+        throw new Error("MediaPipe WebGL 엔진이 분리 마스크를 반환하지 않았습니다.");
+    }
+
+    setBgRemoveProgress(start + (end - start) * .82, "투명 PNG 합성 중");
+    const width = image.naturalWidth || image.width;
+    const height = image.naturalHeight || image.height;
+    const maskCanvas = document.createElement("canvas");
+    maskCanvas.width = width;
+    maskCanvas.height = height;
+    const maskContext = maskCanvas.getContext("2d");
+    const outputCanvas = document.createElement("canvas");
+    outputCanvas.width = width;
+    outputCanvas.height = height;
+    const outputContext = outputCanvas.getContext("2d");
+    if (!maskContext || !outputContext) {
+        throw new Error("WebGL 배경 제거 결과를 합성할 Canvas를 만들 수 없습니다.");
+    }
+
+    maskContext.save();
+    maskContext.filter = "blur(1px)";
+    maskContext.drawImage(results.segmentationMask, 0, 0, width, height);
+    maskContext.restore();
+    outputContext.clearRect(0, 0, width, height);
+    outputContext.drawImage(image, 0, 0, width, height);
+    outputContext.globalCompositeOperation = "destination-in";
+    outputContext.drawImage(maskCanvas, 0, 0);
+    outputContext.globalCompositeOperation = "source-over";
+    setBgRemoveProgress(end, "WebGL 배경 제거 결과 확인");
+    return outputCanvas.toDataURL("image/png");
 }
 
 async function loadRembgModule() {
@@ -537,7 +738,11 @@ async function runBackgroundRemoval() {
     bgRemoveState.abortController = new AbortController();
     dom.btnRunBgRemove.disabled = false;
     const originalButtonText = dom.btnRunBgRemove.innerText;
-    dom.btnRunBgRemove.innerText = bgRemoveState.mode === "ai" ? "■ AI 처리 정지" : "■ 모델 처리 정지";
+    dom.btnRunBgRemove.innerText = bgRemoveState.mode === "ai"
+        ? "■ AI 처리 정지"
+        : bgRemoveState.localEngine === "onnx"
+            ? "■ ONNX 처리 정지"
+            : "■ WebGL 처리 정지";
 
     try {
         const throwIfStopped = () => {
@@ -558,44 +763,62 @@ async function runBackgroundRemoval() {
             );
             throwIfStopped();
             setBgRemoveProgress(48, "AI JPEG 결과에 투명 배경 생성 중");
-            await ensureBackgroundModelConnected();
-            const module = await loadRembgModule();
-            const session = await getHumanSegmentationSessionWithRecovery(module);
-            throwIfStopped();
-            const aiResultBlob = await dataUrlToBlob(result.src);
-            const transparentBlob = await module.remove(aiResultBlob, {
-                session: session,
-                postProcessMask: true,
-                onProgress: info => {
-                    const progress = Number(info?.progress);
-                    setBgRemoveProgress(
-                        Number.isFinite(progress) ? 48 + progress * .44 : 55,
-                        "AI 결과의 배경을 투명하게 변환 중"
-                    );
-                }
-            });
-            throwIfStopped();
-            bgRemoveState.resultSrc = await blobToDataUrl(transparentBlob);
+            if (bgRemoveState.localEngine === "onnx") {
+                await ensureBackgroundModelConnected();
+                const module = await loadRembgModule();
+                const session = await getHumanSegmentationSessionWithRecovery(module);
+                throwIfStopped();
+                const aiResultBlob = await dataUrlToBlob(result.src);
+                const transparentBlob = await module.remove(aiResultBlob, {
+                    session: session,
+                    postProcessMask: true,
+                    onProgress: info => {
+                        const progress = Number(info?.progress);
+                        setBgRemoveProgress(
+                            Number.isFinite(progress) ? 48 + progress * .44 : 55,
+                            "AI 결과의 배경을 투명하게 변환 중"
+                        );
+                    }
+                });
+                throwIfStopped();
+                bgRemoveState.resultSrc = await blobToDataUrl(transparentBlob);
+            } else {
+                bgRemoveState.resultSrc = await runWebGlBackgroundRemoval(
+                    result.src,
+                    bgRemoveState.abortController.signal,
+                    48,
+                    94
+                );
+            }
             setBgRemoveProgress(94, "투명 PNG 결과 확인");
         } else {
             bgRemoveState.prompt = "";
-            setBgRemoveProgress(2, "자동 연결된 모델 확인");
-            await ensureBackgroundModelConnected();
-            setBgRemoveProgress(78, "배경 제거 라이브러리 로드");
-            const module = await loadRembgModule();
-            setBgRemoveProgress(82, "사람 분리 모델 실제 로드 및 초기화");
-            const session = await getHumanSegmentationSessionWithRecovery(module);
-            throwIfStopped();
-            dom.btnPrepareBgModel.innerText = "✓ 모델 준비 완료";
-            dom.btnPrepareBgModel.disabled = true;
-            const inputBlob = await dataUrlToBlob(item.src);
-            const resultBlob = await module.remove(inputBlob, {
-                session: session,
-                postProcessMask: true,
-                onProgress: updateBgRemoveProgress
-            });
-            throwIfStopped();
-            bgRemoveState.resultSrc = await blobToDataUrl(resultBlob);
+            if (bgRemoveState.localEngine === "onnx") {
+                setBgRemoveProgress(2, "자동 연결된 ONNX 모델 확인");
+                await ensureBackgroundModelConnected();
+                setBgRemoveProgress(78, "ONNX 배경 제거 라이브러리 로드");
+                const module = await loadRembgModule();
+                setBgRemoveProgress(82, "사람 분리 모델 실제 로드 및 초기화");
+                const session = await getHumanSegmentationSessionWithRecovery(module);
+                throwIfStopped();
+                dom.btnPrepareBgModel.innerText = "✓ 모델 준비 완료";
+                dom.btnPrepareBgModel.disabled = true;
+                const inputBlob = await dataUrlToBlob(item.src);
+                const resultBlob = await module.remove(inputBlob, {
+                    session: session,
+                    postProcessMask: true,
+                    onProgress: updateBgRemoveProgress
+                });
+                throwIfStopped();
+                bgRemoveState.resultSrc = await blobToDataUrl(resultBlob);
+            } else {
+                bgRemoveState.resultSrc = await runWebGlBackgroundRemoval(
+                    item.src,
+                    bgRemoveState.abortController.signal,
+                    4,
+                    94
+                );
+            }
         }
 
         const resultImage = await loadUpscaleImage(bgRemoveState.resultSrc);
@@ -643,6 +866,10 @@ async function acceptBackgroundMaskResult(resultSrc) {
 
 function getBackgroundRemoveErrorMessage(error) {
     const message = error?.message || String(error);
+    if (/mediapipe|selfie segmentation|webgl/i.test(message)) {
+        return "MediaPipe WebGL 엔진을 실행하지 못했습니다. 인터넷 연결과 브라우저의 WebGL 사용 설정을 " +
+            "확인하거나, 'ONNX 모델 적용'을 선택해 다시 시도하세요. 원인: " + message;
+    }
     if (/resolve module specifier|onnxruntime-web/i.test(message)) {
         return "ONNX Runtime 모듈을 불러오지 못했습니다. 앱을 새로고침한 뒤 다시 시도하세요.";
     }
@@ -717,7 +944,11 @@ function saveBackgroundRemoveResult(saveMode) {
     const sourceItem = images[sourceIndex];
     if (!sourceItem || !bgRemoveState.resultSrc) return;
 
-    const method = bgRemoveState.mode === "ai" ? "ai" : "rembg-web";
+    const method = bgRemoveState.mode === "ai"
+        ? "ai"
+        : bgRemoveState.localEngine === "onnx"
+            ? "rembg-web"
+            : "mediapipe-webgl";
     let resultIndex = sourceIndex;
 
     if (saveMode === "replace") {
@@ -730,6 +961,7 @@ function saveBackgroundRemoveResult(saveMode) {
         sourceItem.backgroundRemoveMethod = method;
         sourceItem.backgroundRemoveInfo = {
             method: method,
+            engine: bgRemoveState.localEngine,
             width: bgRemoveState.resultWidth,
             height: bgRemoveState.resultHeight,
             prompt: bgRemoveState.prompt || undefined
@@ -743,7 +975,11 @@ function saveBackgroundRemoveResult(saveMode) {
         );
     } else {
         const sourcePath = sourceItem.path;
-        const suffix = method === "ai" ? "ai_bg_remove" : "bg_remove";
+        const suffix = method === "ai"
+            ? "ai_bg_remove"
+            : method === "mediapipe-webgl"
+                ? "webgl_bg_remove"
+                : "bg_remove";
         const count = images.filter(item =>
             item.backgroundRemoveSourcePath === sourcePath && item.backgroundRemoveMethod === method
         ).length + 1;
@@ -760,6 +996,7 @@ function saveBackgroundRemoveResult(saveMode) {
             backgroundRemoveMethod: method,
             backgroundRemoveInfo: {
                 method: method,
+                engine: bgRemoveState.localEngine,
                 width: bgRemoveState.resultWidth,
                 height: bgRemoveState.resultHeight,
                 prompt: bgRemoveState.prompt || undefined

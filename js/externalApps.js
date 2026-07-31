@@ -32,6 +32,7 @@ const EXTERNAL_IMAGE_APPS = {
         title: "BG Remover App",
         description: "현재 누끼 결과 또는 보관소에 저장된 전체 결과를 가져옵니다.",
         path: "App_src/BGRemoverApp/bgremoverV2.html",
+        version: "20260731-1",
         currentLabel: "현재 누끼 넣기",
         allLabel: "보관소 모두 넣기"
     }
@@ -174,7 +175,7 @@ function openExternalImageApp(key) {
     dom.externalAppDescription.innerText = app.description;
     dom.btnImportExternalCurrent.innerText = app.currentLabel;
     dom.btnImportExternalAll.innerText = app.allLabel;
-    setExternalAppProgress(5, "Aura 앱을 불러오는 중…");
+    setExternalAppProgress(5, `${app.title}을(를) 불러오는 중…`);
     dom.externalAppImportHint.innerText =
         key === "story"
             ? "스토리 앱에서 보낼 이미지를 체크한 뒤 선택 가져오기를 누르세요."
@@ -193,6 +194,9 @@ function buildExternalAppUrl(key, path) {
     const url = new URL(path, document.baseURI);
     url.searchParams.set("fmaEmbed", "1");
     url.searchParams.set("app", key);
+    if (EXTERNAL_IMAGE_APPS[key]?.version) {
+        url.searchParams.set("v", EXTERNAL_IMAGE_APPS[key].version);
+    }
     if (key === "story") {
         url.searchParams.set("addon", "fmaviewer");
         url.searchParams.set("origin", window.location.origin);
@@ -213,7 +217,7 @@ function reloadExternalImageApp() {
     const app = EXTERNAL_IMAGE_APPS[externalAppState.key];
     externalAppState.loading = true;
     setExternalAppImportDisabled(true);
-    setExternalAppProgress(5, "Aura 앱을 다시 불러오는 중…");
+    setExternalAppProgress(5, `${app.title}을(를) 다시 불러오는 중…`);
     dom.externalAppFrame.src = buildExternalAppUrl(externalAppState.key, app.path) +
         `&reload=${Date.now()}`;
 }
@@ -221,7 +225,8 @@ function reloadExternalImageApp() {
 function handleExternalAppFrameLoad() {
     if (!externalAppState.key || dom.externalAppFrame.src === "about:blank") return;
     externalAppState.loading = false;
-    setExternalAppProgress(10, "Aura 연결 준비 · 생성 중에도 갤러리를 탐색할 수 있습니다.");
+    const appTitle = EXTERNAL_IMAGE_APPS[externalAppState.key]?.title || "이미지 앱";
+    setExternalAppProgress(10, `${appTitle} 연결 준비 · 작업 중에도 갤러리를 탐색할 수 있습니다.`);
     setExternalAppImportDisabled(false);
     dom.externalAppFrame.contentWindow?.postMessage({
         type: "fma-app-host-ready",
@@ -264,8 +269,9 @@ function requestExternalAppImages(mode) {
 async function handleExternalAppMessage(event) {
     if (!externalAppState.key || event.source !== dom.externalAppFrame.contentWindow) return;
     const data = event.data || {};
-    if (data.type === "fma-app-request-source-images" && data.app === "aura") {
-        sendFmaSourceImagesToAura(data.requestId);
+    if (data.type === "fma-app-request-source-images" &&
+        ["aura", "bg"].includes(data.app)) {
+        sendFmaSourceImagesToExternalApp(data.app, data.requestId, data.mode);
         return;
     }
     if (data.type === "fma-app-request-shared-api-key") {
@@ -274,13 +280,14 @@ async function handleExternalAppMessage(event) {
     }
     if (data.type === "fma-app-progress" &&
         (!data.app || data.app === externalAppState.key)) {
-        setExternalAppProgress(data.percent, data.message || "Aura 이미지 처리 중…", {
+        setExternalAppProgress(data.percent, data.message || "이미지 처리 중…", {
             error: data.status === "error"
         });
         return;
     }
     if (data.type === "fma-app-ready" || data.type === "storyboard-studio-ready") {
-        setExternalAppProgress(0, "연결 완료 · Aura 작업을 시작할 수 있습니다.");
+        const appTitle = EXTERNAL_IMAGE_APPS[externalAppState.key]?.title || "이미지 앱";
+        setExternalAppProgress(0, `연결 완료 · ${appTitle} 작업을 시작할 수 있습니다.`);
         setExternalAppImportDisabled(false);
         notifyExternalAppSharedApiKey();
         return;
@@ -302,12 +309,15 @@ async function handleExternalAppMessage(event) {
     await importExternalAppImages(data.images, externalAppState.key);
 }
 
-function sendFmaSourceImagesToAura(requestId) {
-    if (externalAppState.key !== "aura" || !dom.externalAppFrame?.contentWindow) return;
+function sendFmaSourceImagesToExternalApp(appKey, requestId, mode = "all") {
+    if (externalAppState.key !== appKey || !dom.externalAppFrame?.contentWindow) return;
     const order = typeof getActiveImageOrder === "function"
         ? getActiveImageOrder()
         : images.map((_, index) => index);
-    const payload = order
+    const sourceOrder = mode === "current" && images[currentIndex]
+        ? [currentIndex]
+        : order;
+    const payload = sourceOrder
         .map((rawIndex, displayIndex) => {
             const item = images[rawIndex];
             if (!item?.src || !String(item.src).startsWith("data:image")) return null;
@@ -322,7 +332,7 @@ function sendFmaSourceImagesToAura(requestId) {
         .filter(Boolean);
     dom.externalAppFrame.contentWindow.postMessage({
         type: "fma-app-source-images",
-        app: "aura",
+        app: appKey,
         requestId,
         images: payload
     }, "*");
