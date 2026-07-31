@@ -234,8 +234,9 @@ async function getMediaPipeSegmentationSession() {
                 session.setOptions({ modelSelection: 1 });
                 session.onResults(results => {
                     const pending = mediaPipePendingResult;
+                    if (!pending || pending.session !== session) return;
                     mediaPipePendingResult = null;
-                    pending?.resolve(results);
+                    pending.resolve(results);
                 });
                 return session;
             })
@@ -273,14 +274,22 @@ function requestMediaPipeSegmentation(session, image, signal) {
             rejectResult(new Error("MediaPipe WebGL 분석 시간이 초과되었습니다."));
         }, 60000);
 
-        mediaPipePendingResult = { resolve: resolveResult, reject: rejectResult };
+        mediaPipePendingResult = {
+            session: session,
+            resolve: resolveResult,
+            reject: rejectResult
+        };
         signal?.addEventListener("abort", handleAbort, { once: true });
         if (signal?.aborted) {
             handleAbort();
             return;
         }
 
-        Promise.resolve(session.send({ image })).catch(rejectResult);
+        try {
+            Promise.resolve(session.send({ image })).catch(rejectResult);
+        } catch (error) {
+            rejectResult(error);
+        }
     });
 }
 
@@ -303,27 +312,50 @@ async function runWebGlBackgroundRemoval(src, signal, startPercent, endPercent) 
     setBgRemoveProgress(start + (end - start) * .82, "투명 PNG 합성 중");
     const width = image.naturalWidth || image.width;
     const height = image.naturalHeight || image.height;
+    const rawMaskCanvas = document.createElement("canvas");
+    rawMaskCanvas.width = width;
+    rawMaskCanvas.height = height;
+    const rawMaskContext = rawMaskCanvas.getContext("2d", { willReadFrequently: true });
     const maskCanvas = document.createElement("canvas");
     maskCanvas.width = width;
     maskCanvas.height = height;
-    const maskContext = maskCanvas.getContext("2d");
+    const maskContext = maskCanvas.getContext("2d", { willReadFrequently: true });
     const outputCanvas = document.createElement("canvas");
     outputCanvas.width = width;
     outputCanvas.height = height;
-    const outputContext = outputCanvas.getContext("2d");
-    if (!maskContext || !outputContext) {
+    const outputContext = outputCanvas.getContext("2d", { willReadFrequently: true });
+    if (!rawMaskContext || !maskContext || !outputContext) {
         throw new Error("WebGL 배경 제거 결과를 합성할 Canvas를 만들 수 없습니다.");
     }
 
-    maskContext.save();
-    maskContext.filter = "blur(1px)";
-    maskContext.drawImage(results.segmentationMask, 0, 0, width, height);
-    maskContext.restore();
-    outputContext.clearRect(0, 0, width, height);
+    // BG Remover 앱과 같은 기본 매팅 보정값(Threshold 30, Blur 2px)을 적용한다.
+    rawMaskContext.drawImage(results.segmentationMask, 0, 0, width, height);
+    const rawMask = rawMaskContext.getImageData(0, 0, width, height);
+    const threshold = 30;
+    for (let index = 0; index < rawMask.data.length; index += 4) {
+        const alpha = rawMask.data[index + 3];
+        const value = alpha < threshold
+            ? 0
+            : ((alpha - threshold) / (255 - threshold)) * 255;
+        rawMask.data[index] = value;
+        rawMask.data[index + 1] = value;
+        rawMask.data[index + 2] = value;
+        rawMask.data[index + 3] = 255;
+    }
+    rawMaskContext.putImageData(rawMask, 0, 0);
+    maskContext.fillStyle = "#000";
+    maskContext.fillRect(0, 0, width, height);
+    maskContext.filter = "blur(2px)";
+    maskContext.drawImage(rawMaskCanvas, 0, 0);
+    maskContext.filter = "none";
+
     outputContext.drawImage(image, 0, 0, width, height);
-    outputContext.globalCompositeOperation = "destination-in";
-    outputContext.drawImage(maskCanvas, 0, 0);
-    outputContext.globalCompositeOperation = "source-over";
+    const outputPixels = outputContext.getImageData(0, 0, width, height);
+    const maskPixels = maskContext.getImageData(0, 0, width, height).data;
+    for (let index = 0; index < outputPixels.data.length; index += 4) {
+        outputPixels.data[index + 3] = maskPixels[index];
+    }
+    outputContext.putImageData(outputPixels, 0, 0);
     setBgRemoveProgress(end, "WebGL 배경 제거 결과 확인");
     return outputCanvas.toDataURL("image/png");
 }
