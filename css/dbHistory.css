@@ -1,0 +1,290 @@
+:root {
+    color-scheme: dark;
+    font-family: Pretendard, "Segoe UI", sans-serif;
+    background: #090c12;
+    color: #f3f6fb;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    min-width: 680px;
+    min-height: 100vh;
+    margin: 0;
+    background:
+        radial-gradient(circle at 18% 0, rgba(0, 209, 255, .09), transparent 34%),
+        #090c12;
+}
+
+button {
+    border: 1px solid rgba(255, 255, 255, .15);
+    border-radius: 9px;
+    padding: 9px 12px;
+    color: #f4f7fb;
+    background: #252c3a;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 750;
+    cursor: pointer;
+}
+
+button:hover {
+    border-color: rgba(127, 221, 255, .65);
+    background: #303a4b;
+}
+
+button.primary {
+    color: #071117;
+    border-color: #77f5d1;
+    background: linear-gradient(135deg, #7fddff, #77f5d1);
+}
+
+button.danger {
+    color: #ff9eab;
+    border-color: rgba(255, 83, 106, .42);
+    background: rgba(95, 24, 38, .3);
+}
+
+.db-history-header {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 18px 22px;
+    border-bottom: 1px solid rgba(255, 255, 255, .1);
+    background: rgba(22, 28, 38, .96);
+    backdrop-filter: blur(14px);
+}
+
+.db-history-header h1,
+.db-history-header p {
+    margin: 0;
+}
+
+.db-history-header h1 {
+    font-size: 22px;
+}
+
+.db-history-header p {
+    margin-top: 5px;
+    color: rgba(255, 255, 255, .5);
+    font-size: 13px;
+}
+
+.db-history-header-actions {
+    display: flex;
+    gap: 8px;
+}
+
+main {
+    width: min(940px, calc(100% - 32px));
+    margin: 0 auto;
+    padding: 20px 0 36px;
+}
+
+.db-history-summary {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    color: #94f8dd;
+}
+
+.db-history-status {
+    padding: 30px 18px;
+    border: 1px dashed rgba(255, 255, 255, .15);
+    border-radius: 12px;
+    color: rgba(255, 255, 255, .5);
+    text-align: center;
+}
+
+.db-history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.db-history-item {
+    display: grid;
+    grid-template-columns: 92px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 16px;
+    padding: 13px;
+    border: 1px solid rgba(255, 255, 255, .1);
+    border-radius: 13px;
+    background: rgba(22, 28, 38, .86);
+}
+
+.db-history-thumb {
+    width: 92px;
+    height: 72px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border-radius: 9px;
+    color: #88ecff;
+    background: #0d121a;
+}
+
+.db-history-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.db-history-details {
+    min-width: 0;
+}
+
+.db-history-details h2,
+.db-history-details p {
+    margin: 0;
+}
+
+.db-history-details h2 {
+    overflow: hidden;
+    font-size: 15px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.db-history-details p {
+    margin-top: 5px;
+    color: rgba(255, 255, 255, .48);
+    font-size: 12px;
+}
+
+.db-history-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 9px;
+}
+
+.db-history-badges span {
+    padding: 4px 7px;
+    border: 1px solid rgba(127, 221, 255, .14);
+    border-radius: 999px;
+    color: #a9deed;
+    background: rgba(127, 221, 255, .05);
+    font-size: 11px;
+}
+
+.db-history-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.db-restore-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(3, 6, 10, .88);
+    backdrop-filter: blur(12px);
+}
+
+.db-restore-card {
+    width: min(480px, 92vw);
+    padding: 30px;
+    text-align: center;
+    border: 1px solid rgba(127, 221, 255, .28);
+    border-radius: 18px;
+    background: linear-gradient(145deg, #1d2430, #121720);
+    box-shadow: 0 28px 90px rgba(0, 0, 0, .68);
+}
+
+.db-restore-icon {
+    width: 54px;
+    height: 54px;
+    display: grid;
+    place-items: center;
+    margin: 0 auto 15px;
+    border: 1px solid rgba(119, 245, 209, .4);
+    border-radius: 15px;
+    color: #071117;
+    background: linear-gradient(135deg, #7fddff, #77f5d1);
+    font-weight: 900;
+}
+
+.db-restore-card h2,
+.db-restore-card p {
+    margin: 0;
+}
+
+.db-restore-card h2 {
+    font-size: 20px;
+}
+
+.db-restore-card p {
+    min-height: 40px;
+    margin-top: 9px;
+    color: rgba(255, 255, 255, .62);
+    font-size: 13px;
+    line-height: 1.55;
+}
+
+.db-restore-track {
+    height: 12px;
+    margin-top: 20px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #080c12;
+}
+
+.db-restore-track span {
+    width: 0;
+    height: 100%;
+    display: block;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #7fddff, #77f5d1, #a5ff8a);
+    box-shadow: 0 0 20px rgba(119, 245, 209, .35);
+    transition: width .18s ease;
+}
+
+.db-restore-card strong {
+    display: block;
+    margin-top: 10px;
+    color: #94f8dd;
+    font: 800 18px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.db-restore-card small {
+    display: block;
+    min-height: 18px;
+    margin-top: 8px;
+    color: rgba(255, 255, 255, .4);
+    font-size: 11px;
+}
+
+.db-restore-overlay.error .db-restore-card {
+    border-color: rgba(255, 83, 106, .55);
+}
+
+.db-restore-overlay.error .db-restore-card strong {
+    color: #ff9eab;
+}
+
+@media (max-width: 760px) {
+    .db-history-item {
+        grid-template-columns: 72px minmax(0, 1fr);
+    }
+
+    .db-history-thumb {
+        width: 72px;
+        height: 64px;
+    }
+
+    .db-history-actions {
+        grid-column: 1 / -1;
+        flex-direction: row;
+    }
+}

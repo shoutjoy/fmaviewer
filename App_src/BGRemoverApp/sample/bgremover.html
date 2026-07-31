@@ -1,0 +1,1427 @@
+<!DOCTYPE html>
+<html lang="ko" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 인물 배경 제거 스튜디오 v2.6.0</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        studio: {
+                            50: '#f8fafc',
+                            100: '#f1f5f9',
+                            800: '#1e293b',
+                            900: '#0f172a',
+                            950: '#020617',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Google MediaPipe Selfie Segmentation Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
+    <style>
+        /* Checkerboard background */
+        .bg-transparent-checker {
+            background-color: #ffffff;
+            background-image: radial-gradient(#cbd5e1 20%, transparent 20%), radial-gradient(#cbd5e1 20%, transparent 20%);
+            background-size: 16px 16px;
+            background-position: 0 0, 8px 8px;
+        }
+        .dark .bg-transparent-checker {
+            background-color: #0f172a;
+            background-image: radial-gradient(#334155 20%, transparent 20%), radial-gradient(#334155 20%, transparent 20%);
+            background-size: 16px 16px;
+            background-position: 0 0, 8px 8px;
+        }
+        /* Custom UI Scrollbars */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+        /* Collapsible panel */
+        .panel-content { max-height: 1200px; transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        .panel-content.collapsed { max-height: 0; overflow: hidden; padding-top: 0 !important; padding-bottom: 0 !important; border-top-width: 0 !important; border-bottom-width: 0 !important; }
+    </style>
+</head>
+<body class="bg-studio-950 text-slate-100 min-h-screen flex flex-col font-sans transition-colors duration-300 select-none">
+
+    <!-- 상단 헤더 영역 -->
+    <header class="border-b border-slate-800 bg-studio-900/90 backdrop-blur px-6 py-4 flex items-center justify-between sticky top-0 z-50">
+        <div class="flex items-center gap-3">
+            <div class="p-2 bg-indigo-600 rounded-xl text-white shadow-lg shadow-indigo-500/20">
+                <i data-lucide="scissors" class="w-6 h-6"></i>
+            </div>
+            <div>
+                <div class="flex items-center gap-2">
+                    <h1 class="text-lg font-bold tracking-tight bg-gradient-to-r from-white via-slate-200 to-indigo-400 bg-clip-text text-transparent">
+                        AI Portrait Studio
+                    </h1>
+                    <span class="text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded">v2.6.0-Pro</span>
+                </div>
+                <p class="text-xs text-slate-400">실시간 강도 조절 픽셀 렌더링 파이프라인 탑재</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <span class="text-xs px-2.5 py-1 bg-slate-800 border border-slate-700 rounded-full text-slate-300 flex items-center gap-1.5">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> DB Connected
+            </span>
+        </div>
+    </header>
+
+    <!-- 대시보드 컨테이너 -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 flex flex-col gap-6">
+        
+        <!-- [1] 최상단 배치: 멀티 업로드 및 이미지 영구 갤러리 영역 -->
+        <section class="bg-studio-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 border-b border-slate-800 pb-4">
+                <div>
+                    <h2 class="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                        <i data-lucide="database" class="w-4.5 h-4.5 text-indigo-400"></i> 미디어 아카이브 및 타겟 설정
+                    </h2>
+                    <p class="text-xs text-slate-400">사진을 로드한 뒤 우측에서 이미지를 확인하고 연산을 가동한다.</p>
+                </div>
+                <div class="flex gap-2">
+                    <input type="file" id="imageInput" accept="image/*" multiple class="hidden">
+                    <button id="uploadBtn" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition-all">
+                        <i data-lucide="folder-plus" class="w-4 h-4 text-indigo-400"></i> 이미지 추가
+                    </button>
+                    <button id="clearAllDbBtn" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 hover:text-rose-400 text-slate-400 rounded-xl text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition-all">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i> 모두 지우기
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <!-- 왼쪽 드래그 존 & 갤러리 (8칸) -->
+                <div class="lg:col-span-8 flex flex-col gap-3 justify-center">
+                    <div id="dropZone" class="border-2 border-dashed border-slate-700 hover:border-indigo-500 bg-slate-950/40 rounded-xl p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center min-h-[120px] group">
+                        <i data-lucide="upload-cloud" class="w-8 h-8 text-slate-500 group-hover:scale-110 transition-transform text-indigo-400 mb-2"></i>
+                        <p class="text-xs font-medium text-slate-300">이곳에 파일을 드래그 앤 드롭하거나 클릭하여 추가</p>
+                        <p class="text-[10px] text-slate-500 mt-1">다중 선택을 지원하며 로컬 브라우저에 안전히 보존된다.</p>
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                            <i data-lucide="images" class="w-3 h-3"></i> 보관소 갤러리 (<span id="galleryCount">0</span>)
+                        </p>
+                        <div id="imageGalleryGrid" class="flex gap-3 overflow-x-auto py-2 px-1 border border-slate-800/60 bg-slate-950/20 rounded-xl min-h-[90px] items-center">
+                            <div class="text-xs text-slate-600 italic px-4 w-full text-center py-4">대기 중인 미디어가 없다.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 오른쪽: 작업 대상 제어 패널 (4칸) -->
+                <div class="lg:col-span-4 border border-slate-800 bg-slate-950/60 rounded-xl p-4 flex flex-col justify-between relative min-h-[160px] shadow-inner">
+                    <div class="absolute top-2 left-2 px-1.5 py-0.5 bg-indigo-600/10 border border-indigo-500/20 text-[9px] text-indigo-400 rounded">
+                        Active Workspace Target
+                    </div>
+                    
+                    <div id="activeTargetMeta" class="w-full text-center space-y-3 mt-5 flex-1 flex flex-col items-center justify-center">
+                        <div class="relative w-20 h-20 rounded-xl overflow-hidden border border-slate-700 shadow-lg bg-transparent-checker transition-colors">
+                            <img id="activeTargetThumb" class="w-full h-full object-cover hidden">
+                            <div id="activeTargetPlaceholder" class="w-full h-full flex items-center justify-center text-slate-600">
+                                <i data-lucide="user" class="w-8 h-8"></i>
+                            </div>
+                        </div>
+                        <div class="min-w-0 w-full px-2">
+                            <p id="activeTargetName" class="text-xs font-semibold text-slate-300 truncate">파일을 선택하십시오</p>
+                        </div>
+                        
+                        <!-- 고정 노출 인스펙터 버튼 -->
+                        <div id="activeTargetActions" class="flex items-center justify-center gap-2 mt-1 opacity-50 pointer-events-none transition-opacity">
+                            <button onclick="viewImageModal(state.selectedImageId, 'original')" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-300 text-[10px] font-bold shadow flex items-center gap-1.5 pointer-events-auto transition-colors">
+                                <i data-lucide="zoom-in" class="w-3.5 h-3.5"></i> 크게 보기
+                            </button>
+                            <button onclick="openImageNewTab(state.selectedImageId, 'original')" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-300 text-[10px] font-bold shadow flex items-center gap-1.5 pointer-events-auto transition-colors">
+                                <i data-lucide="external-link" class="w-3.5 h-3.5"></i> 새창 열기
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 명시적 글로벌 실행 버튼 -->
+                    <div class="mt-4 pt-4 border-t border-slate-800/80">
+                        <button id="globalRunBtn" class="w-full py-3 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white rounded-xl font-bold shadow-[0_0_15px_rgba(79,70,229,0.3)] transition-all flex items-center justify-center gap-2 transform active:scale-[0.98]">
+                            <i data-lucide="play" class="w-4 h-4 fill-current"></i> BG Remove 실행
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- [2] 중간부 배치: 접이식 설정 패널들 -->
+        <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            
+            <!-- 아코디언 A: 세그멘테이션 엔진 설정 -->
+            <div class="bg-studio-900 border border-slate-800 rounded-2xl overflow-hidden shadow-lg">
+                <button class="w-full px-5 py-4 flex items-center justify-between text-left hover:bg-slate-800/30 transition-colors border-b border-transparent" onclick="toggleAccordion('enginePanel')">
+                    <span class="text-xs font-bold text-slate-200 flex items-center gap-2">
+                        <i data-lucide="cpu" class="w-4 h-4 text-indigo-400"></i> [설정] 세그멘테이션 엔진
+                    </span>
+                    <i data-lucide="chevron-down" id="enginePanelIcon" class="w-4 h-4 text-slate-400 transition-transform -rotate-90"></i>
+                </button>
+                <div id="enginePanel" class="panel-content p-5 space-y-4 collapsed border-t border-slate-800/50">
+                    <div class="grid grid-cols-1 gap-2">
+                        <button id="engineLocalBtn" class="flex items-start gap-2.5 p-3 rounded-xl border text-left transition-all bg-indigo-950/40 border-indigo-500/50 ring-1 ring-indigo-500/30">
+                            <i data-lucide="zap" class="w-4 h-4 text-indigo-400 shrink-0 mt-0.5"></i>
+                            <div>
+                                <div class="text-xs font-bold text-indigo-200">로컬 고속 WebGL 엔진</div>
+                                <p class="text-[10px] text-slate-400 mt-1 leading-relaxed">로컬 처리로 프라이버시와 속도를 보장.</p>
+                            </div>
+                        </button>
+                        <button id="engineCloudBtn" class="flex items-start gap-2.5 p-3 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-900 text-left transition-all text-slate-500">
+                            <i data-lucide="cloud-lightning" class="w-4 h-4 text-slate-500 shrink-0 mt-0.5"></i>
+                            <div>
+                                <div class="text-xs font-bold text-slate-400">클라우드 생성형 AI 엔진</div>
+                                <p class="text-[10px] text-slate-500 mt-1 leading-relaxed">Gemini 2.5 다중 모달 분석 적용.</p>
+                            </div>
+                        </button>
+                    </div>
+                    <div class="border-t border-slate-800/80 pt-3.5 space-y-2">
+                        <label class="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                            <i data-lucide="key" class="w-3.5 h-3.5 text-indigo-400"></i> Google AI Studio API Key
+                        </label>
+                        <div class="relative">
+                            <input type="password" id="customApiKeyInput" placeholder="비어있을 시 내장 환경 키 연동" class="w-full bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-indigo-500/60 rounded-xl px-3 py-2 text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none transition-all">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 아코디언 B: 합성 가상 배경 설정 -->
+            <div class="bg-studio-900 border border-slate-800 rounded-2xl overflow-hidden shadow-lg">
+                <button class="w-full px-5 py-4 flex items-center justify-between text-left hover:bg-slate-800/30 transition-colors border-b border-transparent" onclick="toggleAccordion('backgroundPanel')">
+                    <span class="text-xs font-bold text-slate-200 flex items-center gap-2">
+                        <i data-lucide="palette" class="w-4 h-4 text-indigo-400"></i> [설정] 가상 배경 합성
+                    </span>
+                    <i data-lucide="chevron-down" id="backgroundPanelIcon" class="w-4 h-4 text-slate-400 transition-transform -rotate-90"></i>
+                </button>
+                <div id="backgroundPanel" class="panel-content p-5 space-y-4 collapsed border-t border-slate-800/50">
+                    <div class="flex border-b border-slate-800 mb-2 text-[11px]">
+                        <button id="tabTransparent" class="flex-1 pb-1.5 font-bold border-b-2 border-indigo-500 text-indigo-400">투명</button>
+                        <button id="tabColor" class="flex-1 pb-1.5 font-bold border-b-2 border-transparent text-slate-400">단색</button>
+                        <button id="tabGradient" class="flex-1 pb-1.5 font-bold border-b-2 border-transparent text-slate-400">그라디언트</button>
+                        <button id="tabCustom" class="flex-1 pb-1.5 font-bold border-b-2 border-transparent text-slate-400">커스텀</button>
+                    </div>
+
+                    <div class="text-[11px]">
+                        <div id="panelTransparent" class="text-slate-400 leading-relaxed">
+                            배경을 완벽한 투명 픽셀로 변환한다. PNG 추출 시 권장된다.
+                        </div>
+                        <div id="panelColor" class="hidden space-y-3">
+                            <div class="grid grid-cols-5 gap-1.5">
+                                <button class="w-full aspect-square rounded bg-white border border-slate-700" data-color="#FFFFFF"></button>
+                                <button class="w-full aspect-square rounded bg-slate-900 border border-slate-700" data-color="#0F172A"></button>
+                                <button class="w-full aspect-square rounded bg-blue-500 border border-slate-700" data-color="#3B82F6"></button>
+                                <button class="w-full aspect-square rounded bg-emerald-500 border border-slate-700" data-color="#10B981"></button>
+                                <button class="w-full aspect-square rounded bg-rose-500 border border-slate-700" data-color="#F43F5E"></button>
+                            </div>
+                            <div class="flex items-center justify-between bg-slate-950 p-2 rounded-lg border border-slate-800">
+                                <span class="text-slate-400">커스텀 색상</span>
+                                <input type="color" id="customColorPicker" value="#4F46E5" class="w-6 h-6 border-0 cursor-pointer bg-transparent">
+                            </div>
+                        </div>
+                        <div id="panelGradient" class="hidden grid grid-cols-2 gap-1.5">
+                            <button class="py-1.5 px-2 rounded border border-slate-700 text-[10px] bg-gradient-to-br from-indigo-900 to-slate-900 text-slate-200" data-gradient="linear-gradient(135deg, #312e81 0%, #0f172a 100%)">인디고</button>
+                            <button class="py-1.5 px-2 rounded border border-slate-700 text-[10px] bg-gradient-to-br from-rose-900 to-slate-900 text-slate-200" data-gradient="linear-gradient(135deg, #4c0519 0%, #0f172a 100%)">이브닝</button>
+                            <button class="py-1.5 px-2 rounded border border-slate-700 text-[10px] bg-gradient-to-br from-emerald-950 to-slate-900 text-slate-200" data-gradient="linear-gradient(135deg, #022c22 0%, #030712 100%)">포레스트</button>
+                            <button class="py-1.5 px-2 rounded border border-slate-700 text-[10px] bg-gradient-to-br from-violet-800 via-fuchsia-900 to-slate-950 text-slate-200" data-gradient="linear-gradient(135deg, #5b21b6 0%, #701a75 50%, #030712 100%)">사이버</button>
+                        </div>
+                        <div id="panelCustom" class="hidden space-y-2">
+                            <input type="file" id="bgFileInput" accept="image/*" class="hidden">
+                            <button id="bgFileBtn" class="w-full py-2 px-3 border border-dashed border-slate-700 hover:border-indigo-500 rounded-xl flex items-center justify-center gap-1.5 text-slate-300 bg-slate-950/50 transition-all">
+                                <i data-lucide="image" class="w-3.5 h-3.5"></i> 가상 이미지 업로드
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 아코디언 C: 매팅 재가공 (브러시/필터) -->
+            <div class="bg-studio-900 border border-slate-800 rounded-2xl overflow-hidden shadow-lg transition-all duration-300">
+                <button class="w-full px-5 py-4 flex items-center justify-between text-left hover:bg-slate-800/30 transition-colors border-b border-transparent" onclick="toggleAccordion('filterPanel')">
+                    <span class="text-xs font-bold text-slate-200 flex items-center gap-2">
+                        <i data-lucide="sliders" class="w-4 h-4 text-indigo-400"></i> [가공] 매팅 칼리브레이션
+                    </span>
+                    <i data-lucide="chevron-down" id="filterPanelIcon" class="w-4 h-4 text-slate-400 transition-transform -rotate-90"></i>
+                </button>
+                <div id="filterPanel" class="panel-content p-5 space-y-4 collapsed border-t border-slate-800/50">
+                    
+                    <div class="space-y-4">
+                        <!-- 강도(Threshold) 실시간 조절 -->
+                        <div class="space-y-1">
+                            <div class="flex justify-between text-[11px] font-semibold">
+                                <span class="text-slate-400 flex items-center gap-1.5"><i data-lucide="sun" class="w-3 h-3 text-indigo-400"></i> 배경 제거 강도 (Threshold)</span>
+                                <span id="thresholdVal" class="text-indigo-400 font-mono bg-indigo-500/10 px-1.5 rounded">30</span>
+                            </div>
+                            <!-- 값 변경시 재실행 없이 즉시 렌더링 깎임 -->
+                            <input type="range" id="paramThreshold" min="0" max="255" value="30" class="w-full accent-indigo-500 h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer">
+                            <p class="text-[9px] text-slate-500 pt-1">값이 높을수록 잔여 테두리(빛 번짐 등)가 더 강하게 삭제된다.</p>
+                        </div>
+
+                        <!-- 페더링 조절 -->
+                        <div class="space-y-1 pt-1">
+                            <div class="flex justify-between text-[11px] font-semibold">
+                                <span class="text-slate-400">경계면 부드러움 (Blur)</span>
+                                <span id="blurVal" class="text-indigo-400 font-mono">2px</span>
+                            </div>
+                            <input type="range" id="paramBlur" min="0" max="15" value="2" class="w-full accent-indigo-500 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer">
+                        </div>
+                    </div>
+
+                    <!-- 수동 브러시 미세 보정 -->
+                    <div class="border-t border-slate-800/80 pt-4 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <h4 class="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1.5">
+                                <i data-lucide="brush" class="w-3.5 h-3.5 text-indigo-400"></i> 수동 브러시 가공
+                            </h4>
+                            <span id="brushActiveStatus" class="text-[9px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full font-semibold">OFF</span>
+                        </div>
+                        
+                        <button id="toggleBrushModeBtn" class="w-full py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl transition-all border border-slate-700 flex items-center justify-center gap-2">
+                            <i data-lucide="toggle-left" id="toggleBrushIcon" class="w-4 h-4"></i>
+                            <span id="toggleBrushText">브러시 캔버스 모드 활성화</span>
+                        </button>
+
+                        <div id="brushSubOptions" class="space-y-3 hidden bg-slate-950 p-3 rounded-xl border border-slate-800">
+                            <div class="grid grid-cols-2 gap-2">
+                                <button id="brushToolErase" class="py-1.5 px-2 bg-indigo-600 border border-indigo-500 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors">
+                                    <i data-lucide="eraser" class="w-3.5 h-3.5"></i> 지우기
+                                </button>
+                                <button id="brushToolRestore" class="py-1.5 px-2 bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors">
+                                    <i data-lucide="sparkle" class="w-3.5 h-3.5"></i> 복원
+                                </button>
+                            </div>
+                            <div class="space-y-1">
+                                <div class="flex justify-between text-[10px] font-semibold text-slate-400">
+                                    <span>브러시 크기 (Size)</span>
+                                    <span id="brushSizeVal" class="text-indigo-400 font-mono">30px</span>
+                                </div>
+                                <input type="range" id="paramBrushSize" min="5" max="150" value="30" class="w-full accent-indigo-500 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- [3] 최하단 배치: 결과물 뷰포트 -->
+        <section class="flex-1 bg-studio-900 border border-slate-800 rounded-3xl p-5 md:p-6 flex flex-col min-h-[500px] relative shadow-2xl justify-center items-center">
+            
+            <div id="noActiveImagePlaceholder" class="flex flex-col items-center gap-3 text-center">
+                <div class="p-4 bg-slate-950 rounded-2xl border border-slate-800 text-slate-500">
+                    <i data-lucide="monitor" class="w-10 h-10"></i>
+                </div>
+                <div>
+                    <p class="text-sm font-semibold text-slate-300">작업 뷰포트 대기 중</p>
+                    <p class="text-xs text-slate-500 mt-1">상단에서 이미지를 선택하고 <span class="text-indigo-400 font-bold">BG Remove 실행</span> 버튼을 누르십시오.</p>
+                </div>
+            </div>
+
+            <div id="loadingOverlay" class="hidden absolute inset-0 bg-studio-950/95 z-40 flex flex-col items-center justify-center gap-4 backdrop-blur-md rounded-3xl">
+                <div class="relative w-14 h-14">
+                    <div class="absolute inset-0 rounded-full border-4 border-slate-800"></div>
+                    <div class="absolute inset-0 rounded-full border-4 border-indigo-500 border-t-transparent animate-spin"></div>
+                </div>
+                <div class="text-center">
+                    <p id="loadingText" class="text-sm font-bold text-slate-200">연산 처리 가동 중...</p>
+                </div>
+            </div>
+
+            <!-- 합성 렌더링 영역 -->
+            <div id="workspaceView" class="hidden w-full h-full flex flex-col gap-4 relative">
+                
+                <!-- 슬라이더 대조 프레임 -->
+                <div id="viewContainer" class="relative flex-1 aspect-[16/10] max-h-[600px] rounded-2xl overflow-hidden bg-transparent-checker border border-slate-800 shadow-inner group">
+                    <img id="previewOriginal" class="absolute inset-0 w-full h-full object-contain pointer-events-none select-none" alt="원본">
+                    <div id="processedContainer" class="absolute inset-0 w-full h-full pointer-events-none select-none overflow-hidden" style="clip-path: inset(0 0 0 0%);">
+                        <div id="compositingLayer" class="w-full h-full bg-transparent-checker relative">
+                            <canvas id="previewComposite" class="w-full h-full object-contain absolute inset-0"></canvas>
+                        </div>
+                    </div>
+                    
+                    <input type="range" id="splitSlider" min="0" max="100" value="0" class="absolute inset-0 w-full h-full opacity-0 cursor-ew-resize z-30">
+                    
+                    <div id="splitBar" class="absolute top-0 bottom-0 w-0.5 bg-white z-20 pointer-events-none shadow-[0_0_12px_rgba(0,0,0,0.8)]" style="left: 0%;">
+                        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-slate-950 border border-slate-700 text-white flex items-center justify-center shadow-2xl">
+                            <i data-lucide="arrow-left-right" class="w-3.5 h-3.5"></i>
+                        </div>
+                    </div>
+
+                    <div id="tagBefore" class="absolute bottom-4 left-4 px-2 py-0.5 rounded bg-black/60 text-[9px] font-bold text-slate-300 z-10 pointer-events-none opacity-0 transition-opacity">BEFORE ORIGINAL</div>
+                    <div class="absolute bottom-4 right-4 px-2 py-0.5 rounded bg-indigo-600 text-[9px] font-bold text-white z-10 pointer-events-none shadow-lg">AFTER MATTING</div>
+                    
+                    <!-- 브러시 잔상 커서 -->
+                    <div id="brushCursor" class="absolute pointer-events-none border border-white rounded-full bg-indigo-500/20 hidden z-40 backdrop-invert"></div>
+                </div>
+
+                <!-- 하단 컨트롤 바 (결과 확대 뷰어 + 저장) -->
+                <div class="flex flex-col md:flex-row items-center justify-between gap-3 bg-slate-950 p-3 rounded-2xl border border-slate-800">
+                    <div class="flex items-center gap-2">
+                        <!-- 빠른 원본 대조 버튼 -->
+                        <button id="holdToViewOriginalBtn" class="flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl transition-all select-none border border-slate-700 shadow-sm">
+                            <i data-lucide="eye" class="w-4 h-4"></i> 원본 비교 (Hold)
+                        </button>
+                        <!-- 인스펙터 버튼 -->
+                        <div class="h-6 w-px bg-slate-800 mx-1"></div>
+                        <button onclick="viewImageModal(null, 'composite')" class="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl border border-slate-700 transition-all tooltip shadow-sm" title="결과물 전체화면 확대">
+                            <i data-lucide="zoom-in" class="w-4 h-4"></i>
+                        </button>
+                        <button onclick="openImageNewTab(null, 'composite')" class="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl border border-slate-700 transition-all tooltip shadow-sm" title="결과물 새 창에서 열기">
+                            <i data-lucide="external-link" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button id="downloadCutoutBtn" class="flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-semibold rounded-xl border border-slate-800 transition-all">
+                            <i data-lucide="file-down" class="w-4 h-4 text-indigo-400"></i> 투명 원본 PNG 저장
+                        </button>
+                        <button id="downloadCompositeBtn" class="flex items-center gap-1.5 px-4.5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-[0_0_10px_rgba(79,70,229,0.3)] transition-all">
+                            <i data-lucide="save" class="w-4 h-4"></i> 배경 합성 결과 저장
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- [4] 이미지 인스펙터 풀스크린 모달 (크게 보기용) -->
+    <div id="imageModal" class="fixed inset-0 z-[100] bg-black/95 flex flex-col justify-center items-center hidden backdrop-blur-sm transition-opacity">
+        <div class="absolute top-4 right-4 flex gap-3">
+            <a id="modalDownloadBtn" href="#" download="inspected_image.png" class="p-3 bg-slate-800 hover:bg-slate-700 text-white rounded-full transition-colors shadow-lg">
+                <i data-lucide="download" class="w-5 h-5"></i>
+            </a>
+            <button onclick="closeImageModal()" class="p-3 bg-rose-600 hover:bg-rose-500 text-white rounded-full transition-colors shadow-lg">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <img id="modalImageDisplay" class="max-w-[95vw] max-h-[90vh] object-contain rounded-xl shadow-2xl bg-transparent-checker border border-slate-700" src="">
+        <div id="modalLabel" class="absolute bottom-6 px-4 py-2 bg-slate-900/80 rounded-xl text-white text-sm font-bold tracking-widest border border-slate-700 backdrop-blur-md shadow-lg">INSPECTOR</div>
+    </div>
+
+    <!-- Toast Notification 컴포넌트 -->
+    <div id="toastBox" class="fixed bottom-6 right-6 transform translate-y-20 opacity-0 pointer-events-none transition-all duration-300 bg-slate-900 border border-slate-800 text-slate-100 px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 z-50">
+        <div id="toastIcon" class="p-1 rounded-lg"></div>
+        <div>
+            <p id="toastTitle" class="text-xs font-bold text-slate-200">알림</p>
+            <p id="toastMsg" class="text-[10px] text-slate-400 mt-0.5">처리 완료</p>
+        </div>
+    </div>
+
+    <script>
+        const fallbackApiKey = "";
+
+        // 글로벌 시스템 상태
+        const state = {
+            activeEngine: 'local', 
+            images: [],
+            selectedImageId: null,
+            cleanCutoutCanvas: null, 
+            activeBgType: 'transparent', 
+            solidColor: '#FFFFFF',
+            gradientStyle: 'linear-gradient(135deg, #312e81 0%, #0f172a 100%)',
+            customBgImage: null,   
+            blurValue: 2,
+            thresholdValue: 30, // 0~255 범위의 적정 기본값
+            isProcessing: false,
+            isBrushMode: false,
+            brushTool: 'erase', 
+            brushSize: 30,
+            isDrawing: false,
+            maskCanvas: null, // 엔진이 분석해낸 오리지널 Grayscale(0~255) 마스크 보존본
+            lastDrawX: null,
+            lastDrawY: null
+        };
+
+        // DOM 객체 바인딩
+        const imageInput = document.getElementById('imageInput');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const clearAllDbBtn = document.getElementById('clearAllDbBtn');
+        const dropZone = document.getElementById('dropZone');
+        const imageGalleryGrid = document.getElementById('imageGalleryGrid');
+        const galleryCount = document.getElementById('galleryCount');
+        const customApiKeyInput = document.getElementById('customApiKeyInput');
+        
+        const activeTargetThumb = document.getElementById('activeTargetThumb');
+        const activeTargetPlaceholder = document.getElementById('activeTargetPlaceholder');
+        const activeTargetActions = document.getElementById('activeTargetActions');
+        const activeTargetName = document.getElementById('activeTargetName');
+
+        const engineLocalBtn = document.getElementById('engineLocalBtn');
+        const engineCloudBtn = document.getElementById('engineCloudBtn');
+        const bgFileInput = document.getElementById('bgFileInput');
+        const customColorPicker = document.getElementById('customColorPicker');
+        
+        const paramBlur = document.getElementById('paramBlur');
+        const blurVal = document.getElementById('blurVal');
+        const paramThreshold = document.getElementById('paramThreshold');
+        const thresholdVal = document.getElementById('thresholdVal');
+        
+        const globalRunBtn = document.getElementById('globalRunBtn');
+
+        const toggleBrushModeBtn = document.getElementById('toggleBrushModeBtn');
+        const toggleBrushIcon = document.getElementById('toggleBrushIcon');
+        const toggleBrushText = document.getElementById('toggleBrushText');
+        const brushActiveStatus = document.getElementById('brushActiveStatus');
+        const brushSubOptions = document.getElementById('brushSubOptions');
+        const brushToolErase = document.getElementById('brushToolErase');
+        const brushToolRestore = document.getElementById('brushToolRestore');
+        const paramBrushSize = document.getElementById('paramBrushSize');
+        const brushSizeVal = document.getElementById('brushSizeVal');
+        const brushCursor = document.getElementById('brushCursor');
+
+        const noActiveImagePlaceholder = document.getElementById('noActiveImagePlaceholder');
+        const workspaceView = document.getElementById('workspaceView');
+        const previewOriginal = document.getElementById('previewOriginal');
+        const previewComposite = document.getElementById('previewComposite');
+        const processedContainer = document.getElementById('processedContainer');
+        const viewContainer = document.getElementById('viewContainer');
+        const splitSlider = document.getElementById('splitSlider');
+        const splitBar = document.getElementById('splitBar');
+        const tagBefore = document.getElementById('tagBefore');
+        const holdToViewOriginalBtn = document.getElementById('holdToViewOriginalBtn');
+        
+        const downloadCutoutBtn = document.getElementById('downloadCutoutBtn');
+        const downloadCompositeBtn = document.getElementById('downloadCompositeBtn');
+        
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const loadingText = document.getElementById('loadingText');
+        const toastBox = document.getElementById('toastBox');
+
+        const imageModal = document.getElementById('imageModal');
+        const modalImageDisplay = document.getElementById('modalImageDisplay');
+        const modalLabel = document.getElementById('modalLabel');
+        const modalDownloadBtn = document.getElementById('modalDownloadBtn');
+
+        // IndexedDB 로컬 영구 스토리지
+        const DB_NAME = "AIPortraitStudioDB";
+        const DB_VERSION = 1;
+        const STORE_NAME = "images_store";
+        let dbInstance = null;
+
+        function initIndexedDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                request.onupgradeneeded = (e) => {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME, { keyPath: "id" });
+                };
+                request.onsuccess = (e) => { dbInstance = e.target.result; resolve(dbInstance); };
+                request.onerror = (e) => reject(e.target.error);
+            });
+        }
+        function loadImagesFromDB() {
+            return new Promise((resolve) => {
+                if (!dbInstance) return resolve([]);
+                const req = dbInstance.transaction([STORE_NAME], "readonly").objectStore(STORE_NAME).getAll();
+                req.onsuccess = () => resolve(req.result || []);
+                req.onerror = () => resolve([]);
+            });
+        }
+        function saveImageToDB(record) {
+            return new Promise((resolve) => {
+                if (!dbInstance) return resolve(false);
+                const tx = dbInstance.transaction([STORE_NAME], "readwrite");
+                tx.objectStore(STORE_NAME).put(record);
+                tx.oncomplete = () => resolve(true);
+            });
+        }
+        function deleteImageFromDB(id) {
+            return new Promise((resolve) => {
+                if (!dbInstance) return resolve(false);
+                const tx = dbInstance.transaction([STORE_NAME], "readwrite");
+                tx.objectStore(STORE_NAME).delete(id);
+                tx.oncomplete = () => resolve(true);
+            });
+        }
+        function clearAllImagesFromDB() {
+            return new Promise((resolve) => {
+                if (!dbInstance) return resolve(false);
+                const tx = dbInstance.transaction([STORE_NAME], "readwrite");
+                tx.objectStore(STORE_NAME).clear();
+                tx.oncomplete = () => resolve(true);
+            });
+        }
+
+        // MediaPipe 초기화 파이프라인
+        let selfieSegmentation = null;
+        try {
+            selfieSegmentation = new SelfieSegmentation({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`
+            });
+            selfieSegmentation.setOptions({ modelSelection: 1 });
+            selfieSegmentation.onResults(onLocalMatingResults);
+        } catch (err) {
+            console.error(`MediaPipe Init Error: ${err.message}`);
+        }
+
+        const embedParams = new URLSearchParams(window.location.search);
+        const isCdLayerEmbed = embedParams.get('mode') === 'cd-layer';
+        const embedLayerId = embedParams.get('layerId') || '';
+
+        function markCdLayerApplyReady() {
+            const applyBtn = document.getElementById('cdLayerApplyBtn');
+            if (applyBtn) applyBtn.disabled = false;
+        }
+
+        async function importCdLayerEmbedImage(payload) {
+            const imgId = `embed_${Date.now()}`;
+            const imageRecord = {
+                id: imgId,
+                name: payload.name || 'cd-layer.png',
+                size: 0,
+                dataUrl: payload.dataUrl,
+                maskDataUrl: null,
+                cutoutUrl: null,
+            };
+            state.images = [imageRecord];
+            state.selectedImageId = imgId;
+            renderGallery();
+            await selectImageTarget(imgId);
+            showToast('CD 연동', '이미지를 불러왔습니다. BG Remove 실행 후 적용하세요.', 'success');
+        }
+
+        function commitCdLayerCutout() {
+            if (!state.cleanCutoutCanvas || !state.cdLayerEmbed?.layerId) {
+                showToast('적용 불가', '먼저 AI 분석을 실행해 주세요.', 'error');
+                return;
+            }
+            const dataUrl = state.cleanCutoutCanvas.toDataURL('image/png');
+            if (window.opener && !window.opener.closed) {
+                window.opener.postMessage({
+                    type: 'cd-bgremover-commit',
+                    layerId: state.cdLayerEmbed.layerId,
+                    dataUrl,
+                }, window.location.origin);
+            }
+            showToast('적용 완료', 'CD 레이어로 결과를 전송했습니다.', 'success');
+            window.setTimeout(() => window.close(), 350);
+        }
+
+        function cancelCdLayerEmbed() {
+            if (window.opener && !window.opener.closed) {
+                window.opener.postMessage({
+                    type: 'cd-bgremover-cancel',
+                    layerId: state.cdLayerEmbed?.layerId || embedLayerId,
+                }, window.location.origin);
+            }
+            window.close();
+        }
+
+        function initCdLayerEmbedMode() {
+            state.cdLayerEmbed = { layerId: embedLayerId, ready: false };
+            document.title = 'CD 배경 제거 · AI Portrait Studio';
+
+            const banner = document.createElement('div');
+            banner.className = 'bg-indigo-600/20 border border-indigo-500/40 text-indigo-100 text-xs font-bold px-4 py-2 rounded-xl';
+            banner.textContent = 'CD 레이어 배경 제거 모드 — 분석 후 「CD 레이어에 적용」을 누르세요.';
+            const mainEl = document.querySelector('main');
+            if (mainEl) mainEl.prepend(banner);
+
+            const actionWrap = downloadCutoutBtn?.parentElement;
+            if (actionWrap) {
+                const applyBtn = document.createElement('button');
+                applyBtn.id = 'cdLayerApplyBtn';
+                applyBtn.type = 'button';
+                applyBtn.disabled = true;
+                applyBtn.className = 'flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl shadow-[0_0_10px_rgba(16,185,129,0.25)] transition-all';
+                applyBtn.innerHTML = '<i data-lucide="check" class="w-4 h-4"></i> CD 레이어에 적용';
+                applyBtn.addEventListener('click', commitCdLayerCutout);
+                actionWrap.insertBefore(applyBtn, downloadCutoutBtn);
+
+                const cancelBtn = document.createElement('button');
+                cancelBtn.id = 'cdLayerCancelBtn';
+                cancelBtn.type = 'button';
+                cancelBtn.className = 'flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-semibold rounded-xl border border-slate-800 transition-all';
+                cancelBtn.innerHTML = '<i data-lucide="x" class="w-4 h-4"></i> 취소';
+                cancelBtn.addEventListener('click', cancelCdLayerEmbed);
+                actionWrap.insertBefore(cancelBtn, applyBtn);
+                lucide.createIcons();
+            }
+
+            window.addEventListener('message', async (event) => {
+                if (event.origin !== window.location.origin) return;
+                if (!event.data || event.data.type !== 'cd-bgremover-init') return;
+                if (event.data.layerId !== embedLayerId) return;
+                if (!event.data.dataUrl) return;
+                await importCdLayerEmbedImage(event.data);
+            });
+
+            if (window.opener && !window.opener.closed) {
+                window.opener.postMessage({ type: 'cd-bgremover-ready', layerId: embedLayerId }, window.location.origin);
+            }
+        }
+
+        // 초기 시작
+        window.addEventListener('DOMContentLoaded', async () => {
+            lucide.createIcons();
+            const savedKey = localStorage.getItem('aistudio_api_key');
+            if (savedKey) customApiKeyInput.value = savedKey;
+
+            if (isCdLayerEmbed) {
+                initCdLayerEmbedMode();
+            } else {
+                try {
+                    await initIndexedDB();
+                    state.images = await loadImagesFromDB();
+                    renderGallery();
+                } catch (err) {
+                    console.error(`DB 연동 에러: ${err}`);
+                }
+            }
+            initEventListeners();
+        });
+
+        // 아코디언 토글 애니메이션
+        window.toggleAccordion = function(panelId) {
+            const panel = document.getElementById(panelId);
+            const icon = document.getElementById(`${panelId}Icon`);
+            const isCollapsed = panel.classList.toggle('collapsed');
+            
+            if (!isCollapsed) {
+                icon.style.transform = 'rotate(0deg)';
+                panel.classList.remove('border-transparent');
+            } else {
+                icon.style.transform = 'rotate(-90deg)';
+                panel.classList.add('border-transparent');
+            }
+        };
+
+        function initEventListeners() {
+            uploadBtn.addEventListener('click', () => imageInput.click());
+            dropZone.addEventListener('click', () => imageInput.click());
+            imageInput.addEventListener('change', handleFileSelection);
+
+            dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('border-indigo-500'); });
+            dropZone.addEventListener('dragleave', () => dropZone.classList.remove('border-indigo-500'));
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault(); dropZone.classList.remove('border-indigo-500');
+                if (e.dataTransfer.files.length > 0) processMultipleFiles(e.dataTransfer.files);
+            });
+
+            customApiKeyInput.addEventListener('input', (e) => localStorage.setItem('aistudio_api_key', e.target.value.trim()));
+
+            clearAllDbBtn.addEventListener('click', async () => {
+                if (confirm("보관소 원본을 전량 파기하시겠습니까? (되돌릴 수 없습니다)")) {
+                    await clearAllImagesFromDB();
+                    state.images = []; state.selectedImageId = null; state.cleanCutoutCanvas = null; state.maskCanvas = null;
+                    renderGallery(); updateActiveTargetUI();
+                    noActiveImagePlaceholder.classList.remove('hidden'); workspaceView.classList.add('hidden');
+                }
+            });
+
+            // 원본부터 다시 분석 재실행하는 액션
+            globalRunBtn.addEventListener('click', triggerProcessing);
+
+            // 대조 슬라이더 연동
+            splitSlider.addEventListener('input', () => updateSplitSlider(splitSlider.value));
+            
+            const holdEvents = {
+                start: (e) => { e.preventDefault(); updateSplitSlider(100); },
+                end: (e) => { e.preventDefault(); updateSplitSlider(splitSlider.value); }
+            };
+            holdToViewOriginalBtn.addEventListener('mousedown', holdEvents.start);
+            holdToViewOriginalBtn.addEventListener('mouseup', holdEvents.end);
+            holdToViewOriginalBtn.addEventListener('mouseleave', holdEvents.end);
+            holdToViewOriginalBtn.addEventListener('touchstart', holdEvents.start);
+            holdToViewOriginalBtn.addEventListener('touchend', holdEvents.end);
+
+            // 환경 스위치
+            engineLocalBtn.addEventListener('click', () => switchEngine('local'));
+            engineCloudBtn.addEventListener('click', () => switchEngine('cloud'));
+
+            // [핵심] 파라미터 조절 시 실시간 렌더링 매핑 파이프라인 호출 (성능 고려 10ms 디바운싱)
+            let renderTimeout = null;
+            paramThreshold.addEventListener('input', (e) => {
+                state.thresholdValue = parseInt(e.target.value);
+                thresholdVal.textContent = state.thresholdValue;
+                if(renderTimeout) clearTimeout(renderTimeout);
+                renderTimeout = setTimeout(() => applyMaskToCutout(), 10);
+            });
+            paramBlur.addEventListener('input', (e) => {
+                state.blurValue = parseInt(e.target.value);
+                blurVal.textContent = `${state.blurValue}px`;
+                if(renderTimeout) clearTimeout(renderTimeout);
+                renderTimeout = setTimeout(() => applyMaskToCutout(), 10);
+            });
+
+            // 브러시 가공 도구 스위치
+            toggleBrushModeBtn.addEventListener('click', toggleManualBrushMode);
+            brushToolErase.addEventListener('click', () => selectBrushTool('erase'));
+            brushToolRestore.addEventListener('click', () => selectBrushTool('restore'));
+            paramBrushSize.addEventListener('input', (e) => {
+                state.brushSize = parseInt(e.target.value);
+                brushSizeVal.textContent = `${state.brushSize}px`;
+                updateBrushCursorDimensions();
+            });
+
+            // 캔버스 페인팅 코어
+            previewComposite.addEventListener('mousedown', startDrawing);
+            previewComposite.addEventListener('mousemove', drawMove);
+            window.addEventListener('mouseup', stopDrawing);
+            previewComposite.addEventListener('touchstart', startDrawing);
+            previewComposite.addEventListener('touchmove', drawMove);
+            window.addEventListener('touchend', stopDrawing);
+
+            previewComposite.addEventListener('mouseenter', () => { if (state.isBrushMode) brushCursor.classList.remove('hidden'); });
+            previewComposite.addEventListener('mouseleave', () => brushCursor.classList.add('hidden'));
+
+            // 다운로드 익스포트
+            downloadCutoutBtn.addEventListener('click', downloadTransparentCutout);
+            downloadCompositeBtn.addEventListener('click', downloadFullComposite);
+
+            // 탭 교체
+            ['Transparent', 'Color', 'Gradient', 'Custom'].forEach(tab => {
+                document.getElementById(`tab${tab}`).addEventListener('click', (e) => switchTab(tab.toLowerCase(), e.target));
+            });
+            document.querySelectorAll('[data-color]').forEach(btn => btn.addEventListener('click', (e) => updateSolidColor(e.target.getAttribute('data-color'))));
+            customColorPicker.addEventListener('input', (e) => updateSolidColor(e.target.value));
+            document.querySelectorAll('[data-gradient]').forEach(btn => btn.addEventListener('click', (e) => {
+                state.gradientStyle = e.target.getAttribute('data-gradient'); renderComposite();
+            }));
+
+            document.getElementById('bgFileBtn').addEventListener('click', () => bgFileInput.click());
+            bgFileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                        const img = new Image();
+                        img.onload = () => { state.customBgImage = img; renderComposite(); };
+                        img.src = ev.target.result;
+                    };
+                    reader.readAsDataURL(e.target.files[0]);
+                }
+            });
+        }
+
+        // --- 이미지 인스펙터 헬퍼 ---
+        function getTargetImageDataUrl(id, mode) {
+            if (mode === 'composite' && previewComposite) return previewComposite.toDataURL('image/png');
+            if (id) {
+                const rec = state.images.find(x => x.id === id);
+                return rec ? rec.dataUrl : null;
+            }
+            return null;
+        }
+
+        window.viewImageModal = function(id, mode) {
+            const dataUrl = getTargetImageDataUrl(id, mode);
+            if (!dataUrl) { showToast("오류", "표시할 이미지가 존재하지 않는다.", "error"); return; }
+            modalImageDisplay.src = dataUrl;
+            modalLabel.textContent = mode === 'original' ? 'ORIGINAL IMAGE INSPECTOR' : 'COMPOSITE RESULT INSPECTOR';
+            modalDownloadBtn.href = dataUrl;
+            imageModal.classList.remove('hidden');
+        };
+
+        window.closeImageModal = function() {
+            imageModal.classList.add('hidden');
+            modalImageDisplay.src = "";
+        };
+
+        window.openImageNewTab = function(id, mode) {
+            const dataUrl = getTargetImageDataUrl(id, mode);
+            if (!dataUrl) { showToast("오류", "표시할 이미지가 존재하지 않는다.", "error"); return; }
+            const win = window.open();
+            if (win) {
+                win.document.write(`
+                    <!DOCTYPE html>
+                    <html>
+                    <head><title>Image Inspector - AI Portrait Studio</title></head>
+                    <body style="margin:0; background:#0f172a; display:flex; justify-content:center; align-items:center; min-height:100vh;">
+                        <img src="${dataUrl}" style="max-width:100vw; max-height:100vh; object-fit:contain; box-shadow: 0 0 20px rgba(0,0,0,0.5);">
+                    </body>
+                    </html>
+                `);
+                win.document.close();
+            } else {
+                showToast("팝업 차단됨", "브라우저 설정에서 팝업을 허용하여 주십시오.", "error");
+            }
+        };
+
+        // --- 로직 제어부 ---
+        function triggerProcessing() {
+            if (!state.selectedImageId) {
+                showToast("실행 불가", "갤러리에서 작업할 대상 이미지를 지정하십시오.", "error");
+                return;
+            }
+            runSegmentation();
+        }
+
+        function updateSplitSlider(val) {
+            processedContainer.style.clipPath = `inset(0 0 0 ${val}%)`;
+            splitBar.style.left = `${val}%`;
+            if (val > 5) tagBefore.classList.remove('opacity-0');
+            else tagBefore.classList.add('opacity-0');
+        }
+
+        function toggleManualBrushMode() {
+            if (!state.selectedImageId || !state.maskCanvas) {
+                showToast("활성 불가", "연산을 1회 실행한 후에만 브러시 가공이 가능하다.", "error");
+                return;
+            }
+            state.isBrushMode = !state.isBrushMode;
+
+            if (state.isBrushMode) {
+                toggleBrushModeBtn.className = "w-full py-2 px-3 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition-all border border-indigo-500 flex items-center justify-center gap-2";
+                toggleBrushIcon.setAttribute('data-lucide', 'toggle-right');
+                toggleBrushText.textContent = "브러시 캔버스 모드 해제";
+                brushActiveStatus.textContent = "ACTIVE";
+                brushActiveStatus.className = "text-[9px] bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded-full font-bold";
+                brushSubOptions.classList.remove('hidden');
+
+                splitSlider.classList.add('pointer-events-none');
+                updateSplitSlider(0); // 브러시 칠을 위해 100% 가공화면으로 오픈
+                showToast("브러시 가동", "드래그하여 미세한 빛 번짐이나 손가락을 지우고 복원하십시오.", "info");
+            } else {
+                toggleBrushModeBtn.className = "w-full py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl transition-all border border-slate-700 flex items-center justify-center gap-2";
+                toggleBrushIcon.setAttribute('data-lucide', 'toggle-left');
+                toggleBrushText.textContent = "브러시 캔버스 모드 활성화";
+                brushActiveStatus.textContent = "OFF";
+                brushActiveStatus.className = "text-[9px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full font-semibold";
+                brushSubOptions.classList.add('hidden');
+                brushCursor.classList.add('hidden');
+
+                splitSlider.classList.remove('pointer-events-none');
+                updateSplitSlider(splitSlider.value);
+            }
+            lucide.createIcons();
+        }
+
+        function selectBrushTool(tool) {
+            state.brushTool = tool;
+            if (tool === 'erase') {
+                brushToolErase.className = "py-1.5 px-2 bg-indigo-600 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors";
+                brushToolRestore.className = "py-1.5 px-2 bg-slate-900 text-slate-400 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors";
+            } else {
+                brushToolRestore.className = "py-1.5 px-2 bg-indigo-600 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors";
+                brushToolErase.className = "py-1.5 px-2 bg-slate-900 text-slate-400 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors";
+            }
+        }
+
+        function updateBrushCursorDimensions() {
+            if (!state.isBrushMode) return;
+            brushCursor.style.width = `${state.brushSize}px`;
+            brushCursor.style.height = `${state.brushSize}px`;
+        }
+
+        function getCanvasCoordinates(e) {
+            const rect = previewComposite.getBoundingClientRect();
+            const canvasWidth = previewComposite.width;
+            const canvasHeight = previewComposite.height;
+            const canvasRatio = canvasWidth / canvasHeight;
+            const containerRatio = rect.width / rect.height;
+
+            let actualWidth, actualHeight, offsetX, offsetY;
+
+            if (containerRatio > canvasRatio) {
+                actualHeight = rect.height; actualWidth = rect.height * canvasRatio;
+                offsetX = rect.left + (rect.width - actualWidth) / 2; offsetY = rect.top;
+            } else {
+                actualWidth = rect.width; actualHeight = rect.width / canvasRatio;
+                offsetX = rect.left; offsetY = rect.top + (rect.height - actualHeight) / 2;
+            }
+
+            let clientX, clientY;
+            if (e.touches && e.touches.length > 0) { clientX = e.touches[0].clientX; clientY = e.touches[0].clientY; } 
+            else { clientX = e.clientX; clientY = e.clientY; }
+
+            const relativeX = clientX - offsetX;
+            const relativeY = clientY - offsetY;
+
+            const x = (relativeX / actualWidth) * canvasWidth;
+            const y = (relativeY / actualHeight) * canvasHeight;
+            const onImage = (relativeX >= 0 && relativeX <= actualWidth && relativeY >= 0 && relativeY <= actualHeight);
+
+            return { x, y, onImage, actualWidth };
+        }
+
+        function moveBrushCursor(e) {
+            const rect = viewContainer.getBoundingClientRect();
+            let clientX, clientY;
+            if (e.touches && e.touches.length > 0) { clientX = e.touches[0].clientX; clientY = e.touches[0].clientY; } 
+            else { clientX = e.clientX; clientY = e.clientY; }
+            brushCursor.style.left = `${clientX - rect.left - (state.brushSize / 2)}px`;
+            brushCursor.style.top = `${clientY - rect.top - (state.brushSize / 2)}px`;
+        }
+
+        function startDrawing(e) {
+            if (!state.isBrushMode || !state.maskCanvas || !state.selectedImageId) return;
+            const coords = getCanvasCoordinates(e);
+            if (!coords.onImage) return;
+            state.isDrawing = true;
+            state.lastDrawX = coords.x; state.lastDrawY = coords.y;
+            drawAction(e);
+        }
+
+        function drawMove(e) {
+            if (!state.isBrushMode || !state.selectedImageId) return;
+            moveBrushCursor(e); updateBrushCursorDimensions();
+            if (!state.isDrawing) return;
+            e.preventDefault();
+            drawAction(e);
+        }
+
+        // 브러시는 state.maskCanvas 평면 위에 기록된다.
+        function drawAction(e) {
+            const coords = getCanvasCoordinates(e);
+            if (!coords.onImage) return;
+
+            const mCtx = state.maskCanvas.getContext('2d');
+            mCtx.lineCap = 'round'; mCtx.lineJoin = 'round';
+            const scaleRatio = previewComposite.width / coords.actualWidth;
+            mCtx.lineWidth = state.brushSize * scaleRatio;
+
+            // 지우개는 명도 0(블랙), 복원은 명도 255(화이트)
+            const brushColor = state.brushTool === 'erase' ? '#000000' : '#FFFFFF';
+            mCtx.strokeStyle = brushColor; mCtx.fillStyle = brushColor;
+
+            mCtx.beginPath();
+            if (state.lastDrawX === null) {
+                mCtx.arc(coords.x, coords.y, mCtx.lineWidth / 2, 0, Math.PI * 2); mCtx.fill();
+            } else {
+                mCtx.moveTo(state.lastDrawX, state.lastDrawY); mCtx.lineTo(coords.x, coords.y); mCtx.stroke();
+            }
+            state.lastDrawX = coords.x; state.lastDrawY = coords.y;
+            
+            applyMaskToCutout();
+        }
+
+        async function stopDrawing() {
+            if (!state.isDrawing) return;
+            state.isDrawing = false; state.lastDrawX = null; state.lastDrawY = null;
+            const record = state.images.find(x => x.id === state.selectedImageId);
+            if (record && state.maskCanvas && state.cleanCutoutCanvas) {
+                record.maskDataUrl = state.maskCanvas.toDataURL('image/png');
+                record.cutoutUrl = state.cleanCutoutCanvas.toDataURL('image/png');
+                saveImageToDB(record); // 논블로킹 저장
+            }
+        }
+
+        function handleFileSelection(e) { if (e.target.files.length > 0) processMultipleFiles(e.target.files); }
+
+        async function processMultipleFiles(files) {
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                await new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = async (e) => {
+                        const imgId = "img_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+                        const imageRecord = { id: imgId, name: file.name, size: Math.round(file.size / 1024), dataUrl: e.target.result, maskDataUrl: null, cutoutUrl: null };
+                        await saveImageToDB(imageRecord);
+                        state.images.push(imageRecord);
+                        resolve();
+                    };
+                    reader.readAsDataURL(file);
+                });
+            }
+            renderGallery();
+            showToast("등록 완료", "DB 보관소에 이미지가 적재되었다.", "success");
+        }
+
+        function renderGallery() {
+            imageGalleryGrid.innerHTML = "";
+            galleryCount.textContent = state.images.length;
+            if (state.images.length === 0) {
+                imageGalleryGrid.innerHTML = `<div class="text-[11px] text-slate-500 italic px-4 w-full text-center py-4">대기 중인 미디어가 없다.</div>`;
+                return;
+            }
+
+            state.images.forEach(imgRecord => {
+                const card = document.createElement('div');
+                const isActive = state.selectedImageId === imgRecord.id;
+                card.className = `relative shrink-0 w-16 h-16 rounded-xl overflow-hidden cursor-pointer border-2 transition-all group shadow-sm ${isActive ? 'border-indigo-500 ring-2 ring-indigo-500/20 scale-95' : 'border-slate-800 hover:border-slate-600'}`;
+                card.innerHTML = `
+                    <img src="${imgRecord.dataUrl}" class="w-full h-full object-cover">
+                    <button class="absolute top-0.5 right-0.5 bg-slate-950/80 p-0.5 rounded text-slate-400 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity" data-delete-id="${imgRecord.id}"><i data-lucide="x" class="w-2.5 h-2.5"></i></button>
+                `;
+                card.addEventListener('click', (e) => { if (e.target.closest('[data-delete-id]')) return; selectImageTarget(imgRecord.id); });
+                card.querySelector('[data-delete-id]').addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const targetId = e.target.closest('[data-delete-id]').getAttribute('data-delete-id');
+                    await deleteImageFromDB(targetId);
+                    state.images = state.images.filter(x => x.id !== targetId);
+                    if (state.selectedImageId === targetId) {
+                        state.selectedImageId = null; state.cleanCutoutCanvas = null; state.maskCanvas = null;
+                        updateActiveTargetUI(); noActiveImagePlaceholder.classList.remove('hidden'); workspaceView.classList.add('hidden');
+                    }
+                    renderGallery();
+                });
+                imageGalleryGrid.appendChild(card);
+            });
+            lucide.createIcons();
+        }
+
+        async function selectImageTarget(id) {
+            state.selectedImageId = id;
+            renderGallery();
+            updateActiveTargetUI();
+
+            if (state.isBrushMode) toggleManualBrushMode();
+
+            const record = state.images.find(x => x.id === id);
+            if (record) {
+                previewOriginal.src = record.dataUrl;
+                const img = new Image();
+                img.onload = () => {
+                    state.maskCanvas = document.createElement('canvas');
+                    state.maskCanvas.width = img.naturalWidth; state.maskCanvas.height = img.naturalHeight;
+                    const mCtx = state.maskCanvas.getContext('2d');
+                    mCtx.fillStyle = '#000000'; mCtx.fillRect(0, 0, state.maskCanvas.width, state.maskCanvas.height);
+
+                    if (record.maskDataUrl) {
+                        const savedMask = new Image();
+                        savedMask.onload = () => {
+                            mCtx.clearRect(0, 0, state.maskCanvas.width, state.maskCanvas.height);
+                            mCtx.drawImage(savedMask, 0, 0);
+                            applyMaskToCutout();
+                            noActiveImagePlaceholder.classList.add('hidden'); workspaceView.classList.remove('hidden');
+                        };
+                        savedMask.src = record.maskDataUrl;
+                    } else if (record.cutoutUrl) {
+                        const savedCutout = new Image();
+                        savedCutout.onload = () => {
+                            mCtx.clearRect(0, 0, state.maskCanvas.width, state.maskCanvas.height);
+                            mCtx.drawImage(savedCutout, 0, 0);
+                            const imgData = mCtx.getImageData(0, 0, state.maskCanvas.width, state.maskCanvas.height);
+                            const pix = imgData.data;
+                            for (let i = 0; i < pix.length; i += 4) {
+                                const alpha = pix[i+3];
+                                pix[i] = alpha; pix[i+1] = alpha; pix[i+2] = alpha; pix[i+3] = 255;
+                            }
+                            mCtx.putImageData(imgData, 0, 0);
+                            applyMaskToCutout();
+                            noActiveImagePlaceholder.classList.add('hidden'); workspaceView.classList.remove('hidden');
+                        };
+                        savedCutout.src = record.cutoutUrl;
+                    } else {
+                        state.cleanCutoutCanvas = null;
+                        noActiveImagePlaceholder.classList.remove('hidden'); workspaceView.classList.add('hidden');
+                    }
+                };
+                img.src = record.dataUrl;
+            }
+        }
+
+        function updateActiveTargetUI() {
+            if (!state.selectedImageId) {
+                activeTargetThumb.classList.add('hidden');
+                activeTargetActions.classList.add('pointer-events-none', 'opacity-0');
+                activeTargetPlaceholder.classList.remove('hidden');
+                activeTargetName.textContent = "타겟 파일을 선택하십시오";
+                return;
+            }
+            const record = state.images.find(x => x.id === state.selectedImageId);
+            if (record) {
+                activeTargetThumb.src = record.dataUrl;
+                activeTargetThumb.classList.remove('hidden');
+                activeTargetActions.classList.remove('pointer-events-none', 'opacity-0');
+                activeTargetActions.classList.add('opacity-100');
+                activeTargetPlaceholder.classList.add('hidden');
+                activeTargetName.textContent = record.name;
+            }
+        }
+
+        function switchEngine(engine) {
+            if (state.activeEngine === engine) return;
+            state.activeEngine = engine;
+            if (engine === 'local') {
+                engineLocalBtn.className = "flex items-start gap-2.5 p-3 rounded-xl border text-left transition-all bg-indigo-950/40 border-indigo-500/50 ring-1 ring-indigo-500/30";
+                engineCloudBtn.className = "flex items-start gap-2.5 p-3 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-900 text-left transition-all text-slate-500";
+            } else {
+                engineCloudBtn.className = "flex items-start gap-2.5 p-3 rounded-xl border text-left transition-all bg-indigo-950/40 border-indigo-500/50 ring-1 ring-indigo-500/30";
+                engineLocalBtn.className = "flex items-start gap-2.5 p-3 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-900 text-left transition-all text-slate-500";
+            }
+        }
+
+        async function runSegmentation() {
+            const activeRecord = state.images.find(x => x.id === state.selectedImageId);
+            if (!activeRecord) return;
+
+            setLoading(true, "AI 모델 로드 및 기하학적 매팅 계산 중...");
+
+            if (state.activeEngine === 'local') {
+                try {
+                    const img = new Image();
+                    img.onload = async () => {
+                        if (selfieSegmentation) {
+                            await selfieSegmentation.send({ image: img });
+                        } else {
+                            setLoading(false); showToast("모듈 에러", "MediaPipe 엔진이 초기화되지 않았다.", "error");
+                        }
+                    };
+                    img.src = activeRecord.dataUrl;
+                } catch (err) {
+                    setLoading(false); showToast("연산 실패", "로컬 WebGL 오류", "error");
+                }
+            } else {
+                await runCloudGenerativeSegmentation(activeRecord);
+            }
+        }
+
+        function onLocalMatingResults(results) {
+            if (!results.segmentationMask || !state.selectedImageId) { setLoading(false); return; }
+
+            const record = state.images.find(x => x.id === state.selectedImageId);
+            const img = new Image();
+            img.onload = () => {
+                const width = img.naturalWidth; const height = img.naturalHeight;
+                state.maskCanvas.width = width; state.maskCanvas.height = height;
+                const mCtx = state.maskCanvas.getContext('2d');
+                
+                mCtx.clearRect(0, 0, width, height);
+                mCtx.drawImage(results.segmentationMask, 0, 0, width, height);
+
+                const imgData = mCtx.getImageData(0, 0, width, height);
+                const data = imgData.data;
+                // MediaPipe 마스크 투명도(Alpha)를 오리지널 Grayscale 명도로 전환하여 보존
+                for (let i = 0; i < data.length; i += 4) {
+                    const alpha = data[i+3];
+                    data[i] = alpha; data[i+1] = alpha; data[i+2] = alpha; data[i+3] = 255; 
+                }
+                mCtx.putImageData(imgData, 0, 0);
+                
+                applyMaskToCutout();
+                setLoading(false);
+                markCdLayerApplyReady();
+                showToast("분석 성공", "매팅 맵핑이 완료되었습니다.", "success");
+
+                noActiveImagePlaceholder.classList.add('hidden');
+                workspaceView.classList.remove('hidden');
+                splitSlider.value = 0; updateSplitSlider(0);
+            };
+            img.src = record.dataUrl;
+        }
+
+        async function runCloudGenerativeSegmentation(activeRecord) {
+            const base64Img = activeRecord.dataUrl.split(',')[1];
+            
+            const payload = {
+                contents: [{
+                    parts: [
+                        { text: "Identify the main human portrait subject in the image. Perfectly crop the person out and replace the entire background with solid, pure absolute black (#000000). Keep the original person with extreme details and sharp edges. Do not render any shadows behind the person. Only output the modified image of the person against complete pure black background." },
+                        { inlineData: { mimeType: "image/jpeg", data: base64Img } }
+                    ]
+                }],
+                generationConfig: {
+                    responseModalities: ["TEXT", "IMAGE"]
+                }
+            };
+
+            const userDefinedKey = localStorage.getItem('aistudio_api_key');
+            const finalKey = userDefinedKey ? userDefinedKey.trim() : fallbackApiKey;
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${finalKey}`;
+
+            try {
+                const result = await fetchWithRetry(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const base64Result = result.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
+                if (!base64Result) throw new Error("API에서 유효한 마스크를 반환하지 않았다.");
+
+                const responseImg = new Image();
+                responseImg.onload = async () => {
+                    const width = activeRecord.width || responseImg.width; 
+                    const height = activeRecord.height || responseImg.height;
+                    state.maskCanvas.width = width; state.maskCanvas.height = height;
+                    const mCtx = state.maskCanvas.getContext('2d');
+                    
+                    mCtx.drawImage(responseImg, 0, 0, width, height);
+
+                    const imgData = mCtx.getImageData(0, 0, width, height);
+                    const pixels = imgData.data;
+
+                    // 클라우드 컬러 결과물의 밝기(Luma)를 계산하여 Grayscale 마스크로 저장 (Threshold 적용 전 원시 데이터)
+                    for (let i = 0; i < pixels.length; i += 4) {
+                        const r = pixels[i]; const g = pixels[i+1]; const b = pixels[i+2];
+                        const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+                        pixels[i] = luma; pixels[i+1] = luma; pixels[i+2] = luma; 
+                        pixels[i+3] = 255;
+                    }
+                    mCtx.putImageData(imgData, 0, 0);
+
+                    applyMaskToCutout();
+                    setLoading(false);
+                    markCdLayerApplyReady();
+                    showToast("클라우드 분석 성공", "AI 다중모달 분석이 완료되었습니다.", "success");
+
+                    noActiveImagePlaceholder.classList.add('hidden');
+                    workspaceView.classList.remove('hidden');
+                    splitSlider.value = 0; updateSplitSlider(0);
+                };
+                responseImg.src = `data:image/png;base64,${base64Result}`;
+            } catch (err) {
+                setLoading(false); showToast("통신 장애", err.message, "error");
+            }
+        }
+
+        // [핵심 교정]: 실시간 Threshold 매핑 및 투명도 결합 파이프라인
+        function applyMaskToCutout() {
+            if (!state.selectedImageId || !state.maskCanvas) return;
+            const record = state.images.find(x => x.id === state.selectedImageId);
+            const img = new Image();
+            img.onload = () => {
+                const width = img.naturalWidth; const height = img.naturalHeight;
+                
+                // 1. 임시 캔버스에 오리지널 마스크 복제 및 실시간 Threshold 적용
+                const tempMaskCanvas = document.createElement('canvas');
+                tempMaskCanvas.width = width; tempMaskCanvas.height = height;
+                const tCtx = tempMaskCanvas.getContext('2d');
+                tCtx.drawImage(state.maskCanvas, 0, 0);
+                
+                const tData = tCtx.getImageData(0, 0, width, height);
+                const tPix = tData.data;
+                const th = state.thresholdValue; // 조절된 강도값 (0~255)
+                
+                // Threshold 이하 픽셀은 완전 제거, 이상 픽셀은 스무딩 유지
+                for(let i=0; i<tPix.length; i+=4) {
+                    const val = tPix[i]; // Grayscale(R) 
+                    if (val < th) {
+                        tPix[i] = tPix[i+1] = tPix[i+2] = 0; // 완전 배경
+                    } else {
+                        // 남은 계조를 원래 범위(0~255)로 다시 넓게 펴서 자연스러움 극대화
+                        const newVal = th === 255 ? 255 : ((val - th) / (255 - th)) * 255;
+                        tPix[i] = tPix[i+1] = tPix[i+2] = newVal;
+                    }
+                }
+                tCtx.putImageData(tData, 0, 0);
+
+                // 2. Threshold 처리된 마스크에 Blur(페더링) 먹이기
+                const blurredMaskCanvas = document.createElement('canvas');
+                blurredMaskCanvas.width = width; blurredMaskCanvas.height = height;
+                const bCtx = blurredMaskCanvas.getContext('2d');
+                bCtx.fillStyle = '#000000';
+                bCtx.fillRect(0, 0, width, height);
+                bCtx.filter = `blur(${state.blurValue}px)`;
+                bCtx.drawImage(tempMaskCanvas, 0, 0);
+
+                const maskData = bCtx.getImageData(0, 0, width, height);
+                const maskPixels = maskData.data;
+
+                // 3. 최종 Cutout 생성: 원본 이미지 알파 채널에 가공된 마스크 명도 매핑
+                const cutoutCanvas = document.createElement('canvas');
+                cutoutCanvas.width = width; cutoutCanvas.height = height;
+                const cCtx = cutoutCanvas.getContext('2d');
+                cCtx.drawImage(img, 0, 0);
+                
+                const imgData = cCtx.getImageData(0, 0, width, height);
+                const pixels = imgData.data;
+
+                for (let i = 0; i < pixels.length; i += 4) {
+                    pixels[i + 3] = maskPixels[i]; 
+                }
+                cCtx.putImageData(imgData, 0, 0);
+
+                state.cleanCutoutCanvas = cutoutCanvas;
+                
+                // 마스크는 원본 state.maskCanvas를 보존하고, 결과물만 저장
+                record.cutoutUrl = cutoutCanvas.toDataURL('image/png');
+                saveImageToDB(record); // 논블로킹
+                
+                renderComposite();
+                markCdLayerApplyReady();
+            };
+            img.src = record.dataUrl;
+        }
+
+        function renderComposite() {
+            if (!state.cleanCutoutCanvas || !state.selectedImageId) return;
+            const activeRecord = state.images.find(x => x.id === state.selectedImageId);
+            const img = new Image();
+            img.onload = () => {
+                const width = img.naturalWidth; const height = img.naturalHeight;
+                previewComposite.width = width; previewComposite.height = height;
+                const ctx = previewComposite.getContext('2d');
+
+                ctx.clearRect(0, 0, width, height);
+
+                // 가상 배경
+                if (state.activeBgType === 'color') {
+                    ctx.fillStyle = state.solidColor; ctx.fillRect(0, 0, width, height);
+                } else if (state.activeBgType === 'gradient') {
+                    const grad = ctx.createLinearGradient(0, 0, width, height);
+                    if (state.gradientStyle.includes('#312e81')) { grad.addColorStop(0, '#312e81'); grad.addColorStop(1, '#0f172a'); }
+                    else if (state.gradientStyle.includes('#4c0519')) { grad.addColorStop(0, '#4c0519'); grad.addColorStop(1, '#0f172a'); }
+                    else if (state.gradientStyle.includes('#022c22')) { grad.addColorStop(0, '#022c22'); grad.addColorStop(1, '#030712'); }
+                    else { grad.addColorStop(0, '#5b21b6'); grad.addColorStop(0.5, '#701a75'); grad.addColorStop(1, '#030712'); }
+                    ctx.fillStyle = grad; ctx.fillRect(0, 0, width, height);
+                } else if (state.activeBgType === 'custom' && state.customBgImage) {
+                    const bg = state.customBgImage; const bgRatio = bg.width / bg.height; const canvasRatio = width / height;
+                    let sWidth, sHeight, sx, sy;
+                    if (bgRatio > canvasRatio) { sHeight = bg.height; sWidth = bg.height * canvasRatio; sx = (bg.width - sWidth) / 2; sy = 0; } 
+                    else { sWidth = bg.width; sHeight = bg.width / canvasRatio; sx = 0; sy = (bg.height - sHeight) / 2; }
+                    ctx.drawImage(bg, sx, sy, sWidth, sHeight, 0, 0, width, height);
+                }
+
+                ctx.drawImage(state.cleanCutoutCanvas, 0, 0, width, height);
+            };
+            img.src = activeRecord.dataUrl;
+        }
+
+        function switchTab(type, targetBtn) {
+            state.activeBgType = type;
+            ['Transparent', 'Color', 'Gradient', 'Custom'].forEach(tab => {
+                document.getElementById(`tab${tab}`).className = "flex-1 pb-1.5 font-bold border-b-2 border-transparent text-slate-400";
+                document.getElementById(`panel${tab}`).classList.add('hidden');
+            });
+            targetBtn.className = "flex-1 pb-1.5 font-bold border-b-2 border-indigo-500 text-indigo-400";
+            document.getElementById(`panel${type.charAt(0).toUpperCase() + type.slice(1)}`).classList.remove('hidden');
+            renderComposite();
+        }
+
+        function updateSolidColor(color) { state.solidColor = color; customColorPicker.value = color; renderComposite(); }
+
+        function downloadTransparentCutout() {
+            if (!state.cleanCutoutCanvas) return;
+            const link = document.createElement('a'); link.download = 'portrait_mask_cutout.png'; link.href = state.cleanCutoutCanvas.toDataURL('image/png'); link.click();
+        }
+        function downloadFullComposite() {
+            if (!previewComposite) return;
+            const link = document.createElement('a'); link.download = `composite_studio_${state.activeBgType}.png`; link.href = previewComposite.toDataURL('image/png'); link.click();
+        }
+
+        async function fetchWithRetry(url, options, maxRetries = 5) {
+            let delay = 1000;
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const res = await fetch(url, options);
+                    if (res.ok) return await res.json();
+                } catch (e) { }
+                await new Promise(r => setTimeout(r, delay)); delay *= 2;
+            }
+            throw new Error("클라우드 서버에서 이미지를 생성하지 못했다.");
+        }
+
+        function setLoading(isActive, message = "처리 중...") {
+            state.isProcessing = isActive;
+            if (isActive) { loadingText.textContent = message; loadingOverlay.classList.remove('hidden'); } 
+            else loadingOverlay.classList.add('hidden');
+        }
+
+        function showToast(title, msg, type = 'info') {
+            document.getElementById('toastTitle').textContent = title;
+            document.getElementById('toastMsg').textContent = msg;
+            const icon = document.getElementById('toastIcon');
+            if (type === 'success') { icon.className = "p-1 rounded-lg bg-emerald-500/20 text-emerald-400"; icon.innerHTML = `<i data-lucide="check-circle" class="w-5 h-5"></i>`; } 
+            else if (type === 'error') { icon.className = "p-1 rounded-lg bg-rose-500/20 text-rose-400"; icon.innerHTML = `<i data-lucide="alert-triangle" class="w-5 h-5"></i>`; }
+            else { icon.className = "p-1 rounded-lg bg-indigo-500/20 text-indigo-400"; icon.innerHTML = `<i data-lucide="info" class="w-5 h-5"></i>`; }
+            lucide.createIcons();
+            toastBox.classList.remove('translate-y-20', 'opacity-0', 'pointer-events-none');
+            toastBox.classList.add('translate-y-0', 'opacity-100');
+            setTimeout(() => {
+                toastBox.classList.add('translate-y-20', 'opacity-0', 'pointer-events-none');
+                toastBox.classList.remove('translate-y-0', 'opacity-100');
+            }, 3500);
+        }
+    </script>
+</body>
+</html>

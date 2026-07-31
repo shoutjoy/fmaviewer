@@ -7,6 +7,8 @@ let offsetY = 0;
 let isDragging = false;
 let startX = 0;
 let startY = 0;
+let wheelNavAccumulator = 0;
+let lastWheelNavTime = 0;
 
 function setupDragPan() {
     dom.previewContainer.addEventListener("mousedown", (e) => {
@@ -37,7 +39,24 @@ function setupDragPan() {
             else zoom /= 1.1;
             zoom = Math.max(0.1, Math.min(zoom, 5));
             updateZoom();
+            return;
         }
+
+        if (orientation === 'vert' || images.length === 0) return;
+
+        e.preventDefault();
+        const delta = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+        const now = Date.now();
+
+        if (now - lastWheelNavTime > 500) wheelNavAccumulator = 0;
+        wheelNavAccumulator += delta;
+
+        if (Math.abs(wheelNavAccumulator) < 45 || now - lastWheelNavTime < 260) return;
+
+        const direction = wheelNavAccumulator > 0 ? 1 : -1;
+        wheelNavAccumulator = 0;
+        lastWheelNavTime = now;
+        navigateSortedImages(direction * navStep);
     };
 }
 
@@ -53,6 +72,17 @@ function updateZoom() {
 
 function resetZoom() {
     zoom = 1; offsetX = 0; offsetY = 0; updateZoom();
+}
+
+function centerPreviewImage() {
+    offsetX = 0;
+    offsetY = 0;
+    updateZoom();
+    if (orientation === "vert") {
+        const position = getImageDisplayPosition(currentIndex);
+        const target = dom.previewContainer.children[position];
+        target?.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+    }
 }
 
 function initPanelResize() {

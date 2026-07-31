@@ -20,7 +20,42 @@ async function processFMAData(data) {
     images = [];
     showLoading("Extracting Data...");
     try {
-        await walkAsync(data, "$");
+        const exportedImages = Array.isArray(data?.images)
+            ? data.images.filter(item => item && typeof item.src === "string" && item.src.startsWith("data:image"))
+            : [];
+
+        if (exportedImages.length > 0) {
+            const fallbackDate = Date.parse(data.timestamp) || Date.now();
+            images = exportedImages.map((item, index) => ({
+                src: item.src,
+                path: item.path || `$.images[${index}].src`,
+                group: item.group || groupFromPath(item.path),
+                date: item.date || fallbackDate,
+                size: item.size || item.src.length,
+                mimeType: item.mimeType || String(item.src).match(/^data:([^;,]+)/)?.[1] || "",
+                isFav: Boolean(item.isFav),
+                width: item.width,
+                height: item.height,
+                modifiedAt: item.modifiedAt,
+                metadata: item.metadata || {},
+                embeddedMetadata: item.embeddedMetadata || {},
+                embeddedMetadataScanned: Boolean(item.embeddedMetadataScanned),
+                cropSourcePath: item.cropSourcePath,
+                cropRect: item.cropRect,
+                upscaleSourcePath: item.upscaleSourcePath,
+                upscaleMethod: item.upscaleMethod,
+                upscaleInfo: item.upscaleInfo,
+                backgroundRemoveSourcePath: item.backgroundRemoveSourcePath,
+                backgroundRemoveMethod: item.backgroundRemoveMethod,
+                backgroundRemoveInfo: item.backgroundRemoveInfo,
+                imageEditParentPath: item.imageEditParentPath,
+                imageEditSourceSrc: item.imageEditSourceSrc,
+                imageEditConfig: item.imageEditConfig,
+                imageEditInfo: item.imageEditInfo
+            }));
+        } else {
+            await walkAsync(data, "$");
+        }
     } catch (err) {
         console.warn("Minor extraction error (continuing):", err);
     } finally {
@@ -60,6 +95,7 @@ async function walkAsync(obj, path) {
                         group: groupFromPath(p),
                         date: Date.now(),
                         size: o.length,
+                        mimeType: String(o).match(/^data:([^;,]+)/)?.[1] || "",
                         isFav: false
                     });
                 }
@@ -99,6 +135,9 @@ function groupFromPath(p) {
 }
 
 async function handleAddImages(files) {
+    files = files.filter(isImageFile);
+    if (files.length === 0) return;
+
     const total = files.length;
     let current = 0;
     showLoading(`Importing ${total} Images...`);
@@ -113,6 +152,7 @@ async function handleAddImages(files) {
                     group: "added",
                     date: file.lastModified || Date.now(),
                     size: file.size,
+                    mimeType: file.type,
                     isFav: false
                 });
                 current++;
@@ -126,7 +166,137 @@ async function handleAddImages(files) {
     renderGallery();
     dom.imageCount.innerText = "Images: " + images.length;
     saveCurrentImagesToDB();
+    updateImportStatus(`${total}개 이미지를 추가했습니다.`);
     hideLoading();
+}
+
+async function handleImportFiles(files) {
+    const imageFiles = files.filter(isImageFile);
+    const zipFiles = files.filter(file =>
+        file.name.toLowerCase().endsWith(".zip") ||
+        file.type === "application/zip" ||
+        file.type === "application/x-zip-compressed"
+    );
+
+    if (imageFiles.length > 0) await handleAddImages(imageFiles);
+    for (const zipFile of zipFiles) await handleAddZip(zipFile);
+
+    if (imageFiles.length === 0 && zipFiles.length === 0) {
+        updateImportStatus("지원되는 이미지 또는 ZIP 파일이 아닙니다.", true);
+    }
+}
+
+function isImageFile(file) {
+    return Boolean(file) && (
+        String(file.type || "").startsWith("image/") ||
+        /\.(png|jpe?g|webp|gif|bmp|svg|avif)$/i.test(file.name || "")
+    );
+}
+
+async function handleAddZip(file) {
+    if (typeof JSZip === "undefined") {
+        alert("ZIP 처리 모듈을 불러오지 못했습니다.");
+        return;
+    }
+
+    showLoading(`ZIP 열기: ${file.name}`);
+    try {
+        const zip = await JSZip.loadAsync(file);
+        const imageEntries = Object.values(zip.files).filter(entry =>
+            !entry.dir && /\.(png|jpe?g|webp|gif|bmp|svg|avif)$/i.test(entry.name)
+        );
+
+        if (imageEntries.length === 0) {
+            updateImportStatus(`${file.name}에 이미지가 없습니다.`, true);
+            return;
+        }
+
+        const extractedFiles = [];
+        for (let index = 0; index < imageEntries.length; index++) {
+            const entry = imageEntries[index];
+            const blob = await entry.async("blob");
+            const type = getMimeTypeFromName(entry.name);
+            extractedFiles.push(new File([blob], entry.name, {
+                type: type,
+                lastModified: file.lastModified || Date.now()
+            }));
+            updateLoading(((index + 1) / imageEntries.length) * 100);
+        }
+
+        await handleAddImages(extractedFiles);
+        updateImportStatus(`${file.name}에서 ${extractedFiles.length}개 이미지를 추가했습니다.`);
+    } catch (error) {
+        console.error("ZIP import error:", error);
+        updateImportStatus("ZIP 파일을 열 수 없습니다.", true);
+        alert("ZIP 이미지 추가 중 오류가 발생했습니다: " + error.message);
+    } finally {
+        hideLoading();
+    }
+}
+
+function getMimeTypeFromName(name) {
+    const extension = String(name).split(".").pop().toLowerCase();
+    const mimeTypes = {
+        png: "image/png",
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+        webp: "image/webp",
+        gif: "image/gif",
+        bmp: "image/bmp",
+        svg: "image/svg+xml",
+        avif: "image/avif"
+    };
+    return mimeTypes[extension] || "application/octet-stream";
+}
+
+async function importClipboardImages() {
+    if (!navigator.clipboard || typeof navigator.clipboard.read !== "function") {
+        updateImportStatus("이 영역에서 Ctrl+V를 눌러 이미지를 붙여넣으세요.");
+        return;
+    }
+
+    try {
+        const clipboardItems = await navigator.clipboard.read();
+        const files = [];
+        for (const item of clipboardItems) {
+            const imageType = item.types.find(type => type.startsWith("image/"));
+            if (!imageType) continue;
+            const blob = await item.getType(imageType);
+            const extension = imageType.split("/")[1].replace("jpeg", "jpg").replace("svg+xml", "svg");
+            files.push(new File(
+                [blob],
+                `clipboard_${Date.now()}_${files.length + 1}.${extension}`,
+                { type: imageType, lastModified: Date.now() }
+            ));
+        }
+
+        if (files.length === 0) {
+            updateImportStatus("클립보드에서 이미지를 찾지 못했습니다.", true);
+            return;
+        }
+        await handleAddImages(files);
+    } catch (error) {
+        console.warn("Clipboard read failed:", error);
+        updateImportStatus("Ctrl+V를 눌러 클립보드 이미지를 붙여넣으세요.", true);
+    }
+}
+
+function handlePasteEvent(event) {
+    const items = Array.from(event.clipboardData?.items || []);
+    const files = items
+        .filter(item => item.kind === "file" && item.type.startsWith("image/"))
+        .map(item => item.getAsFile())
+        .filter(Boolean);
+
+    if (files.length === 0) return;
+    event.preventDefault();
+    handleAddImages(files);
+}
+
+function updateImportStatus(message, isError) {
+    if (!dom.importStatus) return;
+    dom.importStatus.innerText = message;
+    dom.importStatus.classList.toggle("error", Boolean(isError));
 }
 
 function openExternal(src) {
@@ -199,7 +369,29 @@ function saveFMA() {
                 images: images.map(img => ({
                     path: img.path,
                     src: img.src,
-                    group: img.group
+                    group: img.group,
+                    date: img.date,
+                    size: img.size,
+                    mimeType: img.mimeType,
+                    isFav: img.isFav,
+                    width: img.width,
+                    height: img.height,
+                    modifiedAt: img.modifiedAt,
+                    metadata: img.metadata || {},
+                    embeddedMetadata: img.embeddedMetadata || {},
+                    embeddedMetadataScanned: Boolean(img.embeddedMetadataScanned),
+                    cropSourcePath: img.cropSourcePath,
+                    cropRect: img.cropRect,
+                    upscaleSourcePath: img.upscaleSourcePath,
+                    upscaleMethod: img.upscaleMethod,
+                    upscaleInfo: img.upscaleInfo,
+                    backgroundRemoveSourcePath: img.backgroundRemoveSourcePath,
+                    backgroundRemoveMethod: img.backgroundRemoveMethod,
+                    backgroundRemoveInfo: img.backgroundRemoveInfo,
+                    imageEditParentPath: img.imageEditParentPath,
+                    imageEditSourceSrc: img.imageEditSourceSrc,
+                    imageEditConfig: img.imageEditConfig,
+                    imageEditInfo: img.imageEditInfo
                 }))
             };
 

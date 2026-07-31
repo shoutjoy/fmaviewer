@@ -5,12 +5,23 @@
 function renderGallery() {
     const fragment = document.createDocumentFragment();
     let sortedImages = [...images];
-    if (sortMode === 'date') sortedImages.sort((a, b) => b.date - a.date);
-    else if (sortMode === 'size') sortedImages.sort((a, b) => b.size - a.size);
+    if (sortMode === 'latest') sortedImages.sort((a, b) => (b.date || 0) - (a.date || 0));
+    else if (sortMode === 'oldest') sortedImages.sort((a, b) => (a.date || 0) - (b.date || 0));
+    else if (sortMode === 'size') sortedImages.sort((a, b) => (b.size || 0) - (a.size || 0));
+    else if (sortMode === 'type') {
+        sortedImages.sort((a, b) => {
+            const typeCompare = getImageTypeLabel(a).localeCompare(getImageTypeLabel(b));
+            return typeCompare || (b.date || 0) - (a.date || 0);
+        });
+    }
 
     const groups = {};
     sortedImages.forEach(img => {
-        const groupName = (sortMode === 'group') ? img.group : 'All Images';
+        const groupName = sortMode === 'group'
+            ? img.group
+            : sortMode === 'type'
+                ? getImageTypeLabel(img)
+                : 'All Images';
         if (!groups[groupName]) groups[groupName] = [];
         groups[groupName].push({ ...img, realIndex: images.indexOf(img) });
     });
@@ -21,10 +32,21 @@ function renderGallery() {
         return a.localeCompare(b);
     });
 
+    sortedImageOrder = sortedKeys.flatMap(groupName =>
+        groups[groupName].map(image => image.realIndex)
+    );
+
     sortedKeys.forEach(g => {
         const title = document.createElement("div");
         title.className = "groupTitle";
-        title.innerText = (sortMode === 'group') ? g : `${g} (${sortedImages.length})`;
+        const sortTitles = {
+            latest: "최신 이미지",
+            oldest: "오래된 이미지",
+            size: "파일 크기순"
+        };
+        title.innerText = (sortMode === 'group' || sortMode === 'type')
+            ? `${g} (${groups[g].length})`
+            : `${sortTitles[sortMode] || g} (${sortedImages.length})`;
         fragment.appendChild(title);
 
         const grid = document.createElement("div");
@@ -52,6 +74,47 @@ function renderGallery() {
 
     dom.gallery.innerHTML = "";
     dom.gallery.appendChild(fragment);
+    if (typeof updatePreviewPageText === "function") updatePreviewPageText();
+}
+
+function getActiveImageOrder() {
+    const isValid = sortedImageOrder.length === images.length &&
+        sortedImageOrder.every(index => Number.isInteger(index) && index >= 0 && index < images.length) &&
+        new Set(sortedImageOrder).size === images.length;
+    return isValid ? sortedImageOrder : images.map((_, index) => index);
+}
+
+function getImageDisplayPosition(rawIndex) {
+    const position = getActiveImageOrder().indexOf(rawIndex);
+    return position >= 0 ? position : 0;
+}
+
+function getImageIndexAtDisplayPosition(position) {
+    const order = getActiveImageOrder();
+    if (order.length === 0) return -1;
+    const clampedPosition = Math.max(0, Math.min(order.length - 1, position));
+    return order[clampedPosition];
+}
+
+function getAdjacentSortedImageIndex(rawIndex, offset) {
+    return getImageIndexAtDisplayPosition(getImageDisplayPosition(rawIndex) + offset);
+}
+
+function navigateSortedImages(offset) {
+    if (images.length === 0) return;
+    showImage(getAdjacentSortedImageIndex(currentIndex, offset));
+}
+
+function getImageTypeLabel(image) {
+    const mime = image.mimeType || String(image.src || "").match(/^data:([^;,]+)/)?.[1] || "";
+    const mimeSubtype = mime.split("/")[1];
+    if (mimeSubtype) {
+        const normalized = mimeSubtype.replace("svg+xml", "svg").replace("jpeg", "jpg");
+        return normalized.toUpperCase();
+    }
+
+    const extension = String(image.path || "").match(/\.([a-z0-9]+)(?:$|[?#])/i)?.[1];
+    return extension ? extension.toUpperCase() : "OTHER";
 }
 
 function toggleFav(i) {
