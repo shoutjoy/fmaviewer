@@ -8,6 +8,7 @@
 
     <!-- Project Styles -->
     <link rel="stylesheet" href="css/styles.css?v=20260801-29">
+    <link rel="stylesheet" href="Auth/auth.css?v=20260802-1">
 
     <!-- JSZip CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -359,13 +360,6 @@
                     <small>활성화한 앱만 상단 메뉴에 표시</small>
                 </div>
                 <label class="settings-check">
-                    <input id="enableStoryApp" type="checkbox">
-                    <span>
-                        <strong>Story Gemini 앱 버튼 표시</strong>
-                        <small>공유 Gemini Story 앱을 새 탭에서 엽니다. FMA API 키를 사용하지 않습니다.</small>
-                    </span>
-                </label>
-                <label class="settings-check">
                     <input id="enableStoryHtmlApp" type="checkbox">
                     <span>
                         <strong>Story Image HTML 앱 버튼 표시</strong>
@@ -377,6 +371,20 @@
                     <span>
                         <strong>Aura Image 앱 버튼 표시</strong>
                         <small>로컬 Aura HTML 앱을 내부 창에서 열고 결과 이미지를 가져옵니다.</small>
+                    </span>
+                </label>
+                <label class="settings-check">
+                    <input id="enableBgRemoverApp" type="checkbox">
+                    <span>
+                        <strong>BG Remover 앱 버튼 표시</strong>
+                        <small>현재 누끼 결과 또는 보관소 전체 결과를 가져옵니다.</small>
+                    </span>
+                </label>
+                <label class="settings-check">
+                    <input id="enableStoryApp" type="checkbox">
+                    <span>
+                        <strong>Story Gemini 앱 버튼 표시</strong>
+                        <small>공유 Gemini Story 앱을 새 탭에서 엽니다. FMA API 키를 사용하지 않습니다.</small>
                     </span>
                 </label>
                 <label class="settings-check">
@@ -393,13 +401,6 @@
                         <small>공유 Gemini 배경생성 앱을 새 탭에서 엽니다. FMA API 키를 사용하지 않습니다.</small>
                     </span>
                 </label>
-                <label class="settings-check">
-                    <input id="enableBgRemoverApp" type="checkbox">
-                    <span>
-                        <strong>BG Remover 앱 버튼 표시</strong>
-                        <small>현재 누끼 결과 또는 보관소 전체 결과를 가져옵니다.</small>
-                    </span>
-                </label>
 
                 <div class="settings-warning">
                     AI 업스케일과 AI 배경 제거는 생성형 이미지 편집을 사용하므로 인물·문자·세부 요소가 원본과 미세하게 달라질 수 있고
@@ -409,7 +410,7 @@
             <div class="utility-footer">
                 <div class="settings-footer-links">
                     <button id="btnClearApiKey" class="danger-subtle" type="button">API 키 삭제</button>
-                    <a class="settings-privacy-link" href="PRIVACY_POLICY.md" target="_blank"
+                    <a class="settings-privacy-link" href="Auth/PRIVACY_POLICY.md" target="_blank"
                         rel="noopener noreferrer">개인정보 처리방침</a>
                     <a class="settings-usage-link" href="https://aistudio.google.com/spend" target="_blank"
                         rel="noopener noreferrer" aria-label="Google AI Studio 사용량 확인 페이지 열기">
@@ -1838,66 +1839,6 @@
         </div>
     </div>
 
-    <!-- First-use Gmail registration and privacy consent -->
-    <div id="firstUseModal" class="first-use-modal" role="dialog" aria-modal="true"
-        aria-labelledby="firstUseTitle" aria-describedby="firstUseDescription" style="display:none;">
-        <div class="first-use-dialog">
-            <header class="first-use-header">
-                <span class="first-use-mark" aria-hidden="true">FMA</span>
-                <div>
-                    <h2 id="firstUseTitle">FMA Viewer 첫 사용자 확인</h2>
-                    <p id="firstUseDescription">Gmail로 받은 인증 링크를 열면 사용 승인이 기록되고 FMA Viewer가 시작됩니다.</p>
-                </div>
-            </header>
-            <div class="first-use-body">
-                <div class="first-use-notice">
-                    <strong>사용 신청에 포함되는 정보</strong>
-                    <ul>
-                        <li>입력한 Gmail 주소</li>
-                        <li>첫 사용 일자와 시각(시·분)</li>
-                        <li>이메일 인증 일자와 시각</li>
-                        <li>마지막 등록 확인 시각과 사용 상태</li>
-                    </ul>
-                    <p>비밀번호, Gmail 인증 토큰, 이미지 또는 영상은 이 최초 사용자 알림에 포함되지 않습니다.</p>
-                </div>
-                <details class="first-use-policy" open>
-                    <summary>개인정보 처리방침 주요 내용</summary>
-                    <div>
-                        <p>위 정보는 최초 사용자 확인, 운영 공지 및 문의 대응 목적으로 처리됩니다.</p>
-                        <p>Gmail과 마지막 확인 시각은 현재 브라우저에 보관됩니다. Google Apps Script가 입력한 Gmail로 30분 동안 유효한 인증 링크를 발송하며,
-                            링크를 열어 인증을 완료한 뒤에만 Google Sheet의 Users 탭에 Active 상태로 저장됩니다. 인증 완료 알림은 <strong>shoutjoy1@yonsei.ac.kr</strong>로 발송됩니다.</p>
-                        <p>앱은 관리자가 설정한 횟수만큼 Sheet의 이메일을 확인합니다(기본 하루 1회). 이메일이 없으면 다시 신청해야 하며, 서버 연결이 일시적으로 실패하면 기존 등록 사용자는 계속 사용할 수 있습니다.</p>
-                        <p>AI 기능을 직접 실행하는 경우 선택한 이미지와 프롬프트가 Google Gemini API로 전송될 수 있습니다.
-                            로컬 편집 기능은 가능한 범위에서 브라우저 안에서 처리됩니다.</p>
-                        <p>동의 철회 및 삭제 요청은 개발자 이메일로 접수할 수 있습니다.</p>
-                        <a href="privacy_policy.html" target="_blank" rel="noopener noreferrer">개인정보 처리방침 전문 보기 ↗</a>
-                    </div>
-                </details>
-                <label class="first-use-email-label" for="firstUseGmail">
-                    <span>사용자 Gmail</span>
-                    <input id="firstUseGmail" type="email" inputmode="email" autocomplete="email"
-                        placeholder="example@gmail.com" spellcheck="false">
-                    <small>Google 계정 비밀번호는 입력하지 마세요.</small>
-                </label>
-                <div class="first-use-mail-preview">
-                    <strong>신청 알림 문구</strong>
-                    <output id="firstUseMailPreview" aria-live="polite"></output>
-                </div>
-                <label class="first-use-consent-check">
-                    <input id="firstUsePrivacyConsent" type="checkbox">
-                    <span>개인정보 처리방침을 읽었으며 Gmail 주소, 신청·인증 시각, 마지막 확인 시각 및 사용 상태를 등록 시스템에서 처리하는 것에 동의합니다.</span>
-                </label>
-                <p id="firstUseStatus" class="first-use-status" role="status" aria-live="polite" hidden></p>
-                <p id="firstUseError" class="first-use-error" role="alert" hidden></p>
-            </div>
-            <footer class="first-use-footer">
-                <p>인증 전에는 앱이 잠겨 있으며, 인증 후 Sheet 등록을 정기 동기화합니다.</p>
-                <div class="first-use-footer-actions">
-                    <button id="btnFirstUseContinue" type="button">사용 신청하고 시작</button>
-                </div>
-            </footer>
-        </div>
-    </div>
 
     <!-- Loading Overlay -->
     <div id="dbHistoryModal" class="db-history-internal-modal" role="dialog" aria-modal="true"
@@ -1958,25 +1899,27 @@
     </div>
 
     <!-- Project Scripts (Modularized) -->
-    <script src="js/globals.js?v=20260801-6"></script>
-    <script src="js/database.js?v=20260731-51"></script>
-    <script src="js/gallery.js?v=20260801-1"></script>
-    <script src="js/imageMetadata.js?v=20260801-1"></script>
-    <script src="js/preview.js?v=20260801-3"></script>
-    <script src="js/videoEditor.js?v=20260801-2"></script>
-    <script src="js/crop.js?v=20260801-46"></script>
-    <script src="js/imageUpscale.js?v=20260801-2"></script>
-    <script src="js/aiJena.js?v=20260801-3"></script>
-    <script src="js/imageEditor.js?v=20260801-59"></script>
-    <script src="js/backgroundMaskEditor.js?v=20260801-47"></script>
-    <script src="js/backgroundRemove.js?v=20260801-8"></script>
-    <script src="js/fileHandlers.js?v=20260801-48"></script>
-    <script src="js/externalApps.js?v=20260801-8"></script>
-    <script src="js/interaction.js?v=20260801-1"></script>
-    <script src="js/adminConfig.js?v=20260801-3"></script>
-    <script src="js/firstRunConsent.js?v=20260802-3"></script>
-    <script src="js/navigationGuard.js?v=20260801-1"></script>
-    <script src="js/app.js?v=20260801-1"></script>
+    <script src="js/core/globals.js?v=20260802-1"></script>
+    <script src="js/storage/database.js?v=20260802-1"></script>
+    <script src="js/gallery/gallery.js?v=20260802-1"></script>
+    <script src="js/image/imageMetadata.js?v=20260802-1"></script>
+    <script src="js/gallery/preview.js?v=20260802-1"></script>
+    <script src="js/video/videoEditor.js?v=20260802-1"></script>
+    <script src="js/image/crop.js?v=20260802-1"></script>
+    <script src="js/image/imageUpscale.js?v=20260802-2"></script>
+    <script src="js/ai/aiJena.js?v=20260802-1"></script>
+    <script src="js/image/imageEditor.js?v=20260802-1"></script>
+    <script src="js/image/backgroundMaskEditor.js?v=20260802-1"></script>
+    <script src="js/image/backgroundRemove.js?v=20260802-1"></script>
+    <script src="js/files/fileHandlers.js?v=20260802-1"></script>
+    <script src="js/integrations/externalApps.js?v=20260802-1"></script>
+    <script src="js/core/interaction.js?v=20260802-1"></script>
+    <script src="Auth/settings.js?v=20260802-1"></script>
+    <script src="Auth/config.js?v=20260802-6"></script>
+    <script src="Auth/modal.js?v=20260802-1"></script>
+    <script src="Auth/client.js?v=20260802-5"></script>
+    <script src="js/core/navigationGuard.js?v=20260802-1"></script>
+    <script src="js/core/app.js?v=20260802-1"></script>
 </body>
 
 </html>

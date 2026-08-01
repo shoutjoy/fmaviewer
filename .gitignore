@@ -3,4 +3,4 @@
 
 # Private Google Apps Script server source and deployment notes.
 # This folder is a local deployment copy and must not be published to GitHub.
-/gas/
+/Auth/gas/

@@ -2,17 +2,20 @@
    First-use registration, periodic Sheet sync, and block watching
    ======================================================= */
 
-const FMA_FIRST_USE_STORAGE = "fma_viewer_registration_v4";
+const FMA_AUTH_SETTINGS = window.FMAAuthSettings || {};
+const FMA_AUTH_STORAGE_PREFIX = String(FMA_AUTH_SETTINGS.storagePrefix || "fma_viewer");
+const FMA_AUTH_APP_NAME = String(FMA_AUTH_SETTINGS.appName || "FMA Viewer");
+const FMA_FIRST_USE_STORAGE = `${FMA_AUTH_STORAGE_PREFIX}_registration_v4`;
 const FMA_FIRST_USE_LEGACY_STORAGES = [
-    "fma_viewer_registration_v3",
-    "fma_viewer_access_approval_v2",
-    "fma_viewer_first_use_consent_v1"
+    `${FMA_AUTH_STORAGE_PREFIX}_registration_v3`,
+    `${FMA_AUTH_STORAGE_PREFIX}_access_approval_v2`,
+    `${FMA_AUTH_STORAGE_PREFIX}_first_use_consent_v1`
 ];
-const FMA_DEFAULT_GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbw4Q4MEQtQlI40FE4_xKFyXbs88-uqQ-7lMERXTjljsMHkQ5LiGcQoTA666pxRMjbAU/exec";
-const FMA_REGISTRATION_TIMEOUT_MS = 60000;
-const FMA_REGISTRATION_RETRY_MS = 60 * 60 * 1000;
-const FMA_VERIFICATION_POLL_MS = 5000;
-const FMA_VERIFICATION_RETRY_MS = 30000;
+const FMA_DEFAULT_GAS_WEB_APP_URL = String(FMA_AUTH_SETTINGS.gasWebAppUrl || "");
+const FMA_REGISTRATION_TIMEOUT_MS = Number(FMA_AUTH_SETTINGS.registrationTimeoutMs) || 60000;
+const FMA_REGISTRATION_RETRY_MS = Number(FMA_AUTH_SETTINGS.registrationRetryMs) || (60 * 60 * 1000);
+const FMA_VERIFICATION_POLL_MS = Number(FMA_AUTH_SETTINGS.verificationPollMs) || 5000;
+const FMA_VERIFICATION_RETRY_MS = Number(FMA_AUTH_SETTINGS.verificationRetryMs) || 30000;
 
 let firstUseMemoryRecord = null;
 let registrationSyncTimer = null;
@@ -105,7 +108,7 @@ function formatFirstUseTimestamp(date) {
 
 function createFirstUseMessage(email, firstUsedAt) {
     const address = String(email || "입력된 메일").trim();
-    return `${address}이 FMA Viewer를 ${formatFirstUseTimestamp(new Date(firstUsedAt))}에 사용 신청했습니다.`;
+    return `${address}이 ${FMA_AUTH_APP_NAME}를 ${formatFirstUseTimestamp(new Date(firstUsedAt))}에 사용 신청했습니다.`;
 }
 
 function updateFirstUseMailPreview(email, firstUsedAt = new Date().toISOString()) {
@@ -219,7 +222,7 @@ function describeGasError(error) {
         return "신청 서버에 연결하지 못했습니다. GAS 공개 배포 설정과 배포 URL을 확인해 주세요.";
     }
     if (error?.message === "GAS_VERIFICATION_NOT_SENT") {
-        return "현재 GAS가 이메일 인증 기능이 없는 이전 버전입니다. gas/Code.gs를 적용한 새 버전으로 재배포해 주세요.";
+        return "현재 GAS가 이메일 인증 기능이 없는 이전 버전입니다. Auth/gas/Code.gs를 적용한 새 버전으로 재배포해 주세요.";
     }
     return `신청 정보 처리 중 오류가 발생했습니다. (${error?.message || "알 수 없는 오류"})`;
 }
@@ -234,7 +237,7 @@ function createRegistrationRecord(email, result, requestedAt) {
         lastVerifiedAt: checkedAt,
         emailVerifiedAt: result.verifiedAt || checkedAt,
         consentedAt: requestedAt,
-        privacyPolicyVersion: "2026-08-02",
+        privacyPolicyVersion: String(FMA_AUTH_SETTINGS.privacyPolicyVersion || "2026-08-02"),
         verificationMethod: "email-link"
     };
 }
@@ -247,7 +250,7 @@ function createPendingRegistrationRecord(email, requestId, result, requestedAt) 
         requestedAt: result.requestedAt || requestedAt,
         expiresAt: result.expiresAt || "",
         consentedAt: requestedAt,
-        privacyPolicyVersion: "2026-08-02",
+        privacyPolicyVersion: String(FMA_AUTH_SETTINGS.privacyPolicyVersion || "2026-08-02"),
         verificationMethod: "email-link"
     };
 }
@@ -461,7 +464,7 @@ async function verifyPendingRegistration(record) {
             saveFirstUseRecord(registeredRecord);
             scheduleRegistrationSync(registeredRecord);
             scheduleBlockedWatch(registeredRecord);
-            alert("이메일 인증이 완료되었습니다. FMA Viewer를 시작합니다.");
+            alert(`이메일 인증이 완료되었습니다. ${FMA_AUTH_APP_NAME}를 시작합니다.`);
             unlockFirstUseModal();
             return;
         }

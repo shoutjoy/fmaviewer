@@ -27,9 +27,9 @@ FMA Viewer Ultra는 여러 이미지를 한 프로젝트에서 모아 보고, �
 
 GAS 웹 앱은 인증 메일 발신 계정인 `shoutjoy1@gmail.com`에서 배포 사용자의 권한으로 실행하고, 로그인하지 않은 사용자도 접근할 수 있도록 공개 배포해야 합니다. 다른 계정으로 실행하면 health 검사와 메일 발송이 중지됩니다. JSON 대신 Google 로그인 화면이 반환되면 FMA Viewer는 배포 설정 오류를 표시합니다.
 
-등록·알림 서버 코드와 배포 정보는 공개 저장소와 분리된 로컬 전용 `gas/` 영역에서 관리하며 GitHub 배포 대상에서 제외합니다.
+등록·알림 서버 코드와 배포 정보는 `Auth/gas/` 영역에서 관리하며 GitHub 배포 대상에서 제외합니다.
 
-자세한 내용은 [FMA Viewer 개인정보 처리방침](PRIVACY_POLICY.md)을 확인하십시오.
+자세한 내용은 [FMA Viewer 개인정보 처리방침](Auth/PRIVACY_POLICY.md)을 확인하십시오.
 
 ## 개발자
 
@@ -714,9 +714,11 @@ AI 기능을 실행하면 프롬프트와 처리에 필요한 이미지가 Googl
 ```text
 fmaviewer/
 ├─ index.html              # FMA Viewer 메인 화면
+├─ admin.html              # 인증 서버 및 동기화 설정 화면
+├─ Auth/                   # 재사용 가능한 이메일 인증 모듈과 GAS 코드
 ├─ db_history.html         # SaveDB 히스토리 관리 화면
 ├─ css/                    # 앱 스타일
-├─ js/                     # 기능별 JavaScript
+├─ js/                     # core, storage, gallery, image 등 기능별 JavaScript
 ├─ App_src/                # Aura Image, BG Remover 등 연동 앱
 ├─ image_model/            # 로컬 배경 제거 모델
 ├─ doc/                    # 관련 문서
@@ -724,7 +726,7 @@ fmaviewer/
 └─ README.md
 ```
 
-`image_model/`의 대용량 AI 모델 파일은 GitHub 업로드 대상에서 제외하도록 `.gitignore`에 등록되어 있습니다.
+`image_model/`의 대용량 AI 모델 파일과 `Auth/gas/`의 서버 배포 코드는 GitHub 업로드 대상에서 제외하도록 `.gitignore`에 등록되어 있습니다.
 
 ---
 

@@ -224,7 +224,7 @@ function isStoryHtmlAppEnabled() {
 }
 
 function isAuraAppEnabled() {
-    return readUpscaleSetting(AURA_APP_ENABLED_STORAGE, "false") === "true";
+    return readUpscaleSetting(AURA_APP_ENABLED_STORAGE, "true") === "true";
 }
 
 function isAuraGeminiAppEnabled() {
@@ -236,7 +236,7 @@ function isBackgroundGeminiAppEnabled() {
 }
 
 function isBgRemoverAppEnabled() {
-    return readUpscaleSetting(BG_REMOVER_APP_ENABLED_STORAGE, "false") === "true";
+    return readUpscaleSetting(BG_REMOVER_APP_ENABLED_STORAGE, "true") === "true";
 }
 
 function getAiUpscalePrompt() {

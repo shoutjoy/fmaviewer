@@ -3,6 +3,15 @@
 
     const configApi = window.FMAAdminConfig;
     if (!configApi) throw new Error("FMAAdminConfig is not available.");
+    const appName = String(window.FMAAuthSettings?.appName || "FMA Viewer");
+
+    document.title = `${appName} 관리자 설정`;
+    const description = document.getElementById("adminDescription");
+    if (description) description.content = `${appName} GAS 배포 URL과 등록·차단 점검 주기를 설정합니다.`;
+    const eyebrow = document.getElementById("adminAppEyebrow");
+    if (eyebrow) eyebrow.textContent = appName.toUpperCase();
+    const appNameText = document.getElementById("adminAppName");
+    if (appNameText) appNameText.textContent = appName;
 
     const form = document.getElementById("adminSettingsForm");
     const urlInput = document.getElementById("gasWebAppUrl");
@@ -17,6 +26,7 @@
     const savedAtBadge = document.getElementById("savedAtBadge");
     const testButton = document.getElementById("testConnectionButton");
     const openAppLink = document.getElementById("openAppLink");
+    openAppLink.textContent = `${appName} 열기`;
 
     function formatDateTime(value) {
         if (!value) return "기본값 사용 중";
@@ -67,7 +77,7 @@
     }
 
     function updateAppLink(config) {
-        const appUrl = new URL("index.html", location.href);
+        const appUrl = new URL("../index.html", location.href);
         appUrl.searchParams.set("fmaGasUrl", config.gasWebAppUrl);
         appUrl.searchParams.set("fmaChecks", String(config.checksPerDay));
         appUrl.searchParams.set("fmaBlockMinutes", String(config.blockedCheckMinutes));
@@ -119,7 +129,8 @@
         testUrl.searchParams.set("action", "health");
         testUrl.searchParams.set("_", String(Date.now()));
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 60000);
+        const timeoutMs = Number(window.FMAAuthSettings?.registrationTimeoutMs) || 60000;
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
         testButton.disabled = true;
         testButton.textContent = "연결 확인 중...";
         healthResult.hidden = true;
@@ -146,15 +157,20 @@
             } catch (_) {
                 throw new Error("서버가 올바른 JSON을 반환하지 않았습니다.");
             }
-            if (String(payload?.service || "") !== "FMA Viewer verified email registration") {
+            healthResult.textContent = JSON.stringify(payload, null, 2);
+            healthResult.hidden = false;
+            const expectedService = String(window.FMAAuthSettings?.serverServiceName || "FMA Viewer verified email registration");
+            const expectedVersion = String(window.FMAAuthSettings?.serverVersion || "2026-08-02-email-verify-3");
+            if (String(payload?.service || "") !== expectedService) {
                 throw new Error("현재 배포 URL은 이메일 인증 기능이 없는 이전 GAS 버전입니다. 새 Code.gs로 재배포하세요.");
+            }
+            if (String(payload?.version || "") !== expectedVersion) {
+                throw new Error("현재 배포는 이전 이메일 인증 코드입니다. 최신 Code.gs를 저장한 뒤 새 버전으로 다시 배포하세요.");
             }
             if (!response.ok || payload?.success !== true || String(payload?.status || "").toUpperCase() !== "OK") {
                 throw new Error(payload?.message || `GAS HTTP ${response.status}`);
             }
 
-            healthResult.textContent = JSON.stringify(payload, null, 2);
-            healthResult.hidden = false;
             setStatus("서버 연결이 정상입니다. 이 URL을 저장할 수 있습니다.", "success");
         } catch (error) {
             const message = error?.name === "AbortError"
@@ -174,7 +190,7 @@
             const saved = configApi.save(readFormConfig());
             renderConfig(saved);
             renderHistory();
-            setStatus("설정이 저장되었습니다. 같은 환경의 FMA Viewer가 새 설정을 사용합니다.", "success");
+            setStatus(`설정이 저장되었습니다. 같은 환경의 ${appName}가 새 설정을 사용합니다.`, "success");
         } catch (error) {
             setStatus(String(error?.message || error), "error");
         }

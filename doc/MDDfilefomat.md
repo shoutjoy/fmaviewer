@@ -741,7 +741,7 @@ function validateMdproMdd(payload) {
 - [file_format.js](../file_format/file_format.js): 포맷 레지스트리, 식별, JSON 파싱, MDD 정규화
 - [extend-files.js](../js/extendFiles/extend-files.js): 현재 MDD 내보내기와 IndexedDB 가져오기
 - [imageDB.js](../imageDB/imageDB.js): `internal://` ID 추출, 이미지 Blob 저장·조회·렌더링
-- [app.js](../js/app.js): 파일 열기, 내보내기 메뉴, MDD 가져오기 호출
+- [app.js](../js/core/app.js): 파일 열기, 내보내기 메뉴, MDD 가져오기 호출
 - [index.html](../index.html): 위 모듈을 실제 앱에 로드하는 진입점
 
 참고용 구형·미연결 구현:

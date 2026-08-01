@@ -1,10 +1,13 @@
 (function initializeFMAAdminConfig(global) {
     "use strict";
 
-    const STORAGE_KEY = "fma_viewer_admin_config_v1";
-    const HISTORY_KEY = "fma_viewer_admin_config_history_v1";
+    const authSettings = global.FMAAuthSettings || {};
+    const storagePrefix = String(authSettings.storagePrefix || "fma_viewer");
+    const STORAGE_KEY = `${storagePrefix}_admin_config_v2`;
+    const LEGACY_STORAGE_KEY = `${storagePrefix}_admin_config_v1`;
+    const HISTORY_KEY = `${storagePrefix}_admin_config_history_v1`;
     const DEFAULT_CONFIG = Object.freeze({
-        gasWebAppUrl: "https://script.google.com/macros/s/AKfycbw4Q4MEQtQlI40FE4_xKFyXbs88-uqQ-7lMERXTjljsMHkQ5LiGcQoTA666pxRMjbAU/exec",
+        gasWebAppUrl: String(authSettings.gasWebAppUrl || ""),
         checksPerDay: 1,
         blockedCheckMinutes: 5,
         updatedAt: ""
@@ -49,7 +52,12 @@
     function load() {
         try {
             const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
-            return normalizeConfig(stored || DEFAULT_CONFIG);
+            const legacy = stored ? null : JSON.parse(localStorage.getItem(LEGACY_STORAGE_KEY) || "null");
+            const loaded = normalizeConfig(stored || legacy || DEFAULT_CONFIG);
+            if (!stored) {
+                loaded.gasWebAppUrl = DEFAULT_CONFIG.gasWebAppUrl;
+            }
+            return loaded;
         } catch (error) {
             console.warn("FMA admin configuration could not be loaded:", error);
             return { ...DEFAULT_CONFIG };
