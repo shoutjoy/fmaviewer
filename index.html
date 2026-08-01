@@ -1843,16 +1843,16 @@
                 <span class="first-use-mark" aria-hidden="true">FMA</span>
                 <div>
                     <h2 id="firstUseTitle">FMA Viewer 첫 사용자 확인</h2>
-                    <p id="firstUseDescription">개인정보 처리방침을 확인하고 Gmail 주소를 입력해야 앱을 시작할 수 있습니다.</p>
+                    <p id="firstUseDescription">개인정보 처리방침을 확인하고 Gmail 주소를 입력하면 메일 작성 화면이 열립니다.</p>
                 </div>
             </header>
             <div class="first-use-body">
                 <div class="first-use-notice">
-                    <strong>수집·전달되는 정보</strong>
+                    <strong>Gmail 메일에 입력되는 정보</strong>
                     <ul>
                         <li>입력한 Gmail 주소</li>
                         <li>첫 사용 일자와 시각(시·분)</li>
-                        <li>FMAViewer 최초 사용자라는 이용 정보</li>
+                        <li>FMA Viewer 사용 알림이라는 이용 정보</li>
                     </ul>
                     <p>비밀번호, Gmail 인증 토큰, 이미지 또는 영상은 이 최초 사용자 알림에 포함되지 않습니다.</p>
                 </div>
@@ -1860,10 +1860,10 @@
                     <summary>개인정보 처리방침 주요 내용</summary>
                     <div>
                         <p>위 정보는 최초 사용자 확인, 운영 공지 및 문의 대응 목적으로 처리됩니다.</p>
-                        <p>동의 기록은 현재 브라우저에 보관됩니다. 자동 전송이 완료되면 입력 정보와 최초 사용 시각이
-                            <strong>shoutjoy1@yonsei.ac.kr</strong>로 전달됩니다.</p>
-                        <p>자동 메일 전달에는 FormSubmit 중계 서비스가 사용되며, 전송된 양식 데이터는 해당 서비스의
-                            개인정보 처리 기준이 함께 적용됩니다.</p>
+                        <p>동의 기록은 현재 브라우저에 보관됩니다. 버튼을 누르면 받는 사람이
+                            <strong>shoutjoy1@yonsei.ac.kr</strong>로 지정된 Gmail 작성 화면이 열립니다.</p>
+                        <p>앱은 메일을 자동 전송하지 않으며 전송 여부를 확인할 수도 없습니다. 내용을 확인한 뒤 Gmail에서
+                            사용자가 직접 보내야 합니다.</p>
                         <p>AI 기능을 직접 실행하는 경우 선택한 이미지와 프롬프트가 Google Gemini API로 전송될 수 있습니다.
                             로컬 편집 기능은 가능한 범위에서 브라우저 안에서 처리됩니다.</p>
                         <p>동의 철회 및 삭제 요청은 개발자 이메일로 접수할 수 있습니다.</p>
@@ -1877,18 +1877,18 @@
                     <small>Google 계정 비밀번호는 입력하지 마세요.</small>
                 </label>
                 <div class="first-use-mail-preview">
-                    <strong>전송될 메일 내용</strong>
+                    <strong>Gmail에 입력될 메일 내용</strong>
                     <output id="firstUseMailPreview" aria-live="polite"></output>
                 </div>
                 <label class="first-use-consent-check">
                     <input id="firstUsePrivacyConsent" type="checkbox">
-                    <span>개인정보 처리방침을 읽었으며 Gmail 주소와 최초 사용 시각을 개발자에게 보내는 것에 동의합니다.</span>
+                    <span>개인정보 처리방침을 읽었으며 Gmail 주소와 최초 사용 시각이 입력된 메일 작성 화면을 여는 것에 동의합니다.</span>
                 </label>
                 <p id="firstUseError" class="first-use-error" role="alert" hidden></p>
             </div>
             <footer class="first-use-footer">
-                <p>버튼을 누르면 최초 사용자 정보가 자동으로 전송됩니다. 성공한 경우에만 앱이 열립니다.</p>
-                <button id="btnFirstUseContinue" type="button">자동 알림 보내고 FMA Viewer 시작</button>
+                <p>버튼을 누르면 Gmail 작성 화면이 열립니다. 내용을 확인하고 Gmail에서 직접 보내 주세요.</p>
+                <button id="btnFirstUseContinue" type="button">Gmail 열고 FMA Viewer 시작</button>
             </footer>
         </div>
     </div>
@@ -1953,7 +1953,7 @@
     <script src="js/fileHandlers.js?v=20260731-47"></script>
     <script src="js/externalApps.js?v=20260801-8"></script>
     <script src="js/interaction.js?v=20260801-1"></script>
-    <script src="js/firstRunConsent.js?v=20260801-3"></script>
+    <script src="js/firstRunConsent.js?v=20260801-4"></script>
     <script src="js/app.js?v=20260801-1"></script>
 </body>
 

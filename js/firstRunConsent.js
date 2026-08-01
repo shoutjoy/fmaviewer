@@ -1,10 +1,10 @@
 /* =======================================================
-   First-use consent and Gmail notification
+   First-use consent and Gmail compose
    ======================================================= */
 
 const FMA_FIRST_USE_STORAGE = "fma_viewer_first_use_consent_v1";
 const FMA_FIRST_USE_RECIPIENT = "shoutjoy1@yonsei.ac.kr";
-const FMA_FIRST_USE_ENDPOINT = `https://formsubmit.co/ajax/${FMA_FIRST_USE_RECIPIENT}`;
+const FMA_GMAIL_COMPOSE_ENDPOINT = "https://mail.google.com/mail/u/";
 
 function readFirstUseRecord() {
     try {
@@ -33,61 +33,24 @@ function updateFirstUseMailPreview(email, firstUsedAt = new Date().toISOString()
     if (preview) preview.textContent = createFirstUseMessage(email, firstUsedAt);
 }
 
-async function sendFirstUseNotification(email, firstUsedAt) {
-    const message = createFirstUseMessage(email, firstUsedAt);
+function createGmailComposeUrl(email, firstUsedAt) {
+    const params = new URLSearchParams({
+        authuser: email,
+        view: "cm",
+        fs: "1",
+        to: FMA_FIRST_USE_RECIPIENT,
+        su: "FMA Viewer 사용 알림",
+        body: createFirstUseMessage(email, firstUsedAt)
+    });
+    return `${FMA_GMAIL_COMPOSE_ENDPOINT}?${params.toString()}`;
+}
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+function openGmailCompose(email, firstUsedAt) {
+    const composeWindow = window.open(createGmailComposeUrl(email, firstUsedAt), "_blank");
+    if (!composeWindow) throw new Error("POPUP_BLOCKED");
     try {
-        const response = await fetch(FMA_FIRST_USE_ENDPOINT, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            },
-            body: JSON.stringify({
-                name: "FMA Viewer 사용자",
-                email,
-                message,
-                _subject: "FMA Viewer 사용 알림",
-                _template: "basic",
-                _captcha: "false"
-            }),
-            signal: controller.signal
-        });
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok || result?.success === false || result?.success === "false") {
-            throw new Error(result?.message || `HTTP ${response.status}`);
-        }
-        return result;
-    } finally {
-        clearTimeout(timeoutId);
-    }
-}
-
-function setFirstUseSending(sending) {
-    const submitButton = document.getElementById("btnFirstUseContinue");
-    const emailInput = document.getElementById("firstUseGmail");
-    const consentInput = document.getElementById("firstUsePrivacyConsent");
-    if (submitButton) {
-        submitButton.disabled = sending;
-        submitButton.textContent = sending ? "사용 알림을 보내는 중..." : "자동 알림 보내고 FMA Viewer 시작";
-    }
-    if (emailInput) emailInput.disabled = sending;
-    if (consentInput) consentInput.disabled = sending;
-}
-
-function describeSendError(error) {
-    if (error?.name === "AbortError") {
-        return "자동 전송 시간이 초과되었습니다. 인터넷 연결을 확인하고 다시 시도해 주세요.";
-    }
-    if (/activate form/i.test(String(error?.message || ""))) {
-        return "FormSubmit 최초 연결 승인이 필요합니다. shoutjoy1@yonsei.ac.kr 받은편지함에서 'Activate Form' 메일을 승인한 뒤 다시 시도해 주세요.";
-    }
-    if (location.protocol === "file:") {
-        return "자동 전송에 실패했습니다. 브라우저의 로컬 파일 제한일 수 있습니다. README의 로컬 HTTP 서버 방식으로 앱을 실행한 뒤 다시 시도해 주세요.";
-    }
-    return `자동 전송에 실패했습니다. 인터넷 연결을 확인하고 다시 시도해 주세요. (${error?.message || "전송 오류"})`;
+        composeWindow.opener = null;
+    } catch (_) {}
 }
 
 function saveFirstUseRecord(record) {
@@ -105,12 +68,12 @@ function createFirstUseRecord(email, firstUsedAt) {
         firstUsedAt,
         consentedAt: firstUsedAt,
         privacyPolicyVersion: "2026-08-01",
-        notificationMethod: "formsubmit-ajax",
-        notificationSentAt: new Date().toISOString()
+        notificationMethod: "gmail-compose",
+        gmailComposeOpenedAt: new Date().toISOString()
     };
 }
 
-async function completeFirstUseConsent() {
+function completeFirstUseConsent() {
     const modal = document.getElementById("firstUseModal");
     const emailInput = document.getElementById("firstUseGmail");
     const consentInput = document.getElementById("firstUsePrivacyConsent");
@@ -130,16 +93,13 @@ async function completeFirstUseConsent() {
 
     const firstUsedAt = new Date().toISOString();
     updateFirstUseMailPreview(email, firstUsedAt);
-    setFirstUseSending(true);
     try {
-        await sendFirstUseNotification(email, firstUsedAt);
+        openGmailCompose(email, firstUsedAt);
         saveFirstUseRecord(createFirstUseRecord(email, firstUsedAt));
         unlockFirstUseModal(modal);
     } catch (error) {
-        console.error("FMA first-use notification failed:", error);
-        showFirstUseError(describeSendError(error));
-    } finally {
-        setFirstUseSending(false);
+        console.error("FMA Gmail compose could not be opened:", error);
+        showFirstUseError("Gmail 작성 화면을 열지 못했습니다. 브라우저의 팝업 허용 후 다시 눌러 주세요.");
     }
 }
 
