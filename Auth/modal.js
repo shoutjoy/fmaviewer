@@ -33,6 +33,8 @@
                         <strong>사용 신청에 포함되는 정보</strong>
                         <ul>
                             <li>입력한 Gmail 주소</li>
+                            <li>신청자 이름과 소속</li>
+                            <li>작성한 사용목적</li>
                             <li>첫 사용 일자와 시각(시·분)</li>
                             <li>이메일 인증 일자와 시각</li>
                             <li>마지막 등록 확인 시각과 사용 상태</li>
@@ -43,27 +45,45 @@
                         <summary>개인정보 처리방침 주요 내용</summary>
                         <div>
                             <p>위 정보는 최초 사용자 확인, 운영 공지 및 문의 대응 목적으로 처리됩니다.</p>
-                            <p>Gmail과 마지막 확인 시각은 현재 브라우저에 보관됩니다. Google Apps Script가 입력한 Gmail로 30분 동안 유효한 인증 링크를 발송하며,
-                                링크를 열어 인증을 완료한 뒤에만 Google Sheet의 Users 탭에 Active 상태로 저장됩니다. 인증 완료 알림은 <strong>${escapeHtml(recipient)}</strong>로 발송됩니다.</p>
+                            <p>신청 정보는 인증을 기다리는 동안 현재 브라우저와 Google Apps Script 임시 저장소에 보관됩니다. 입력한 Gmail로 30분 동안 유효한 인증 링크를 발송하며,
+                                링크를 열어 인증을 완료한 뒤에만 Gmail, 이름, 소속, 사용목적이 Google Sheet의 Users 탭에 Active 상태로 저장됩니다. 인증 완료 알림은 <strong>${escapeHtml(recipient)}</strong>로 발송됩니다.</p>
                             <p>앱은 관리자가 설정한 횟수만큼 Sheet의 이메일을 확인합니다(기본 하루 1회). 이메일이 없으면 다시 신청해야 하며, 서버 연결이 일시적으로 실패하면 기존 등록 사용자는 계속 사용할 수 있습니다.</p>
                             <p>AI 기능을 직접 실행하는 경우 선택한 이미지와 프롬프트가 Google Gemini API로 전송될 수 있습니다. 로컬 편집 기능은 가능한 범위에서 브라우저 안에서 처리됩니다.</p>
                             <p>동의 철회 및 삭제 요청은 개발자 이메일로 접수할 수 있습니다.</p>
                             <a href="${escapeHtml(policyUrl)}" target="_blank" rel="noopener noreferrer">개인정보 처리방침 전문 보기 ↗</a>
                         </div>
                     </details>
-                    <label class="first-use-email-label" for="firstUseGmail">
-                        <span>사용자 Gmail</span>
-                        <input id="firstUseGmail" type="email" inputmode="email" autocomplete="email"
-                            placeholder="example@gmail.com" spellcheck="false">
-                        <small>Google 계정 비밀번호는 입력하지 마세요.</small>
-                    </label>
+                    <div class="first-use-application-grid">
+                        <label class="first-use-field" for="firstUseName">
+                            <span>이름</span>
+                            <input id="firstUseName" type="text" autocomplete="name" maxlength="80"
+                                placeholder="신청자 이름" required>
+                        </label>
+                        <label class="first-use-field" for="firstUseOrganization">
+                            <span>소속</span>
+                            <input id="firstUseOrganization" type="text" autocomplete="organization" maxlength="120"
+                                placeholder="학교, 기관, 회사 등" required>
+                        </label>
+                        <label class="first-use-field first-use-field-wide" for="firstUseGmail">
+                            <span>사용자 Gmail</span>
+                            <input id="firstUseGmail" type="email" inputmode="email" autocomplete="email"
+                                placeholder="example@gmail.com" spellcheck="false" required>
+                            <small>Google 계정 비밀번호는 입력하지 마세요.</small>
+                        </label>
+                        <label class="first-use-field first-use-field-wide" for="firstUsePurpose">
+                            <span>사용목적</span>
+                            <textarea id="firstUsePurpose" rows="3" maxlength="500"
+                                placeholder="FMA Viewer를 사용하려는 목적을 작성해 주세요." required></textarea>
+                            <small>최대 500자까지 입력할 수 있습니다.</small>
+                        </label>
+                    </div>
                     <div class="first-use-mail-preview">
-                        <strong>신청 알림 문구</strong>
+                        <strong>신청 정보 요약</strong>
                         <output id="firstUseMailPreview" aria-live="polite"></output>
                     </div>
                     <label class="first-use-consent-check">
                         <input id="firstUsePrivacyConsent" type="checkbox">
-                        <span>개인정보 처리방침을 읽었으며 Gmail 주소, 신청·인증 시각, 마지막 확인 시각 및 사용 상태를 등록 시스템에서 처리하는 것에 동의합니다.</span>
+                        <span>개인정보 처리방침을 읽었으며 Gmail 주소, 이름, 소속, 사용목적, 신청·인증 시각, 마지막 확인 시각 및 사용 상태를 등록 시스템에서 처리하는 것에 동의합니다.</span>
                     </label>
                     <p id="firstUseStatus" class="first-use-status" role="status" aria-live="polite" hidden></p>
                     <p id="firstUseError" class="first-use-error" role="alert" hidden></p>

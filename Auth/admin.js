@@ -25,8 +25,18 @@
     const emptyHistory = document.getElementById("emptyHistory");
     const savedAtBadge = document.getElementById("savedAtBadge");
     const testButton = document.getElementById("testConnectionButton");
+    const applyDeploymentToAppButton = document.getElementById("applyDeploymentToAppButton");
     const openAppLink = document.getElementById("openAppLink");
-    openAppLink.textContent = `${appName} 열기`;
+    const expectedServerVersion = String(window.FMAAuthSettings?.serverVersion || "2026-08-02-email-verify-4");
+    const gasCodePreview = document.getElementById("gasCodePreview");
+    const gasCodeStatus = document.getElementById("gasCodeStatus");
+    const gasCodeVersionBadge = document.getElementById("gasCodeVersionBadge");
+    const gasCodeSourceLabel = document.getElementById("gasCodeSourceLabel");
+    const copyGasCodeButton = document.getElementById("copyGasCodeButton");
+    const reloadGasCodeButton = document.getElementById("reloadGasCodeButton");
+    const gasCodeFileInput = document.getElementById("gasCodeFileInput");
+    const openGasCodeLink = document.getElementById("openGasCodeLink");
+    openAppLink.textContent = `${appName}에 현재 설정 적용`;
 
     function formatDateTime(value) {
         if (!value) return "기본값 사용 중";
@@ -53,6 +63,124 @@
         status.hidden = !message;
     }
 
+    function setGasCodeStatus(message, tone = "success") {
+        gasCodeStatus.textContent = message;
+        gasCodeStatus.dataset.tone = tone;
+        gasCodeStatus.hidden = !message;
+    }
+
+    function readGasCodeVersion(source) {
+        const match = String(source || "").match(/const\s+SERVER_VERSION\s*=\s*['"]([^'"]+)['"]/);
+        return match ? match[1] : "";
+    }
+
+    function normalizeGasCodeSource(source) {
+        const normalized = String(source || "")
+            .replace(/^\uFEFF/, "")
+            .replace(/\r\n?/g, "\n")
+            .trim();
+        if (
+            normalized.length < 1000 ||
+            !/function\s+doPost\s*\(/.test(normalized) ||
+            !/function\s+doGet\s*\(/.test(normalized) ||
+            !/const\s+SERVER_VERSION\s*=/.test(normalized) ||
+            /^\s*<!doctype\s+html/i.test(normalized)
+        ) {
+            throw new Error("선택한 파일이 올바른 FMA Viewer Code.gs 원문이 아닙니다.");
+        }
+        return normalized + "\n";
+    }
+
+    function applyGasCodeSource(source, sourceLabel) {
+        const normalized = normalizeGasCodeSource(source);
+        const sourceVersion = readGasCodeVersion(normalized);
+        gasCodePreview.value = normalized;
+        gasCodeSourceLabel.textContent = sourceLabel;
+        gasCodeVersionBadge.textContent = sourceVersion
+            ? `Code.gs · ${sourceVersion}`
+            : "Code.gs · 버전 확인 불가";
+        copyGasCodeButton.disabled = false;
+
+        if (!sourceVersion) {
+            setGasCodeStatus("코드를 불러왔지만 SERVER_VERSION을 확인하지 못했습니다.", "error");
+        } else if (sourceVersion !== expectedServerVersion) {
+            setGasCodeStatus(
+                `불러온 코드 버전(${sourceVersion})과 앱이 요구하는 버전(${expectedServerVersion})이 다릅니다. 최신 파일인지 확인해 주세요.`,
+                "error"
+            );
+        } else {
+            const lineCount = normalized.split("\n").length - 1;
+            setGasCodeStatus(`최신 Code.gs ${lineCount.toLocaleString("ko-KR")}줄을 불러왔습니다. 전체 복사할 수 있습니다.`, "success");
+        }
+    }
+
+    async function loadGasCode() {
+        const sourceUrl = new URL("gas/Code.gs", location.href);
+        const requestUrl = new URL(sourceUrl.href);
+        requestUrl.searchParams.set("_", String(Date.now()));
+        openGasCodeLink.href = sourceUrl.href;
+        reloadGasCodeButton.disabled = true;
+        reloadGasCodeButton.textContent = "코드 불러오는 중...";
+        gasCodeSourceLabel.textContent = sourceUrl.href;
+        setGasCodeStatus("최신 Code.gs 원문을 확인하고 있습니다…", "success");
+
+        try {
+            const response = await fetch(requestUrl.toString(), { cache: "no-store" });
+            if (!response.ok) throw new Error(`Code.gs HTTP ${response.status}`);
+            applyGasCodeSource(await response.text(), sourceUrl.href);
+        } catch (error) {
+            if (!gasCodePreview.value || /불러오는 중/.test(gasCodePreview.value)) {
+                gasCodePreview.value = "";
+                copyGasCodeButton.disabled = true;
+            }
+            const localHint = location.protocol === "file:"
+                ? " 브라우저의 로컬 파일 보안 제한일 수 있으므로 ‘로컬 Code.gs 선택’을 이용해 주세요."
+                : " Code.gs가 정적 배포에 포함되어 있는지 확인해 주세요.";
+            setGasCodeStatus(`Code.gs를 자동으로 불러오지 못했습니다. (${error?.message || error})${localHint}`, "error");
+        } finally {
+            reloadGasCodeButton.disabled = false;
+            reloadGasCodeButton.textContent = "최신 코드 다시 불러오기";
+        }
+    }
+
+    function copyGasCodeFallback() {
+        const selectionStart = gasCodePreview.selectionStart;
+        const selectionEnd = gasCodePreview.selectionEnd;
+        gasCodePreview.focus();
+        gasCodePreview.select();
+        const copied = document.execCommand("copy");
+        gasCodePreview.setSelectionRange(selectionStart, selectionEnd);
+        if (!copied) throw new Error("브라우저가 복사 명령을 허용하지 않았습니다.");
+    }
+
+    async function copyGasCode() {
+        const source = String(gasCodePreview.value || "");
+        if (!source) {
+            setGasCodeStatus("먼저 Code.gs를 불러와 주세요.", "error");
+            return;
+        }
+
+        copyGasCodeButton.disabled = true;
+        copyGasCodeButton.textContent = "복사 중...";
+        try {
+            if (navigator.clipboard?.writeText && window.isSecureContext) {
+                await navigator.clipboard.writeText(source);
+            } else {
+                copyGasCodeFallback();
+            }
+            setGasCodeStatus("Code.gs 전체를 클립보드에 복사했습니다. Apps Script 편집기에 붙여넣으세요.", "success");
+            copyGasCodeButton.textContent = "복사 완료 ✓";
+            setTimeout(() => {
+                copyGasCodeButton.textContent = "Code.gs 전체 복사";
+            }, 1800);
+        } catch (error) {
+            setGasCodeStatus(`자동 복사에 실패했습니다. 코드 상자를 클릭해 Ctrl+A, Ctrl+C로 복사해 주세요. (${error?.message || error})`, "error");
+            copyGasCodeButton.textContent = "Code.gs 전체 복사";
+        } finally {
+            copyGasCodeButton.disabled = false;
+        }
+    }
+
     function readFormConfig() {
         return {
             gasWebAppUrl: configApi.normalizeGasWebAppUrl(urlInput.value),
@@ -76,12 +204,36 @@
         }
     }
 
-    function updateAppLink(config) {
+    function createAppUrl(config) {
         const appUrl = new URL("../index.html", location.href);
         appUrl.searchParams.set("fmaGasUrl", config.gasWebAppUrl);
         appUrl.searchParams.set("fmaChecks", String(config.checksPerDay));
         appUrl.searchParams.set("fmaBlockMinutes", String(config.blockedCheckMinutes));
+        return appUrl;
+    }
+
+    function updateAppLink(config) {
+        const appUrl = createAppUrl(config);
         openAppLink.href = appUrl.href;
+        return appUrl;
+    }
+
+    function saveFormConfig() {
+        const saved = configApi.save(readFormConfig());
+        renderConfig(saved);
+        renderHistory();
+        return saved;
+    }
+
+    function applyDeploymentToApp() {
+        try {
+            const saved = saveFormConfig();
+            const appUrl = createAppUrl(saved);
+            setStatus(`새 GAS 배포 URL을 저장했습니다. ${appName}에 전달하여 최신화합니다…`, "success");
+            window.location.assign(appUrl.href);
+        } catch (error) {
+            setStatus(String(error?.message || error), "error");
+        }
     }
 
     function renderConfig(config = configApi.load()) {
@@ -160,11 +312,10 @@
             healthResult.textContent = JSON.stringify(payload, null, 2);
             healthResult.hidden = false;
             const expectedService = String(window.FMAAuthSettings?.serverServiceName || "FMA Viewer verified email registration");
-            const expectedVersion = String(window.FMAAuthSettings?.serverVersion || "2026-08-02-email-verify-3");
             if (String(payload?.service || "") !== expectedService) {
                 throw new Error("현재 배포 URL은 이메일 인증 기능이 없는 이전 GAS 버전입니다. 새 Code.gs로 재배포하세요.");
             }
-            if (String(payload?.version || "") !== expectedVersion) {
+            if (String(payload?.version || "") !== expectedServerVersion) {
                 throw new Error("현재 배포는 이전 이메일 인증 코드입니다. 최신 Code.gs를 저장한 뒤 새 버전으로 다시 배포하세요.");
             }
             if (!response.ok || payload?.success !== true || String(payload?.status || "").toUpperCase() !== "OK") {
@@ -187,10 +338,8 @@
     form.addEventListener("submit", event => {
         event.preventDefault();
         try {
-            const saved = configApi.save(readFormConfig());
-            renderConfig(saved);
-            renderHistory();
-            setStatus(`설정이 저장되었습니다. 같은 환경의 ${appName}가 새 설정을 사용합니다.`, "success");
+            saveFormConfig();
+            setStatus(`설정을 저장했습니다. 실행 중인 앱에 확실히 전달하려면 ‘배포 URL로 앱 최신화’를 눌러 주세요.`, "success");
         } catch (error) {
             setStatus(String(error?.message || error), "error");
         }
@@ -214,6 +363,20 @@
         } catch (_) {}
     });
     testButton.addEventListener("click", testConnection);
+    applyDeploymentToAppButton.addEventListener("click", applyDeploymentToApp);
+    copyGasCodeButton.addEventListener("click", copyGasCode);
+    reloadGasCodeButton.addEventListener("click", loadGasCode);
+    gasCodeFileInput.addEventListener("change", async event => {
+        const file = event.currentTarget.files?.[0];
+        if (!file) return;
+        try {
+            applyGasCodeSource(await file.text(), `로컬 파일 · ${file.name}`);
+        } catch (error) {
+            setGasCodeStatus(String(error?.message || error), "error");
+        } finally {
+            event.currentTarget.value = "";
+        }
+    });
 
     document.getElementById("resetSettingsButton").addEventListener("click", () => {
         if (!confirm("배포 URL과 점검 주기를 기본값으로 복원할까요?")) return;
@@ -241,4 +404,5 @@
         : location.origin;
     renderConfig();
     renderHistory();
+    void loadGasCode();
 })();

@@ -28,7 +28,8 @@ body {
 }
 
 button,
-input {
+input,
+textarea {
     font: inherit;
 }
 
@@ -277,6 +278,106 @@ button.danger {
     color: var(--muted);
 }
 
+.gas-code-guide {
+    padding: 18px 20px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: rgba(7, 17, 28, .55);
+    color: #c7d7e4;
+    line-height: 1.7;
+}
+
+.gas-code-guide p {
+    margin-bottom: 10px;
+}
+
+.gas-code-guide ol {
+    margin: 0;
+    padding-left: 22px;
+}
+
+.gas-code-guide code,
+.gas-code-meta strong {
+    color: var(--cyan);
+}
+
+.gas-code-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 18px;
+}
+
+.file-button {
+    display: inline-flex;
+    min-height: 43px;
+    align-items: center;
+    padding: 0 16px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #172a3c;
+    color: var(--text);
+    cursor: pointer;
+    font-weight: 750;
+}
+
+.file-button:hover {
+    border-color: var(--cyan);
+}
+
+.text-link {
+    margin-left: auto;
+    color: var(--cyan);
+    font-size: 13px;
+    font-weight: 750;
+    text-underline-offset: 3px;
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.gas-code-meta {
+    display: flex;
+    gap: 10px;
+    margin-top: 18px;
+    color: var(--muted);
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+
+.gas-code-preview {
+    width: 100%;
+    min-height: 520px;
+    margin-top: 14px;
+    padding: 18px;
+    border: 1px solid #2d495e;
+    border-radius: 13px;
+    outline: none;
+    resize: vertical;
+    background: #06101a;
+    color: #c9edf1;
+    font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    tab-size: 2;
+    white-space: pre;
+}
+
+.gas-code-preview:focus {
+    border-color: var(--cyan);
+    box-shadow: 0 0 0 3px rgba(108, 231, 242, .1);
+}
+
 .admin-status,
 .health-result {
     margin: 18px 0 0;
@@ -374,5 +475,21 @@ footer {
 
     .action-row button {
         width: 100%;
+    }
+
+    .gas-code-actions > *,
+    .gas-code-actions button {
+        width: 100%;
+        justify-content: center;
+        text-align: center;
+    }
+
+    .text-link {
+        margin-left: 0;
+        padding: 10px 0;
+    }
+
+    .gas-code-preview {
+        min-height: 420px;
     }
 }

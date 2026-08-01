@@ -16,6 +16,7 @@ const FMA_REGISTRATION_TIMEOUT_MS = Number(FMA_AUTH_SETTINGS.registrationTimeout
 const FMA_REGISTRATION_RETRY_MS = Number(FMA_AUTH_SETTINGS.registrationRetryMs) || (60 * 60 * 1000);
 const FMA_VERIFICATION_POLL_MS = Number(FMA_AUTH_SETTINGS.verificationPollMs) || 5000;
 const FMA_VERIFICATION_RETRY_MS = Number(FMA_AUTH_SETTINGS.verificationRetryMs) || 30000;
+const FMA_APPLICATION_LIMITS = Object.freeze({ name: 80, organization: 120, purpose: 500 });
 
 let firstUseMemoryRecord = null;
 let registrationSyncTimer = null;
@@ -95,6 +96,52 @@ function isValidGmailAddress(value) {
     return /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@gmail\.com$/i.test(String(value || "").trim());
 }
 
+function normalizeApplicationLine(value) {
+    return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function normalizeApplicationPurpose(value) {
+    return String(value || "").replace(/\r\n?/g, "\n").trim();
+}
+
+function hasCompleteApplicationDetails(application) {
+    const name = normalizeApplicationLine(application?.name);
+    const organization = normalizeApplicationLine(application?.organization);
+    const purpose = normalizeApplicationPurpose(application?.purpose);
+    return Boolean(
+        name && name.length <= FMA_APPLICATION_LIMITS.name &&
+        organization && organization.length <= FMA_APPLICATION_LIMITS.organization &&
+        purpose && purpose.length <= FMA_APPLICATION_LIMITS.purpose
+    );
+}
+
+function readApplicationForm() {
+    return {
+        email: String(document.getElementById("firstUseGmail")?.value || "").trim().toLowerCase(),
+        name: normalizeApplicationLine(document.getElementById("firstUseName")?.value),
+        organization: normalizeApplicationLine(document.getElementById("firstUseOrganization")?.value),
+        purpose: normalizeApplicationPurpose(document.getElementById("firstUsePurpose")?.value)
+    };
+}
+
+function fillApplicationForm(application = {}) {
+    const values = {
+        email: String(application.email || ""),
+        name: String(application.name || ""),
+        organization: String(application.organization || ""),
+        purpose: String(application.purpose || "")
+    };
+    Object.entries({
+        firstUseGmail: values.email,
+        firstUseName: values.name,
+        firstUseOrganization: values.organization,
+        firstUsePurpose: values.purpose
+    }).forEach(([id, value]) => {
+        const input = document.getElementById(id);
+        if (input) input.value = value;
+    });
+}
+
 function createVerificationRequestId() {
     const bytes = new Uint8Array(32);
     crypto.getRandomValues(bytes);
@@ -106,14 +153,17 @@ function formatFirstUseTimestamp(date) {
     return `${date.getFullYear()}년 ${pad(date.getMonth() + 1)}월 ${pad(date.getDate())}일 ${pad(date.getHours())}시 ${pad(date.getMinutes())}분`;
 }
 
-function createFirstUseMessage(email, firstUsedAt) {
-    const address = String(email || "입력된 메일").trim();
-    return `${address}이 ${FMA_AUTH_APP_NAME}를 ${formatFirstUseTimestamp(new Date(firstUsedAt))}에 사용 신청했습니다.`;
+function createFirstUseMessage(application, firstUsedAt) {
+    const name = normalizeApplicationLine(application?.name) || "입력된 이름";
+    const address = String(application?.email || "입력된 메일").trim();
+    const organization = normalizeApplicationLine(application?.organization) || "입력된 소속";
+    const purpose = normalizeApplicationPurpose(application?.purpose) || "입력된 사용목적";
+    return `${name} · ${address} · ${organization}\n사용목적: ${purpose}\n신청시각: ${formatFirstUseTimestamp(new Date(firstUsedAt))}`;
 }
 
-function updateFirstUseMailPreview(email, firstUsedAt = new Date().toISOString()) {
+function updateFirstUseMailPreview(application = readApplicationForm(), firstUsedAt = new Date().toISOString()) {
     const preview = document.getElementById("firstUseMailPreview");
-    if (preview) preview.textContent = createFirstUseMessage(email, firstUsedAt);
+    if (preview) preview.textContent = createFirstUseMessage(application, firstUsedAt);
 }
 
 function showFirstUseError(message) {
@@ -133,11 +183,13 @@ function showFirstUseStatus(message, tone = "pending") {
 
 function setFirstUseMode(mode) {
     const button = document.getElementById("btnFirstUseContinue");
-    const emailInput = document.getElementById("firstUseGmail");
     const consentInput = document.getElementById("firstUsePrivacyConsent");
     const locked = mode === "requesting" || mode === "checking" || mode === "verifying";
 
-    if (emailInput) emailInput.disabled = locked;
+    ["firstUseGmail", "firstUseName", "firstUseOrganization", "firstUsePurpose"].forEach(id => {
+        const input = document.getElementById(id);
+        if (input) input.disabled = locked;
+    });
     if (consentInput) consentInput.disabled = locked;
     if (!button) return;
 
@@ -164,23 +216,22 @@ function unlockFirstUseModal() {
     setFirstUsePageLocked(false);
 }
 
-function showRegistrationForm(message = "", email = "", blocked = false, errorMessage = "") {
+function showRegistrationForm(message = "", email = "", blocked = false, errorMessage = "", application = {}) {
     clearRegistrationTimers();
     const modal = document.getElementById("firstUseModal");
-    const emailInput = document.getElementById("firstUseGmail");
     const consentInput = document.getElementById("firstUsePrivacyConsent");
 
     setFirstUsePageLocked(true);
     if (modal) modal.style.display = "flex";
-    if (emailInput) emailInput.value = email;
+    fillApplicationForm({ ...application, email });
     if (consentInput) consentInput.checked = false;
-    updateFirstUseMailPreview(email);
+    updateFirstUseMailPreview(readApplicationForm());
     setFirstUseMode("idle");
     showFirstUseStatus(message, blocked ? "error" : "pending");
     showFirstUseError(blocked
         ? errorMessage || "이 Gmail은 관리자에 의해 사용이 중지되었습니다. 다른 Gmail로 신청할 수 있습니다."
         : "");
-    emailInput?.focus();
+    document.getElementById("firstUseName")?.focus();
 }
 
 async function readGasJson(response) {
@@ -224,6 +275,9 @@ function describeGasError(error) {
     if (error?.message === "GAS_VERIFICATION_NOT_SENT") {
         return "현재 GAS가 이메일 인증 기능이 없는 이전 버전입니다. Auth/gas/Code.gs를 적용한 새 버전으로 재배포해 주세요.";
     }
+    if (error?.message === "GAS_SERVER_VERSION_MISMATCH") {
+        return "현재 GAS가 신청자 정보 저장 기능이 없는 이전 버전입니다. 최신 Auth/gas/Code.gs를 새 버전으로 재배포해 주세요.";
+    }
     return `신청 정보 처리 중 오류가 발생했습니다. (${error?.message || "알 수 없는 오류"})`;
 }
 
@@ -237,20 +291,23 @@ function createRegistrationRecord(email, result, requestedAt) {
         lastVerifiedAt: checkedAt,
         emailVerifiedAt: result.verifiedAt || checkedAt,
         consentedAt: requestedAt,
-        privacyPolicyVersion: String(FMA_AUTH_SETTINGS.privacyPolicyVersion || "2026-08-02"),
+        privacyPolicyVersion: String(FMA_AUTH_SETTINGS.privacyPolicyVersion || "2026-08-02-2"),
         verificationMethod: "email-link"
     };
 }
 
-function createPendingRegistrationRecord(email, requestId, result, requestedAt) {
+function createPendingRegistrationRecord(application, requestId, result, requestedAt) {
     return {
-        email,
+        email: application.email,
+        name: application.name,
+        organization: application.organization,
+        purpose: application.purpose,
         requestId,
         status: "Pending",
         requestedAt: result.requestedAt || requestedAt,
         expiresAt: result.expiresAt || "",
         consentedAt: requestedAt,
-        privacyPolicyVersion: String(FMA_AUTH_SETTINGS.privacyPolicyVersion || "2026-08-02"),
+        privacyPolicyVersion: String(FMA_AUTH_SETTINGS.privacyPolicyVersion || "2026-08-02-2"),
         verificationMethod: "email-link"
     };
 }
@@ -385,7 +442,8 @@ async function verifyBlockedStatus(record) {
     }
 }
 
-async function requestRegistration(userEmail) {
+async function requestRegistration(application) {
+    const userEmail = application.email;
     const requestedAt = new Date().toISOString();
     const requestId = createVerificationRequestId();
     clearVerificationPollTimer();
@@ -393,14 +451,20 @@ async function requestRegistration(userEmail) {
     setFirstUseMode("requesting");
     showFirstUseError("");
     showFirstUseStatus(`${userEmail}을 승인중입니다.`, "pending");
-    updateFirstUseMailPreview(userEmail, requestedAt);
+    updateFirstUseMailPreview(application, requestedAt);
 
     try {
         const result = await fetchGasJson(getRegistrationGasUrl(), {
             method: "POST",
             headers: { "Content-Type": "text/plain;charset=utf-8" },
-            body: JSON.stringify({ email: userEmail, requestId })
+            body: JSON.stringify({ ...application, requestId })
         });
+        if (
+            result?.success === true &&
+            String(result?.serverVersion || "") !== String(FMA_AUTH_SETTINGS.serverVersion || "")
+        ) {
+            throw new Error("GAS_SERVER_VERSION_MISMATCH");
+        }
         if (!result?.success || result?.blocked) {
             throw new Error(result?.message || "GAS_REGISTRATION_REJECTED");
         }
@@ -409,7 +473,7 @@ async function requestRegistration(userEmail) {
             throw new Error(result?.message || "GAS_VERIFICATION_NOT_SENT");
         }
 
-        const pendingRecord = createPendingRegistrationRecord(userEmail, requestId, result, requestedAt);
+        const pendingRecord = createPendingRegistrationRecord(application, requestId, result, requestedAt);
         saveFirstUseRecord(pendingRecord);
         removeLegacyFirstUseRecords();
         showFirstUseStatus(`${userEmail}로 인증 메일을 보냈습니다. 메일의 인증 링크를 눌러 주세요.`, "pending");
@@ -425,15 +489,23 @@ async function requestRegistration(userEmail) {
 
 async function verifyPendingRegistration(record) {
     const modal = document.getElementById("firstUseModal");
-    const emailInput = document.getElementById("firstUseGmail");
     const consentInput = document.getElementById("firstUsePrivacyConsent");
+
+    if (!hasCompleteApplicationDetails(record)) {
+        removeFirstUseRecord();
+        showRegistrationForm(
+            "신청자 정보 항목이 추가되었습니다. 이름, 소속, 사용목적을 입력하고 인증 메일을 다시 요청해 주세요.",
+            record.email || ""
+        );
+        return;
+    }
 
     clearVerificationPollTimer();
     setFirstUsePageLocked(true);
     if (modal) modal.style.display = "flex";
-    if (emailInput) emailInput.value = record.email || "";
+    fillApplicationForm(record);
     if (consentInput) consentInput.checked = true;
-    updateFirstUseMailPreview(record.email, record.requestedAt || new Date().toISOString());
+    updateFirstUseMailPreview(record, record.requestedAt || new Date().toISOString());
     showFirstUseError("");
     showFirstUseStatus(`${record.email}의 이메일 인증 응답을 기다리고 있습니다.`, "pending");
     setFirstUseMode("verifying");
@@ -488,7 +560,9 @@ async function verifyPendingRegistration(record) {
         showRegistrationForm(
             "인증 요청이 만료되었거나 취소되었습니다. 인증 메일을 다시 요청해 주세요.",
             record.email,
-            false
+            false,
+            "",
+            record
         );
     } catch (error) {
         console.warn("Email verification status check failed; retrying:", error);
@@ -500,15 +574,14 @@ async function verifyPendingRegistration(record) {
 
 async function verifyRegistration(record) {
     const modal = document.getElementById("firstUseModal");
-    const emailInput = document.getElementById("firstUseGmail");
     const consentInput = document.getElementById("firstUsePrivacyConsent");
 
     clearRegistrationTimers();
     setFirstUsePageLocked(true);
     if (modal) modal.style.display = "flex";
-    if (emailInput) emailInput.value = record.email || "";
+    fillApplicationForm({ email: record.email || "" });
     if (consentInput) consentInput.checked = true;
-    updateFirstUseMailPreview(record.email, record.requestedAt || new Date().toISOString());
+    updateFirstUseMailPreview({ email: record.email }, record.requestedAt || new Date().toISOString());
     showFirstUseError("");
     showFirstUseStatus("Google Sheet의 등록 이메일을 확인하고 있습니다…", "pending");
     setFirstUseMode("checking");
@@ -561,14 +634,28 @@ async function verifyRegistration(record) {
 }
 
 function completeFirstUseRegistration() {
-    const emailInput = document.getElementById("firstUseGmail");
     const consentInput = document.getElementById("firstUsePrivacyConsent");
-    const email = String(emailInput?.value || "").trim().toLowerCase();
+    const application = readApplicationForm();
 
     showFirstUseError("");
-    if (!isValidGmailAddress(email)) {
+    if (!application.name || application.name.length > FMA_APPLICATION_LIMITS.name) {
+        showFirstUseError("신청자 이름을 80자 이내로 입력해 주세요.");
+        document.getElementById("firstUseName")?.focus();
+        return;
+    }
+    if (!application.organization || application.organization.length > FMA_APPLICATION_LIMITS.organization) {
+        showFirstUseError("소속을 120자 이내로 입력해 주세요.");
+        document.getElementById("firstUseOrganization")?.focus();
+        return;
+    }
+    if (!isValidGmailAddress(application.email)) {
         showFirstUseError("@gmail.com 주소를 정확히 입력해 주세요.");
-        emailInput?.focus();
+        document.getElementById("firstUseGmail")?.focus();
+        return;
+    }
+    if (!application.purpose || application.purpose.length > FMA_APPLICATION_LIMITS.purpose) {
+        showFirstUseError("사용목적을 500자 이내로 입력해 주세요.");
+        document.getElementById("firstUsePurpose")?.focus();
         return;
     }
     if (!consentInput?.checked) {
@@ -577,7 +664,8 @@ function completeFirstUseRegistration() {
         return;
     }
 
-    void requestRegistration(email);
+    fillApplicationForm(application);
+    void requestRegistration(application);
 }
 
 function initFirstUseRegistration() {
@@ -587,7 +675,9 @@ function initFirstUseRegistration() {
 
     button.addEventListener("click", completeFirstUseRegistration);
     const emailInput = document.getElementById("firstUseGmail");
-    emailInput?.addEventListener("input", event => updateFirstUseMailPreview(event.currentTarget.value));
+    ["firstUseGmail", "firstUseName", "firstUseOrganization", "firstUsePurpose"].forEach(id => {
+        document.getElementById(id)?.addEventListener("input", () => updateFirstUseMailPreview());
+    });
     emailInput?.addEventListener("keydown", event => {
         if (event.key === "Enter") {
             event.preventDefault();

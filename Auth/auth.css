@@ -117,17 +117,28 @@ html.first-use-locked body {
     font-weight: 800;
 }
 
-.first-use-email-label {
+.first-use-application-grid {
     display: grid;
-    gap: 7px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
     margin-top: 18px;
 }
 
-.first-use-email-label > span {
+.first-use-field {
+    display: grid;
+    gap: 7px;
+}
+
+.first-use-field-wide {
+    grid-column: 1 / -1;
+}
+
+.first-use-field > span {
     font-weight: 850;
 }
 
-.first-use-email-label input {
+.first-use-field input,
+.first-use-field textarea {
     width: 100%;
     min-height: 48px;
     box-sizing: border-box;
@@ -140,12 +151,22 @@ html.first-use-locked body {
     outline: none;
 }
 
-.first-use-email-label input:focus {
+.first-use-field textarea {
+    min-height: 88px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+    resize: vertical;
+    font-family: inherit;
+    line-height: 1.55;
+}
+
+.first-use-field input:focus,
+.first-use-field textarea:focus {
     border-color: #72eaff;
     box-shadow: 0 0 0 3px rgba(63, 214, 239, .14);
 }
 
-.first-use-email-label small {
+.first-use-field small {
     color: rgba(235, 244, 255, .55);
 }
 
@@ -169,6 +190,7 @@ html.first-use-locked body {
     color: rgba(241, 247, 255, .88);
     line-height: 1.55;
     overflow-wrap: anywhere;
+    white-space: pre-wrap;
 }
 
 .first-use-consent-check {
@@ -310,7 +332,7 @@ html[data-theme="light"] .first-use-header p,
 html[data-theme="light"] .first-use-footer p,
 html[data-theme="light"] .first-use-notice p,
 html[data-theme="light"] .first-use-policy p,
-html[data-theme="light"] .first-use-email-label small {
+html[data-theme="light"] .first-use-field small {
     color: #5a6879;
 }
 
@@ -320,7 +342,8 @@ html[data-theme="light"] .first-use-policy {
     background: rgba(48, 171, 201, .06);
 }
 
-html[data-theme="light"] .first-use-email-label input {
+html[data-theme="light"] .first-use-field input,
+html[data-theme="light"] .first-use-field textarea {
     border-color: rgba(48, 67, 91, .22);
     color: #162335;
     background: #ffffff;
@@ -377,6 +400,14 @@ html[data-theme="light"] .first-use-footer .first-use-reset {
 
     .first-use-footer button {
         width: 100%;
+    }
+
+    .first-use-application-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .first-use-field-wide {
+        grid-column: auto;
     }
 
     .first-use-footer-actions {

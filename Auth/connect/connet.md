@@ -83,11 +83,14 @@ target-app/
       └─ README.md
 ```
 
-`Auth/gas/`는 배포용 원본 보관소이지 브라우저에서 실행할 파일이 아닙니다. 공개 저장소에 서버 설정을 올리지 않으려면 대상 앱의 `.gitignore`에도 다음 규칙을 추가합니다.
+`Auth/gas/Code.gs`는 Apps Script에 붙여넣는 배포용 원본입니다. `admin.html`에서 최신 코드를 자동으로 불러와 복사하게 하려면 `Code.gs`만 정적 배포에 포함하고 나머지 배포 메모는 제외합니다.
 
 ```gitignore
-/Auth/gas/
+/Auth/gas/*
+!/Auth/gas/Code.gs
 ```
+
+서버 원문을 공개 저장소에 올리지 않으려면 `/Auth/gas/` 전체를 제외할 수 있습니다. 이 경우 관리자 화면의 자동 불러오기는 사용할 수 없고, `로컬 Code.gs 선택`으로 파일을 직접 불러와야 합니다. `Code.gs`에는 비밀번호나 인증 토큰을 넣지 마십시오.
 
 이미 다른 위치에 인증 폴더를 둘 경우 이후 HTML의 CSS·스크립트·개인정보 처리방침 경로를 실제 위치에 맞게 바꿉니다.
 
@@ -108,7 +111,7 @@ https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit
 서버가 사용하는 `Users` 탭의 열은 다음과 같습니다.
 
 ```text
-RequestedAt | Email | Status | LastVerifiedAt | VerifiedAt | NotifiedAt | NotificationError
+RequestedAt | Email | Status | LastVerifiedAt | VerifiedAt | NotifiedAt | NotificationError | Name | Organization | Purpose
 ```
 
 `Status`는 다음 두 값만 사용합니다.
@@ -366,12 +369,12 @@ window.FMA_AUTH_SETTINGS = {
 
 1. 앱을 열었을 때 인증 팝업이 표시되고 본문이 잠기는지 확인합니다.
 2. Gmail이 아닌 주소를 입력했을 때 거절되는지 확인합니다.
-3. 테스트 Gmail과 개인정보 동의를 입력하고 신청합니다.
+3. 테스트 이름, 소속, Gmail, 사용목적과 개인정보 동의를 입력하고 신청합니다.
 4. 인증 메일의 앱 이름, 발신 표시, 만료 안내가 올바른지 확인합니다.
 5. 인증 링크를 열고 성공 페이지의 앱 이름을 확인합니다.
 6. 원래 앱 창이 자동 폴링 후 열리는지 확인합니다.
-7. Sheet `Users` 탭에 해당 이메일이 `Active`로 한 행만 생성되는지 확인합니다.
-8. 운영자 알림 메일이 `NOTIFICATION_EMAIL`에 도착하는지 확인합니다.
+7. Sheet `Users` 탭에 해당 이메일이 `Active`로 한 행만 생성되고 이름, 소속, 사용목적이 함께 기록되는지 확인합니다.
+8. 운영자 알림 메일이 `NOTIFICATION_EMAIL`에 도착하고 신청 정보가 포함되는지 확인합니다.
 
 인증 링크를 열기 전에는 신규 이메일이 `Users` 탭에 기록되지 않는 것이 정상입니다. 미인증 요청의 토큰 해시와 요청 정보는 GAS Script Properties에 제한 시간 동안 임시 저장됩니다.
 
@@ -455,10 +458,9 @@ rg -n "FMA Viewer|fma_viewer|fma_pending|shoutjoy1|script.google.com/macros/s/|d
 - 앱 전용 Sheet와 GAS 배포가 존재한다.
 - health 응답의 서비스 이름과 버전이 앱 설정과 일치한다.
 - 대상 앱이 고유한 `storagePrefix`를 사용한다.
-- 신규 Gmail 인증, Sheet `Active` 등록, 앱 잠금 해제가 정상 동작한다.
+- 신규 Gmail 인증, 신청 정보와 Sheet `Active` 등록, 앱 잠금 해제가 정상 동작한다.
 - 운영자 완료 알림이 올바른 주소로 도착한다.
 - `Blocked` 변경이 설정된 시간 안에 앱에 반영된다.
 - 관리자 페이지가 올바른 Sheet와 GAS를 가리킨다.
 - 앱 이름, 이메일, 외부 API 및 데이터 처리 내용이 개인정보 처리방침과 팝업에 정확히 반영되어 있다.
 - 원본 앱의 이름, Sheet ID, GAS URL, 이메일, 저장소 접두사가 대상 앱 파일에 남아 있지 않다.
-
