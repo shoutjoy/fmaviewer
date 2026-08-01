@@ -9,13 +9,17 @@ function renderGallery() {
         if (mediaFilter === "image") return !isVideoMedia(item);
         return true;
     });
-    if (sortMode === 'latest') sortedImages.sort((a, b) => (b.date || 0) - (a.date || 0));
-    else if (sortMode === 'oldest') sortedImages.sort((a, b) => (a.date || 0) - (b.date || 0));
+    if (sortMode === 'latest') sortedImages.sort((a, b) =>
+        getMediaCreatedTimestamp(b) - getMediaCreatedTimestamp(a) || images.indexOf(b) - images.indexOf(a));
+    else if (sortMode === 'modified') sortedImages.sort((a, b) =>
+        getMediaModifiedTimestamp(b) - getMediaModifiedTimestamp(a) || images.indexOf(b) - images.indexOf(a));
+    else if (sortMode === 'oldest') sortedImages.sort((a, b) =>
+        getMediaCreatedTimestamp(a) - getMediaCreatedTimestamp(b) || images.indexOf(a) - images.indexOf(b));
     else if (sortMode === 'size') sortedImages.sort((a, b) => (b.size || 0) - (a.size || 0));
     else if (sortMode === 'type') {
         sortedImages.sort((a, b) => {
             const typeCompare = getImageTypeLabel(a).localeCompare(getImageTypeLabel(b));
-            return typeCompare || (b.date || 0) - (a.date || 0);
+            return typeCompare || getMediaCreatedTimestamp(b) - getMediaCreatedTimestamp(a);
         });
     }
 
@@ -45,7 +49,8 @@ function renderGallery() {
         const title = document.createElement("div");
         title.className = "groupTitle";
         const sortTitles = {
-            latest: mediaFilter === "video" ? "최신 영상" : mediaFilter === "image" ? "최신 이미지" : "최신 미디어",
+            latest: mediaFilter === "video" ? "최신 생성 영상" : mediaFilter === "image" ? "최신 생성 이미지" : "최신 생성 미디어",
+            modified: mediaFilter === "video" ? "최근 수정 영상" : mediaFilter === "image" ? "최근 수정 이미지" : "최근 수정 미디어",
             oldest: mediaFilter === "video" ? "오래된 영상" : mediaFilter === "image" ? "오래된 이미지" : "오래된 미디어",
             size: "파일 크기순"
         };
@@ -64,7 +69,15 @@ function renderGallery() {
             div.appendChild(media);
             const badge = document.createElement("span");
             badge.className = `thumb-media-badge ${isVideoMedia(img) ? "video" : "image"}`;
-            badge.innerText = isVideoMedia(img) ? "▶ VIDEO" : "IMAGE";
+            if (isVideoMedia(img)) badge.innerText = "▶ VIDEO";
+            else {
+                badge.append(document.createTextNode("IMAGE"));
+                if (img.aiJenaRaw) {
+                    const raw = document.createElement("em");
+                    raw.innerText = "RAW";
+                    badge.appendChild(raw);
+                }
+            }
             div.appendChild(badge);
             const overlay = document.createElement("div");
             overlay.className = "thumb-overlay";
@@ -90,6 +103,26 @@ function renderGallery() {
     if (typeof updatePreviewPageText === "function") updatePreviewPageText();
 }
 
+function parseMediaTimestamp(value) {
+    if (value == null || value === "") return 0;
+    const numeric = Number(value);
+    if (Number.isFinite(numeric) && numeric > 0) return numeric;
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getMediaCreatedTimestamp(item) {
+    return parseMediaTimestamp(item?.createdAt) ||
+        parseMediaTimestamp(item?.metadata?.createdAt) ||
+        parseMediaTimestamp(item?.date);
+}
+
+function getMediaModifiedTimestamp(item) {
+    return parseMediaTimestamp(item?.modifiedAt) ||
+        parseMediaTimestamp(item?.metadata?.modifiedAt) ||
+        getMediaCreatedTimestamp(item);
+}
+
 function getActiveImageOrder() {
     const expected = images.map((item, index) => ({ item, index }))
         .filter(({ item }) => mediaFilter === "all" || (mediaFilter === "video") === isVideoMedia(item))
@@ -106,7 +139,7 @@ function getLatestVisibleMediaIndex() {
         .filter(({ item }) => mediaFilter === "all" ||
             (mediaFilter === "video") === isVideoMedia(item));
     if (!visible.length) return -1;
-    visible.sort((a, b) => (Number(b.item.date) || 0) - (Number(a.item.date) || 0));
+    visible.sort((a, b) => getMediaCreatedTimestamp(b.item) - getMediaCreatedTimestamp(a.item));
     return visible[0].index;
 }
 

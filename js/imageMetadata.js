@@ -37,6 +37,10 @@ function createImageMetadataCard(index, imageElement) {
         openImageMetadataEditor(index);
     };
     card.appendChild(editButton);
+    if (index === currentIndex && dom.previewBottomControls) {
+        dom.previewBottomControls.hidden = false;
+        card.appendChild(dom.previewBottomControls);
+    }
 
     const refresh = () => {
         if (imageElement?.naturalWidth) {
@@ -71,7 +75,7 @@ function renderImageMetadataSummary(container, item) {
         ["종류", getImageTypeLabel(item)],
         ["해상도", width && height ? `${width} × ${height}` : "확인 중"],
         ["비율", ratio],
-        ["생성일", formatMetadataDate(item.date)],
+        ["생성일", formatMetadataDate(item.createdAt || item.date)],
         ["그룹", item.group || "미지정"]
     ];
     if (isVideoMedia(item) && Number(item.duration) > 0) {
@@ -141,7 +145,7 @@ async function openImageMetadataEditor(index) {
     const metadata = item.metadata || {};
     dom.metadataPath.value = item.path || "";
     dom.metadataGroup.value = item.group || "";
-    dom.metadataCreatedAt.value = toMetadataDateTimeLocal(item.date);
+    dom.metadataCreatedAt.value = toMetadataDateTimeLocal(item.createdAt || item.date);
     dom.metadataTitleField.value = metadata.title || "";
     dom.metadataAuthor.value = metadata.author || "";
     dom.metadataCopyright.value = metadata.copyright || "";
@@ -171,7 +175,7 @@ function buildMetadataPopupPayload(item, index) {
         item: {
             path: item.path || "",
             group: item.group || "",
-            createdAt: toMetadataDateTimeLocal(item.date),
+            createdAt: toMetadataDateTimeLocal(item.createdAt || item.date),
             metadata: typeof structuredClone === "function"
                 ? structuredClone(item.metadata || {})
                 : JSON.parse(JSON.stringify(item.metadata || {}))
@@ -216,7 +220,10 @@ function handleMetadataWindowMessage(event) {
     const parsedDate = Date.parse(values.createdAt);
     item.path = values.path || item.path;
     item.group = values.group || "added";
-    if (Number.isFinite(parsedDate)) item.date = parsedDate;
+    if (Number.isFinite(parsedDate)) {
+        item.createdAt = parsedDate;
+        item.date = parsedDate;
+    }
     item.modifiedAt = Date.now();
     item.metadata = values.metadata || {};
     renderGallery();
@@ -290,7 +297,10 @@ function saveImageMetadata() {
     const parsedDate = Date.parse(dom.metadataCreatedAt.value);
     item.path = dom.metadataPath.value.trim() || item.path;
     item.group = dom.metadataGroup.value.trim() || "added";
-    if (Number.isFinite(parsedDate)) item.date = parsedDate;
+    if (Number.isFinite(parsedDate)) {
+        item.createdAt = parsedDate;
+        item.date = parsedDate;
+    }
     item.modifiedAt = Date.now();
     item.metadata = {
         title: dom.metadataTitleField.value.trim(),

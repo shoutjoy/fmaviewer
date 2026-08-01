@@ -133,8 +133,10 @@ function setupEventListeners() {
     };
 
     dom.btnAddImg.onclick = () => dom.addImgInput.click();
+    dom.btnOpenFolder.onclick = () => dom.folderImgInput.click();
     dom.btnImportImages.onclick = () => dom.addImgInput.click();
     dom.btnImportZip.onclick = () => dom.zipImgInput.click();
+    dom.btnImportFolder.onclick = () => dom.folderImgInput.click();
     dom.btnPasteImg.onclick = importClipboardImages;
     dom.addImgInput.onchange = async (e) => {
         await handleAddImages(Array.from(e.target.files));
@@ -142,6 +144,10 @@ function setupEventListeners() {
     };
     dom.zipImgInput.onchange = async (e) => {
         await handleImportFiles(Array.from(e.target.files));
+        e.target.value = "";
+    };
+    dom.folderImgInput.onchange = async (e) => {
+        await handleImportFolder(Array.from(e.target.files));
         e.target.value = "";
     };
     dom.btnSave.onclick = saveFMA;
@@ -152,7 +158,7 @@ function setupEventListeners() {
     dom.btnZip.onclick = downloadAllAsZIP;
     dom.btnRestoreRemove.onclick = restoreLastDeleted;
     dom.btnRestore.onclick = restoreLastSession;
-    [dom.btnOpen, dom.btnSave, dom.btnZip, dom.btnAddImg].forEach(button => {
+    [dom.btnOpen, dom.btnSave, dom.btnZip, dom.btnAddImg, dom.btnOpenFolder].forEach(button => {
         button.addEventListener("click", closeFileMenu);
     });
     [dom.btnSaveDbSnapshot, dom.btnOpenDbHistory].forEach(button => {

@@ -12,6 +12,7 @@ var cropState = {
     dragMode: null,
     moveOffsetX: 0,
     moveOffsetY: 0,
+    resizeRatio: null,
     selectionCanMove: false,
     aspectRatio: null,
     previewSrc: "",
@@ -142,6 +143,7 @@ function sizeCropCanvas(image) {
 function closeCropEditor() {
     if (!dom.cropModal) return;
     dom.cropModal.style.display = "none";
+    dom.cropModal.classList.remove("ai-jena-child-workspace");
     document.body.classList.remove("crop-open");
     cropState.imageIndex = -1;
     cropState.image = null;
@@ -192,8 +194,18 @@ function startCropSelection(event) {
     if (!cropState.image) return;
     const point = getCropPointer(event);
     cropState.dragging = true;
+    const resizeHandle = getCropResizeHandle(point);
 
-    if (cropState.selectionCanMove && isPointInCropSelection(point)) {
+    if (resizeHandle) {
+        cropState.dragMode = `resize-${resizeHandle}`;
+        cropState.startX = resizeHandle === "sw"
+            ? cropState.selection.x + cropState.selection.width
+            : cropState.selection.x;
+        cropState.startY = cropState.selection.y;
+        cropState.resizeRatio = cropState.aspectRatio ||
+            (dom.cropAspectLock.checked ? cropState.selection.width / cropState.selection.height : null);
+        dom.cropCanvas.style.cursor = resizeHandle === "sw" ? "nesw-resize" : "nwse-resize";
+    } else if (cropState.selectionCanMove && isPointInCropSelection(point)) {
         cropState.dragMode = "move";
         cropState.moveOffsetX = point.x - cropState.selection.x;
         cropState.moveOffsetY = point.y - cropState.selection.y;
@@ -215,8 +227,10 @@ function updateCropSelection(event) {
     const point = getCropPointer(event);
 
     if (!cropState.dragging) {
-        dom.cropCanvas.style.cursor =
-            cropState.selectionCanMove && isPointInCropSelection(point) ? "move" : "crosshair";
+        const handle = getCropResizeHandle(point);
+        dom.cropCanvas.style.cursor = handle
+            ? handle === "sw" ? "nesw-resize" : "nwse-resize"
+            : cropState.selectionCanMove && isPointInCropSelection(point) ? "move" : "crosshair";
         return;
     }
 
@@ -228,6 +242,16 @@ function updateCropSelection(event) {
         cropState.selection.y = Math.max(
             0,
             Math.min(dom.cropCanvas.height - cropState.selection.height, point.y - cropState.moveOffsetY)
+        );
+    } else if (cropState.dragMode?.startsWith("resize-")) {
+        cropState.selection = calculateCropSelection(
+            cropState.startX,
+            cropState.startY,
+            point.x,
+            point.y,
+            cropState.resizeRatio,
+            dom.cropCanvas.width,
+            dom.cropCanvas.height
         );
     } else {
         cropState.selection = calculateCropSelection(
@@ -248,6 +272,7 @@ function finishCropSelection(event) {
     if (!cropState.dragging) return;
     cropState.dragging = false;
     cropState.dragMode = null;
+    cropState.resizeRatio = null;
     if (dom.cropCanvas.hasPointerCapture(event.pointerId)) {
         dom.cropCanvas.releasePointerCapture(event.pointerId);
     }
@@ -267,6 +292,19 @@ function isPointInCropSelection(point) {
         point.x <= selection.x + selection.width &&
         point.y >= selection.y &&
         point.y <= selection.y + selection.height;
+}
+
+function getCropResizeHandle(point) {
+    const selection = cropState.selection;
+    if (!selection || selection.width < 3 || selection.height < 3) return null;
+    const hitRadius = 14;
+    const handles = [
+        { name: "sw", x: selection.x, y: selection.y + selection.height },
+        { name: "se", x: selection.x + selection.width, y: selection.y + selection.height }
+    ];
+    return handles.find(handle =>
+        Math.hypot(point.x - handle.x, point.y - handle.y) <= hitRadius
+    )?.name || null;
 }
 
 function calculateCropSelection(startX, startY, endX, endY, ratio, maxWidth, maxHeight) {
@@ -341,6 +379,18 @@ function drawCropEditor() {
     context.moveTo(selection.x, selection.y + selection.height * 2 / 3);
     context.lineTo(selection.x + selection.width, selection.y + selection.height * 2 / 3);
     context.stroke();
+
+    const handleRadius = 7;
+    [selection.x, selection.x + selection.width].forEach(handleX => {
+        context.beginPath();
+        context.arc(handleX, selection.y + selection.height, handleRadius, 0, Math.PI * 2);
+        context.fillStyle = "#a5ff8a";
+        context.fill();
+        context.lineWidth = 2;
+        context.strokeStyle = "#102015";
+        context.setLineDash([]);
+        context.stroke();
+    });
     context.restore();
 
     updateCropSelectionInfo();
@@ -492,9 +542,11 @@ function createCroppedImage(saveMode) {
         let resultIndex = sourceIndex;
 
         if (saveMode === "replace") {
+            const editTime = Date.now();
+            sourceItem.createdAt = sourceItem.createdAt || sourceItem.date || editTime;
             sourceItem.src = croppedSource;
             sourceItem.size = estimateDataUrlBytes(croppedSource);
-            sourceItem.date = Date.now();
+            sourceItem.modifiedAt = editTime;
             sourceItem.mimeType = "image/png";
             sourceItem.cropRect = sourceRect;
             applyDerivedImageMetadata(
@@ -511,6 +563,7 @@ function createCroppedImage(saveMode) {
                 path: `${sourceItem.path}.crop_${cropNumber}`,
                 group: "cropped",
                 date: Date.now(),
+                createdAt: Date.now(),
                 size: estimateDataUrlBytes(croppedSource),
                 mimeType: "image/png",
                 isFav: false,

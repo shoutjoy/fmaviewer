@@ -13,7 +13,8 @@
     }
     * { box-sizing:border-box; }
     html,body { margin:0; min-height:100%; background:var(--bg); color:var(--text); font-family:Inter,Segoe UI,sans-serif; }
-    button,input,textarea,select { font:inherit; }
+    body { --story-ui-font-size:10px; font-size:var(--story-ui-font-size); }
+    button,input,textarea,select { font-family:inherit; font-size:var(--story-ui-font-size); }
     button { border:1px solid var(--line); border-radius:10px; background:#222b3a; color:var(--text); padding:9px 12px; cursor:pointer; font-weight:800; }
     button:hover { border-color:#5b6b82; transform:translateY(-1px); }
     button:disabled { opacity:.45; cursor:not-allowed; transform:none; }
@@ -27,7 +28,12 @@
     header { position:sticky; top:0; z-index:5; display:flex; align-items:center; justify-content:space-between; gap:14px; padding:13px 18px; border-bottom:1px solid var(--line); background:rgba(15,21,30,.96); backdrop-filter:blur(12px); }
     .brand strong { display:block; font-size:16px; }
     .brand small { color:var(--muted); font-size:10px; }
-    .header-actions { display:flex; flex-wrap:wrap; gap:7px; }
+    .header-actions { display:flex; flex-wrap:wrap; align-items:center; gap:7px; }
+    .font-controls { display:flex; align-items:center; gap:4px; padding:3px; border:1px solid var(--line); border-radius:10px; background:#111824; }
+    .font-controls button { width:29px; height:29px; padding:0; }
+    .font-controls span { min-width:34px; color:var(--accent); text-align:center; font-weight:800; }
+    #settingsBtn { order:99; width:34px; height:34px; padding:0; border-radius:50%; font-size:15px; }
+    .header-actions .insert-position { width:72px; padding:8px; }
     main { flex:1; display:grid; grid-template-columns:minmax(280px,360px) 1fr; min-height:0; }
     aside { padding:16px; border-right:1px solid var(--line); background:#0e141d; overflow:auto; }
     .workspace { padding:16px; overflow:auto; }
@@ -41,10 +47,15 @@
     .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
     .key-source { margin:7px 0 0; color:var(--muted); font-size:9px; line-height:1.45; }
     .key-source.shared { color:#8ef6bc; } .key-source.app { color:#cbb8ff; } .key-source.none { color:#ffbc88; }
-    .reference-drop { min-height:132px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; border:1px dashed #40506a; border-radius:13px; background:#0c121a; text-align:center; overflow:hidden; cursor:pointer; }
-    .reference-drop img { max-width:100%; max-height:210px; object-fit:contain; display:none; }
-    .reference-drop strong { color:var(--accent); font-size:12px; }
+    .reference-drop { min-height:76px; padding:8px; border:1px dashed #40506a; border-radius:13px; background:#0c121a; text-align:center; overflow:hidden; }
+    .reference-grid { width:100%; display:grid; grid-template-columns:repeat(auto-fill,minmax(52px,1fr)); gap:6px; }
+    .reference-item { position:relative; aspect-ratio:1; max-height:66px; border:1px solid var(--line); border-radius:9px; overflow:hidden; background:#080d13; }
+    .reference-item img { width:100%; height:100%; object-fit:contain; display:block; }
+    .reference-item button { position:absolute; top:3px; right:3px; width:22px; height:22px; padding:0; border-radius:50%; background:#5d1f2a; }
+    .reference-drop strong { color:var(--accent); font-size:10px; }
     .reference-drop small { color:var(--muted); font-size:9px; }
+    .reference-actions { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-top:7px; }
+    .reference-actions button { padding:8px 5px; font-size:9px; }
     .progress { height:7px; border-radius:999px; background:#263141; overflow:hidden; }
     .progress > div { width:0; height:100%; background:linear-gradient(90deg,var(--accent),var(--green)); transition:width .25s; }
     #status { min-height:18px; margin-top:8px; color:var(--muted); font-size:10px; }
@@ -52,14 +63,38 @@
     .scene { border:1px solid var(--line); border-radius:13px; background:var(--panel2); padding:12px; }
     .scene-head { display:flex; justify-content:space-between; gap:8px; margin-bottom:8px; }
     .scene-head strong { font-size:11px; color:var(--accent); }
-    .scene textarea { min-height:88px; font-size:10px; }
+    .scene textarea { min-height:88px; font-size:var(--scene-font,12px); }
+    .scene-tools { display:flex; align-items:center; gap:5px; margin-top:8px; padding:6px; border:1px solid #2e394a; border-radius:11px; background:#0c121a; }
+    .scene-tools button { min-height:30px; padding:5px 7px; font-size:9px; border-radius:8px; }
+    .scene-tools .font-step { width:32px; min-width:32px; padding:0; font-size:15px; }
+    .scene-tools .translate-one { width:34px; min-width:34px; padding:0; }
+    .scene-tools .viewer-icon { padding:5px; color:#bbf3ff; font-size:14px; }
+    .scene-tools .viewer-icon { width:32px; min-width:32px; margin-left:auto; }
+    .scene-tools .generate-one { width:34px; min-width:34px; height:34px; padding:0; border-radius:10px; color:#061017; border-color:transparent; background:linear-gradient(135deg,var(--accent),var(--green)); box-shadow:0 5px 14px rgba(132,232,255,.18); font-size:15px; }
+    .scene-order { display:flex; gap:4px; margin-left:auto; }
+    .scene-order button { width:25px; height:25px; min-height:25px; padding:0; border-radius:7px; color:#bdeeff; }
+    .scene-card-progress { display:none; margin-top:8px; padding:7px 8px; border:1px solid #315367; border-radius:9px; background:#0b1821; }
+    .scene-card-progress.active { display:block; }
+    .scene-card-progress-line { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:5px; color:#aef3d4; font-size:8px; }
+    .scene-card-progress-track { height:6px; overflow:hidden; border-radius:999px; background:#253140; }
+    .scene-card-progress-fill { width:0; height:100%; border-radius:inherit; background:linear-gradient(90deg,#9c8cff,#75dfff,#91ffae); transition:width .25s ease; }
+    .scene-match { display:grid; grid-template-columns:72px 1fr; gap:9px; align-items:center; margin-top:9px; padding:8px; border:1px solid #34445a; border-radius:11px; background:#0b121b; }
+    .scene-match.empty { display:block; min-height:0; text-align:left; }
+    .scene-match img { width:72px; height:58px; object-fit:contain; border-radius:8px; background:#05090e; cursor:zoom-in; }
+    .scene-match-copy { min-width:0; }
+    .scene-match-copy strong,.scene-match-copy small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .scene-match-copy strong { color:#dff8ff; font-size:10px; }
+    .scene-match-copy small { margin-top:3px; color:var(--muted); font-size:8px; }
+    .scene-match-actions { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:8px; }
+    .scene-match-button { width:100%; border-color:#376f7d; color:#baf7ff; background:#102630; }
+    .scene-match-clear { width:100%; border-color:#62414a; color:#ffc2ca; background:#281820; }
     .history-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:12px 0 10px; }
     .history-head h2 { margin:0; font-size:14px; }
     .history-actions { display:flex; flex-wrap:wrap; gap:6px; }
     .history { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:12px; }
     .card { position:relative; border:1px solid var(--line); border-radius:14px; background:#101620; overflow:hidden; }
     .card.selected { border-color:#84e8ff; box-shadow:0 0 0 2px rgba(132,232,255,.13); }
-    .card img { width:100%; aspect-ratio:1/1; display:block; object-fit:contain; background:#090d13; }
+    .card img { width:100%; aspect-ratio:1/1; display:block; object-fit:contain; background:#090d13; cursor:zoom-in; }
     .card-info { padding:9px; }
     .card-info strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px; }
     .card-info small { display:block; margin-top:4px; color:var(--muted); font-size:8px; }
@@ -76,6 +111,64 @@
     .modal-body { padding:15px; }
     .toast { position:fixed; right:18px; bottom:18px; z-index:30; max-width:360px; padding:11px 14px; border:1px solid #406176; border-radius:11px; background:#172533; color:#dff8ff; font-size:10px; opacity:0; transform:translateY(20px); pointer-events:none; transition:.2s; }
     .toast.show { opacity:1; transform:none; }
+    .reader-panel { position:fixed; z-index:14; top:64px; right:0; bottom:0; width:min(480px,92vw); padding:16px; overflow:auto; border-left:1px solid #44536a; background:#0d141e; box-shadow:-20px 0 55px rgba(0,0,0,.45); transform:translateX(102%); transition:.22s; }
+    .reader-panel.open { transform:none; }
+    .reader-head { position:sticky; top:-16px; z-index:2; display:flex; align-items:center; justify-content:space-between; padding:12px 0; background:#0d141e; }
+    .reader-scene { margin-bottom:12px; padding:14px; border:1px solid var(--line); border-radius:13px; background:var(--panel); }
+    .reader-scene h3 { color:var(--accent); font-size:15px; }
+    .reader-scene p { white-space:pre-wrap; font-size:14px; line-height:1.75; }
+    .history-preview { display:none; margin-top:14px; padding:14px; border:1px solid var(--line); border-radius:15px; background:#0d141e; }
+    .history-preview.open { display:grid; grid-template-columns:minmax(240px,1fr) minmax(220px,340px); gap:14px; }
+    .history-preview img { width:100%; max-height:68vh; object-fit:contain; background:#070b10; border-radius:12px; }
+    .preview-actions { display:flex; flex-wrap:wrap; align-content:flex-start; gap:7px; }
+    .preview-actions h3 { width:100%; margin:0 0 5px; }
+    #imageViewerModal { padding:0; background:rgba(0,0,0,.88); }
+    .viewer-box { width:100vw; height:100dvh; max-width:none; display:flex; flex-direction:column; border:0; border-radius:0; }
+    .viewer-box .modal-head { flex:0 0 auto; min-height:54px; }
+    .viewer-box .modal-foot { flex:0 0 auto; min-height:58px; }
+    .viewer-stage { flex:1; min-height:0; position:relative; overflow:hidden; background:#06090e; cursor:grab; }
+    .viewer-stage.dragging { cursor:grabbing; }
+    .viewer-stage img { position:absolute; left:50%; top:50%; max-width:none; transform-origin:center; user-select:none; pointer-events:none; }
+    .viewer-tools { display:flex; flex-wrap:wrap; gap:7px; align-items:center; }
+    .viewer-tools .spacer { flex:1; }
+    .character-label-row { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; }
+    .character-label-row span { color:#cdd8e7; font-size:10px; font-weight:800; }
+    #extractCharacterBtn { display:none; padding:5px 9px; border-color:#397383; color:#bff7ff; background:#102832; font-size:9px; }
+    .export-dock { position:fixed; z-index:13; right:18px; top:50%; display:flex; align-items:flex-start; transform:translateY(-50%); filter:drop-shadow(0 16px 34px rgba(0,0,0,.42)); }
+    .export-dock-toggle { width:42px; height:42px; padding:0; border-radius:50%; border-color:#4b6f83; background:linear-gradient(145deg,#17344a,#15202d); color:#9eecff; font-size:10px; font-weight:900; letter-spacing:.04em; }
+    .export-dock-panel { display:none; width:220px; margin-right:8px; padding:11px; border:1px solid #40536b; border-radius:16px; background:rgba(14,21,31,.98); }
+    .export-dock.open .export-dock-panel { display:block; }
+    .export-dock-panel strong { display:block; margin-bottom:4px; color:#dff7ff; font-size:11px; }
+    .export-dock-panel small { display:block; margin-bottom:9px; color:var(--muted); line-height:1.45; }
+    .export-option-list { display:grid; gap:6px; }
+    .export-option-list button { display:flex; align-items:center; gap:8px; width:100%; padding:8px 9px; text-align:left; }
+    .export-option-list button span { width:22px; font-size:15px; text-align:center; }
+    .export-import { margin-top:9px; padding-top:9px; border-top:1px solid var(--line); }
+    .export-busy { margin-top:8px; color:#8ff0c1; min-height:14px; font-size:9px; }
+    /* 상단 글자 크기 조절값을 실제 Story UI 전체에 연결합니다. 장면 본문은
+       각 카드의 전용 +/- 설정을 그대로 사용합니다. */
+    .brand strong { font-size:calc(var(--story-ui-font-size) + 6px); }
+    .brand small { font-size:var(--story-ui-font-size); }
+    .panel-title strong,
+    .scene-head strong,
+    .history-head h2 { font-size:calc(var(--story-ui-font-size) + 2px); }
+    .field > span,
+    .reference-drop strong,
+    #status,
+    .scene-match-copy strong,
+    .card-info strong,
+    .toast { font-size:var(--story-ui-font-size); }
+    .key-source,
+    .reference-drop small,
+    .reference-actions button,
+    .scene-tools button,
+    .scene-tools .font-value,
+    .card-buttons button { font-size:max(7px, calc(var(--story-ui-font-size) - 1px)); }
+    .scene-match-copy small,
+    .card-info small { font-size:max(7px, calc(var(--story-ui-font-size) - 2px)); }
+    .reader-scene h3 { font-size:calc(var(--story-ui-font-size) + 5px); }
+    .reader-scene p { font-size:calc(var(--story-ui-font-size) + 4px); }
+    .scene-tools .viewer-icon { font-size:calc(var(--story-ui-font-size) + 4px); }
     @media (max-width:820px) { main { grid-template-columns:1fr; } aside { border-right:0; border-bottom:1px solid var(--line); } }
   </style>
 </head>
@@ -87,10 +180,18 @@
       <small>외부 실행 라이브러리 없이 브라우저에서 직접 실행됩니다.</small>
     </div>
     <div class="header-actions">
-      <button id="settingsBtn" type="button">⚙ API 설정</button>
+      <button id="makeScenesBtn" class="purple" type="button">make Story</button>
+      <button id="generateBtn" class="primary" type="button">Make All Scene</button>
+      <button id="fullscreenBtn" type="button" title="Story Image 전체화면">⛶ 전체화면</button>
       <button id="stopAiBtn" class="danger" type="button" style="display:none">■ AI 정지</button>
-      <button id="selectedToFmaBtn" class="purple" type="button">선택 이미지 넣기</button>
-      <button id="allToFmaBtn" class="primary" type="button">히스토리 모두 넣기</button>
+      <button id="selectedToFmaBtn" class="purple" type="button">갤러리에 추가</button>
+      <button id="allToFmaBtn" class="primary" type="button">All2G</button>
+      <div class="font-controls" aria-label="Story Image 글자 크기">
+        <button id="storyFontDownBtn" type="button" title="글자 작게">−</button>
+        <span id="storyFontValue">10px</span>
+        <button id="storyFontUpBtn" type="button" title="글자 크게">＋</button>
+      </div>
+      <button id="settingsBtn" type="button" title="API 설정" aria-label="API 설정">⚙</button>
     </div>
   </header>
 
@@ -100,43 +201,50 @@
         <div class="panel-title"><strong>1. 캐릭터 참고 이미지</strong></div>
         <div class="panel-body">
           <div id="referenceDrop" class="reference-drop" tabindex="0">
-            <img id="referencePreview" alt="캐릭터 참고 이미지">
+            <div id="referenceGrid" class="reference-grid"></div>
             <div id="referenceHint">
-              <strong>이미지 선택 또는 드래그</strong>
-              <small>얼굴과 캐릭터 일관성 유지에 사용합니다.</small>
+              <strong>참고 이미지 없음</strong>
+              <small>PC, FMA 갤러리 또는 붙여넣기로 필요한 이미지만 추가하세요.</small>
             </div>
           </div>
-          <input id="referenceInput" type="file" accept="image/*" hidden>
-          <button id="clearReferenceBtn" type="button" style="width:100%;margin-top:7px">참고 이미지 비우기</button>
+          <input id="referenceInput" type="file" accept="image/*" multiple hidden>
+          <div class="reference-actions">
+            <button id="referencePcBtn" type="button">▧ PC</button>
+            <button id="referenceFmaBtn" type="button">◉ FMA</button>
+            <button id="referencePasteBtn" type="button">▣ 붙여넣기</button>
+          </div>
+          <button id="clearReferenceBtn" type="button" style="width:100%;margin-top:7px">입력 이미지 모두 삭제</button>
         </div>
       </section>
 
       <section class="panel">
         <div class="panel-title"><strong>2. 스토리 구성</strong></div>
         <div class="panel-body">
-          <label class="field"><span>캐릭터 설명</span><textarea id="characterText" placeholder="인물의 외모, 의상, 표정과 유지할 특징"></textarea></label>
+          <label class="field"><span class="character-label-row"><span>캐릭터 설명</span><button id="extractCharacterBtn" type="button">✦ 특징 추출</button></span><textarea id="characterText" placeholder="인물의 외모, 의상, 표정과 유지할 특징"></textarea></label>
           <label class="field"><span>스토리 개요</span><textarea id="storyText" placeholder="만들고 싶은 이야기와 장면 흐름"></textarea></label>
           <div class="grid2">
             <label class="field"><span>장면 수</span><input id="sceneCount" type="number" min="1" max="12" value="4"></label>
-            <label class="field"><span>화면 비율</span><select id="aspectRatio"><option>16:9</option><option>9:16</option><option>3:4</option><option>1:1</option></select></label>
+            <label class="field"><span>화면 비율</span><select id="aspectRatio"><option selected>9:16</option><option>16:9</option><option>3:4</option><option>1:1</option></select></label>
           </div>
           <label class="field"><span>이미지 스타일</span>
             <select id="imageStyle">
+              <option value="hyperreal-photo">극사실주의 포토</option>
               <option value="cinematic semi-realistic">시네마틱 반실사</option>
               <option value="photorealistic">포토리얼</option>
               <option value="anime illustration">애니메이션 일러스트</option>
               <option value="storybook watercolor">동화 수채화</option>
               <option value="3D animation">3D 애니메이션</option>
+              <option value="one-piece manga">원피스형 만화</option>
+              <option value="ghibli-inspired">지브리형</option>
+              <option value="korean webtoon realistic">한국 웹툰 실사</option>
             </select>
           </label>
-          <button id="makeScenesBtn" class="purple" type="button" style="width:100%">장면 구성 만들기</button>
         </div>
       </section>
 
       <section class="panel">
         <div class="panel-title"><strong>3. 이미지 생성</strong></div>
         <div class="panel-body">
-          <button id="generateBtn" class="primary" type="button" style="width:100%">모든 장면 이미지 생성</button>
           <div class="progress" style="margin-top:11px"><div id="progressBar"></div></div>
           <div id="status">실행 준비</div>
         </div>
@@ -146,7 +254,12 @@
     <section class="workspace">
       <div class="history-head" style="margin-top:0">
         <h2>장면 프롬프트</h2>
-        <button id="addSceneBtn" type="button">＋ 장면 추가</button>
+        <div class="history-actions">
+          <button id="readScenesBtn" type="button">Read</button>
+          <button id="translateAllBtn" type="button">EN → KO 빠른 번역</button>
+          <input id="insertScenePosition" class="insert-position" type="number" min="1" value="2" title="추가할 페이지 번호">
+          <button id="addSceneBtn" type="button">＋ 장면 추가</button>
+        </div>
       </div>
       <div id="sceneList" class="scene-list"></div>
 
@@ -160,8 +273,40 @@
       </div>
       <div id="history" class="history"></div>
       <div id="emptyHistory" class="empty">생성된 이미지가 없습니다.<br>왼쪽에서 스토리를 구성하고 이미지를 생성하세요.</div>
+      <section id="historyPreview" class="history-preview">
+        <img id="historyPreviewImage" alt="선택한 생성 이미지">
+        <div class="preview-actions">
+          <h3 id="historyPreviewTitle">생성 이미지</h3>
+          <button id="openLargeViewerBtn" type="button">크게 보기</button>
+          <button id="previewToGalleryBtn" class="primary" type="button">갤러리에 추가</button>
+          <button id="previewEditBtn" type="button">Edit</button>
+          <button id="previewCropBtn" type="button">Crop</button>
+          <button id="previewBgBtn" type="button">BG Remove</button>
+        </div>
+      </section>
     </section>
   </main>
+</div>
+
+<aside id="readerPanel" class="reader-panel" aria-label="장면 읽기 패널">
+  <div class="reader-head"><strong id="readerTitle">전체 장면 읽기</strong><button id="closeReaderBtn" type="button">×</button></div>
+  <div id="readerContent"></div>
+</aside>
+
+<div id="imageViewerModal" class="modal" role="dialog" aria-modal="true">
+  <section class="modal-box viewer-box">
+    <div class="modal-head viewer-tools">
+      <strong id="viewerTitle">생성 이미지 크게 보기</strong>
+      <button id="viewerZoomOut" type="button">−</button><span id="viewerZoomLabel">100%</span><button id="viewerZoomIn" type="button">＋</button>
+      <button id="viewerReset" type="button">원위치</button><button id="viewerFullscreenBtn" type="button" title="이미지 보기 전체화면">⛶</button>
+      <span class="spacer"></span><button id="closeViewerBtn" type="button">×</button>
+    </div>
+    <div id="viewerStage" class="viewer-stage"><img id="viewerImage" alt="확대 이미지"></div>
+    <div class="modal-foot">
+      <button id="viewerEditBtn" type="button">Edit</button><button id="viewerCropBtn" type="button">Crop</button><button id="viewerBgBtn" type="button">BG Remove</button>
+      <button id="viewerToGalleryBtn" class="primary" type="button">갤러리에 추가</button>
+    </div>
+  </section>
 </div>
 
 <div id="settingsModal" class="modal" role="dialog" aria-modal="true">
@@ -177,12 +322,37 @@
       <p id="apiKeySource" class="key-source none">키 상태 확인 중…</p>
       <p style="color:var(--muted);font-size:9px;line-height:1.55">전용 키를 저장하면 Story Image만 해당 키를 사용합니다. 전용 키가 없으면 FMA Viewer 설정에서 적용한 공통 키를 사용합니다.</p>
       <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" style="color:var(--accent);font-size:10px">Google AI Studio에서 API 키 발급 ↗</a>
+      <details style="margin-top:13px;border:1px solid var(--line);border-radius:11px;background:#0c121a;padding:10px">
+        <summary style="cursor:pointer;color:var(--accent);font-weight:800">이미지 스타일 프롬프트 보기</summary>
+        <div id="stylePromptList" style="margin-top:9px;color:#cbd7e7;line-height:1.6;white-space:pre-wrap"></div>
+      </details>
     </div>
     <div class="modal-foot">
       <button id="useSharedKeyBtn" type="button">공통 키 사용</button>
       <button id="saveKeyBtn" class="primary" type="button">전용 키 저장</button>
     </div>
   </section>
+</div>
+<div id="exportDock" class="export-dock" aria-label="스토리보드 내보내기">
+  <div class="export-dock-panel">
+    <strong>스토리보드 백업·다운로드</strong>
+    <small>장면 프롬프트와 연결된 이미지를 내보냅니다.</small>
+    <div class="export-option-list">
+      <button type="button" data-story-export="mdd"><span>🧩</span>MDD 파일 (.mdd)</button>
+      <button type="button" data-story-export="markdown"><span>📦</span>md파일 (.zip)</button>
+      <button type="button" data-story-export="docx"><span>📄</span>MS Word 문서 (.docx)</button>
+      <button type="button" data-story-export="pdf"><span>📑</span>PDF 스토리보드 (.pdf)</button>
+      <button type="button" data-story-export="fmj"><span>🗂</span>데이터 백업 (.fmj)</button>
+    </div>
+    <div class="export-import">
+      <button id="importMddBtn" type="button" style="width:100%">↥ MDD 불러오기</button>
+      <input id="importMddInput" type="file" accept="application/json,.mdd" hidden>
+      <button id="importStoryBtn" type="button" style="width:100%">↥ fmj 불러오기</button>
+      <input id="importStoryInput" type="file" accept="application/json,.fmj,.json" hidden>
+    </div>
+    <div id="exportBusy" class="export-busy"></div>
+  </div>
+  <button id="exportDockToggle" class="export-dock-toggle" type="button" title="스토리보드 백업·다운로드" aria-label="내보내기">EXT</button>
 </div>
 <div id="toast" class="toast"></div>
 
@@ -195,15 +365,30 @@
   const STORE = "history";
   const TEXT_MODEL = "gemini-2.5-flash";
   const IMAGE_MODEL = "gemini-3.1-flash-image";
+  const STORY_FONT_KEY = "fma.storyHtml.uiFontSize.v1";
+  const IMAGE_STYLE_PROMPTS = {
+    "hyperreal-photo":"Ultra-photorealistic editorial photograph with physically accurate skin texture, visible natural pores, fine lip lines and subtle wrinkles, individual eyelashes and flyaway hairs, realistic subsurface scattering, anatomically accurate details, true-to-life fabric fibers, natural tonal transitions, high dynamic range and professional full-frame camera detail. Preserve identity and avoid plastic, waxy, airbrushed or over-smoothed skin.",
+    "cinematic semi-realistic":"Cinematic semi-realistic image, refined natural facial detail, dramatic but believable lighting, filmic color grading and dimensional atmosphere.",
+    "photorealistic":"Photorealistic professional photograph with natural skin, accurate anatomy, realistic materials, balanced lighting and clean camera detail.",
+    "anime illustration":"Polished anime illustration with expressive linework, controlled cel shading, detailed hair and cohesive character design.",
+    "storybook watercolor":"Storybook watercolor illustration with soft pigment texture, delicate edges, elegant color washes and warm narrative atmosphere.",
+    "3D animation":"High-quality 3D animated feature-film style with refined materials, expressive character design, cinematic lighting and clean rendering.",
+    "one-piece manga":"Energetic Japanese adventure manga aesthetic inspired by expressive pirate comics: bold elastic linework, highly readable silhouettes, dynamic foreshortening, vivid colors, exaggerated but coherent facial expressions, adventurous staging and detailed hand-drawn backgrounds. Create an original character and composition without copying any existing copyrighted character.",
+    "ghibli-inspired":"Warm hand-painted Japanese animation aesthetic with delicate pencil-like outlines, soft natural colors, luminous skies, richly observed everyday environments, gentle facial expressions and poetic cinematic atmosphere. Create an original scene without reproducing any existing studio character.",
+    "korean webtoon realistic":"Premium Korean realistic webtoon style combining lifelike facial anatomy, refined skin and hair rendering, elegant fashion detail, cinematic lighting, clean digital linework and polished vertical-webtoon color grading. Preserve a convincing photographic identity while retaining sophisticated illustrated finish."
+  };
   let hostSharedKey = "";
-  let referenceDataUrl = "";
-  let referenceMime = "image/png";
+  let referenceImages = [];
   let scenes = [];
   let history = [];
   let selectedIds = new Set();
   let busy = false;
   let aiUsageEnabled = true;
   let activeController = null;
+  let previewHistoryId = "";
+  let pendingEditRequestId = "";
+  const sceneProgress = new Map();
+  let viewerState = {scale:1,x:0,y:0,dragging:false,startX:0,startY:0};
 
   const $ = id => document.getElementById(id);
   const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
@@ -211,6 +396,24 @@
   const getDedicatedKey = () => localStorage.getItem(DEDICATED_KEY)?.trim() || "";
   const getSharedKey = () => localStorage.getItem(SHARED_KEY)?.trim() || hostSharedKey;
   const getApiKey = () => aiUsageEnabled ? (getDedicatedKey() || getSharedKey()) : "";
+
+  function applyStoryFontSize(value) {
+    const parsed=Number.parseInt(value,10);
+    const size=Math.max(8,Math.min(14,Number.isFinite(parsed)?parsed:10));
+    document.documentElement.style.setProperty("--story-ui-font-size",`${size}px`);
+    document.body.style.setProperty("--story-ui-font-size",`${size}px`);
+    $("storyFontValue").textContent=`${size}px`;
+    $("storyFontDownBtn").disabled=size<=8;
+    $("storyFontUpBtn").disabled=size>=14;
+    try { localStorage.setItem(STORY_FONT_KEY,String(size)); } catch (_) {}
+  }
+
+  function renderStylePrompts() {
+    $("stylePromptList").innerHTML=Object.entries(IMAGE_STYLE_PROMPTS).map(([key,prompt])=>{
+      const label=$("imageStyle").querySelector(`option[value="${key}"]`)?.textContent||key;
+      return `<section style="margin:0 0 10px"><strong style="color:var(--green)">${escapeHtml(label)}</strong><br><span>${escapeHtml(prompt)}</span></section>`;
+    }).join("");
+  }
 
   function toast(message) {
     $("toast").textContent = message;
@@ -229,6 +432,7 @@
     ["makeScenesBtn","generateBtn","addSceneBtn"].forEach(id => $(id).disabled = value);
     $("stopAiBtn").style.display = value ? "inline-flex" : "none";
     if (value) $("stopAiBtn").textContent = "■ AI 정지";
+    syncCharacterExtractor();
   }
 
   function refreshKeyUI(override) {
@@ -241,6 +445,33 @@
       ? (aiUsageEnabled ? "현재: Story Image 전용 키" : "현재: FMA Viewer에서 키 사용 중지됨")
       : shared ? (aiUsageEnabled ? "현재: FMA Viewer 공통 키" : "현재: FMA Viewer에서 키 사용 중지됨") : "현재: 연결된 API 키 없음";
     if (!aiUsageEnabled) status.className = "key-source none";
+    syncCharacterExtractor();
+  }
+
+  function syncCharacterExtractor() {
+    const button=$("extractCharacterBtn");
+    if(!button) return;
+    button.style.display=getApiKey() && referenceImages.length ? "inline-flex" : "none";
+    button.disabled=busy || !getApiKey() || !referenceImages.length;
+  }
+
+  async function extractCharacterFeatures() {
+    if(!getApiKey() || !referenceImages.length) return;
+    const button=$("extractCharacterBtn");
+    const previous=button.textContent;
+    button.disabled=true; button.textContent="추출 중…";
+    try {
+      const parts=[{text:`Analyze all attached character reference images as one character reference set.
+Write a concise Korean character description for consistent image generation. Extract stable identity traits: apparent age range, face shape and facial features, skin tone and texture, hair color/style/length, body proportions, distinctive marks, recurring clothing/accessories, and typical expression. Separate stable character identity from temporary pose, camera angle, and background. If images differ, describe only consistent traits and explicitly note important alternatives. Output plain Korean text only, without markdown, in 4 to 7 compact sentences.`}];
+      referenceImages.forEach(reference=>parts.push({inlineData:{mimeType:reference.mimeType,data:reference.dataUrl.split(",")[1]}}));
+      const result=await apiRequest(TEXT_MODEL,{contents:[{parts}],generationConfig:{temperature:.25}},undefined);
+      const text=result.candidates?.[0]?.content?.parts?.map(part=>part.text||"").join("").trim()||"";
+      if(!text) throw new Error("캐릭터 특징을 추출하지 못했습니다.");
+      $("characterText").value=text;
+      $("characterText").dispatchEvent(new Event("input",{bubbles:true}));
+      toast("참고 이미지에서 캐릭터 특징을 추출했습니다.");
+    } catch(error) { toast(`특징 추출 실패: ${error.message}`); }
+    finally { button.textContent=previous; syncCharacterExtractor(); }
   }
 
   async function apiRequest(model, payload, signal) {
@@ -277,7 +508,7 @@ Each prompt must be an English visual image prompt with composition, character a
       const text = result.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("") || "";
       const parsed = JSON.parse(normalizeJsonText(text));
       scenes = parsed.slice(0,count).map((item,index) => ({
-        id:uid(), title:item.title || `Scene ${index + 1}`, prompt:item.prompt || ""
+        id:uid(), title:item.title || `Scene ${index + 1}`, prompt:item.prompt || "", fontSize:12, language:"en"
       }));
       renderScenes(); setStatus(`${scenes.length}개 장면 구성이 완료되었습니다.`, 100);
     } catch (error) {
@@ -287,20 +518,107 @@ Each prompt must be an English visual image prompt with composition, character a
   }
 
   function addScene() {
-    scenes.push({id:uid(),title:`Scene ${scenes.length + 1}`,prompt:""});
+    syncScenesFromUI();
+    const requested = Number($("insertScenePosition").value);
+    const position = Number.isFinite(requested)
+      ? Math.max(1,Math.min(scenes.length + 1,Math.round(requested)))
+      : scenes.length + 1;
+    scenes.splice(position - 1,0,{id:uid(),title:`Scene ${position}`,prompt:"",fontSize:12,language:"en"});
+    scenes.forEach((scene,index) => { if(/^Scene \d+$/.test(scene.title)) scene.title=`Scene ${index + 1}`; });
     renderScenes();
+    document.querySelector(`[data-scene-id="${scenes[position - 1].id}"]`)?.scrollIntoView({behavior:"smooth",block:"center"});
   }
 
   function renderScenes() {
     $("sceneList").innerHTML = scenes.map((scene,index) => `
-      <article class="scene" data-scene-id="${scene.id}">
+      <article class="scene" data-scene-id="${scene.id}" style="--scene-font:${Math.max(9,Math.min(24,Number(scene.fontSize)||12))}px">
         <div class="scene-head">
           <strong>${index + 1}. ${escapeHtml(scene.title)}</strong>
-          <button type="button" data-remove-scene="${scene.id}" class="danger" style="padding:4px 7px;font-size:8px">삭제</button>
+          <div class="scene-order">
+            <button type="button" data-move-scene="${scene.id}" data-move-direction="-1" title="앞으로 이동" aria-label="앞으로 이동" ${index===0?"disabled":""}>←</button>
+            <button type="button" data-move-scene="${scene.id}" data-move-direction="1" title="뒤로 이동" aria-label="뒤로 이동" ${index===scenes.length-1?"disabled":""}>→</button>
+            <button type="button" data-remove-scene="${scene.id}" class="danger" title="장면 삭제" aria-label="장면 삭제">×</button>
+          </div>
         </div>
         <input data-scene-title="${scene.id}" value="${escapeHtml(scene.title)}" aria-label="장면 제목" style="margin-bottom:7px;font-size:10px">
         <textarea data-scene-prompt="${scene.id}" aria-label="장면 프롬프트">${escapeHtml(scene.prompt)}</textarea>
+        <div class="scene-tools">
+          <button type="button" class="font-step" data-font-down="${scene.id}" title="글자 작게" aria-label="글자 작게">−</button>
+          <button type="button" class="font-step" data-font-up="${scene.id}" title="글자 크게" aria-label="글자 크게">＋</button>
+          <button type="button" class="translate-one" data-translate-scene="${scene.id}" title="한국어/영어 빠른 번역">Tr</button>
+          <button type="button" data-read-scene="${scene.id}" class="viewer-icon" title="크게 보기" aria-label="크게 보기">⛶</button>
+          <button type="button" data-generate-scene="${scene.id}" class="generate-one" title="이 장면 생성" aria-label="이 장면 생성">✦</button>
+        </div>
+        ${renderSceneProgress(scene.id)}
+        ${renderSceneMatch(scene)}
+        <div class="scene-match-actions">
+          <button type="button" data-match-scene="${scene.id}" class="scene-match-button">최적선택</button>
+          <button type="button" data-clear-match-scene="${scene.id}" class="scene-match-clear" ${scene.selectedImageId?"":"disabled"}>최적해제</button>
+        </div>
       </article>`).join("");
+    $("insertScenePosition").max=String(scenes.length + 1);
+    $("insertScenePosition").value=String(scenes.length + 1);
+  }
+
+  function renderSceneProgress(sceneId) {
+    const state=sceneProgress.get(sceneId);
+    const percent=Math.max(0,Math.min(100,Number(state?.percent)||0));
+    return `<div class="scene-card-progress ${state?"active":""}" data-scene-progress="${sceneId}">
+      <div class="scene-card-progress-line"><span data-scene-progress-label>${escapeHtml(state?.label||"생성 준비")}</span><strong data-scene-progress-value>${Math.round(percent)}%</strong></div>
+      <div class="scene-card-progress-track"><div class="scene-card-progress-fill" data-scene-progress-fill style="width:${percent}%"></div></div>
+    </div>`;
+  }
+
+  function setSceneProgress(sceneId,percent,label="생성 중…") {
+    const value=Math.max(0,Math.min(100,Math.round(Number(percent)||0)));
+    sceneProgress.set(sceneId,{percent:value,label});
+    const root=document.querySelector(`[data-scene-progress="${sceneId}"]`);
+    if(!root) return;
+    root.classList.add("active");
+    root.querySelector("[data-scene-progress-label]").textContent=label;
+    root.querySelector("[data-scene-progress-value]").textContent=`${value}%`;
+    root.querySelector("[data-scene-progress-fill]").style.width=`${value}%`;
+  }
+
+  function moveScene(sceneId,direction) {
+    syncScenesFromUI();
+    const from=scenes.findIndex(scene=>scene.id===sceneId),to=from+Number(direction);
+    if(from<0 || to<0 || to>=scenes.length) return;
+    const [scene]=scenes.splice(from,1);scenes.splice(to,0,scene);renderScenes();
+    document.querySelector(`[data-scene-id="${sceneId}"]`)?.scrollIntoView({behavior:"smooth",block:"nearest",inline:"center"});
+  }
+
+  function getSceneMatch(scene) {
+    return history.find(item=>item.id===scene.selectedImageId) || null;
+  }
+
+  function renderSceneMatch(scene) {
+    const item=getSceneMatch(scene);
+    if(!item) return "";
+    return `<div class="scene-match"><img src="${item.dataUrl}" alt="${escapeHtml(item.title)}" data-scene-match-view="${item.id}"><div class="scene-match-copy"><strong>✓ ${escapeHtml(item.title||"최적 이미지")}</strong><small>이 장면의 선택 이미지 · 클릭하여 크게 보기</small></div></div>`;
+  }
+
+  function selectBestImageForScene(sceneId) {
+    syncScenesFromUI();
+    const scene=scenes.find(item=>item.id===sceneId);
+    if(!scene) return;
+    if(!history.length) return toast("먼저 장면 이미지를 생성하거나 히스토리에 이미지를 추가하세요.");
+    const selected=[...selectedIds].filter(id=>history.some(item=>item.id===id));
+    if(selected.length!==1) return toast("히스토리에서 교체할 이미지 한 장만 선택하세요.");
+    const selectedId=selected[0];
+    scene.selectedImageId=selectedId;
+    previewHistoryId=selectedId;
+    renderScenes(); renderHistoryPreview();
+    toast(`“${scene.title}” 장면 이미지를 선택한 히스토리 이미지로 교체했습니다.`);
+  }
+
+  function clearBestImageForScene(sceneId) {
+    syncScenesFromUI();
+    const scene=scenes.find(item=>item.id===sceneId);
+    if(!scene) return;
+    scene.selectedImageId="";
+    renderScenes();
+    toast(`“${scene.title}” 장면의 최적 이미지 연결을 해제했습니다.`);
   }
 
   function syncScenesFromUI() {
@@ -311,36 +629,120 @@ Each prompt must be an English visual image prompt with composition, character a
     }));
   }
 
-  async function generateAll() {
+  async function fastTranslateText(text,target) {
+    if(!text.trim()) return text;
+    const source=target==="ko"?"en":"ko";
+    const endpoint=`https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source}&tl=${target}&dt=t&q=${encodeURIComponent(text)}`;
+    const response=await fetch(endpoint);
+    if(!response.ok) throw new Error("빠른 번역 서버에 연결할 수 없습니다.");
+    const data=await response.json();
+    return (data?.[0]||[]).map(part=>part?.[0]||"").join("") || text;
+  }
+
+  async function translateScene(id) {
     syncScenesFromUI();
-    if (!scenes.length) return toast("먼저 장면 구성을 만들거나 장면을 추가하세요.");
-    activeController = new AbortController();
-    setBusy(true);
+    const scene=scenes.find(item=>item.id===id); if(!scene) return;
+    const target=scene.language==="ko"?"en":"ko";
+    setStatus(`${scene.title} 빠른 번역 중…`,0);
     try {
-      for (let index=0; index<scenes.length; index++) {
-        const scene = scenes[index];
-        if (!scene.prompt) continue;
-        setStatus(`${index + 1}/${scenes.length} · ${scene.title} 생성 중…`, Math.round(index / scenes.length * 100));
+      scene.title=await fastTranslateText(scene.title,target);
+      scene.prompt=await fastTranslateText(scene.prompt,target);
+      scene.language=target;
+      renderScenes(); renderReader();
+      setStatus(`${scene.title} 번역 완료`,100);
+    } catch(error) { toast(error.message); setStatus("빠른 번역 실패",0); }
+  }
+
+  async function translateAllScenes() {
+    syncScenesFromUI();
+    if(!scenes.length) return;
+    const target=scenes.some(scene=>scene.language!=="ko")?"ko":"en";
+    $("translateAllBtn").disabled=true;
+    try {
+      for(let i=0;i<scenes.length;i++) {
+        setStatus(`${i+1}/${scenes.length} 빠른 번역 중…`,Math.round(i/scenes.length*100));
+        scenes[i].title=await fastTranslateText(scenes[i].title,target);
+        scenes[i].prompt=await fastTranslateText(scenes[i].prompt,target);
+        scenes[i].language=target;
+      }
+      renderScenes(); renderReader(); setStatus("전체 장면 번역 완료",100);
+    } catch(error) { toast(error.message); } finally { $("translateAllBtn").disabled=false; }
+  }
+
+  function renderReader(sceneId="") {
+    syncScenesFromUI();
+    const visible=sceneId?scenes.filter(scene=>scene.id===sceneId):scenes;
+    $("readerTitle").textContent=sceneId?"장면 크게 보기":"전체 장면 읽기";
+    $("readerContent").innerHTML=visible.map((scene,index)=>`<article class="reader-scene"><h3>${sceneId?"":`${scenes.indexOf(scene)+1}. `}${escapeHtml(scene.title)}</h3><p>${escapeHtml(scene.prompt)}</p></article>`).join("") || "<p>표시할 장면이 없습니다.</p>";
+    $("readerPanel").classList.add("open");
+  }
+
+  async function generateSceneImage(scene,index,total,signal,cardOnly=false) {
+        if (!scene?.prompt) throw new Error(`${scene?.title || "장면"}: 프롬프트가 비어 있습니다.`);
+        if(cardOnly) setSceneProgress(scene.id,8,"요청을 준비하는 중…");
+        else setStatus(`${index + 1}/${total} · ${scene.title} 생성 중…`, Math.round(index / total * 100));
         const parts = [];
-        if (referenceDataUrl) {
-          parts.push({text:"Use this as the identity and character reference. Preserve facial identity and key appearance consistently:"});
-          parts.push({inlineData:{mimeType:referenceMime,data:referenceDataUrl.split(",")[1]}});
+        if (referenceImages.length) {
+          parts.push({text:`Use all ${referenceImages.length} attached images as complementary visual references. Preserve relevant identity, clothing, background, pose, and continuity without collaging them.`});
+          referenceImages.forEach(reference=>parts.push({inlineData:{mimeType:reference.mimeType,data:reference.dataUrl.split(",")[1]}}));
         }
         parts.push({text:`Generate one polished storyboard image.
 Aspect ratio: ${$("aspectRatio").value}
-Visual style: ${$("imageStyle").value}
+Visual style: ${IMAGE_STYLE_PROMPTS[$("imageStyle").value] || $("imageStyle").value}
 Character continuity: ${$("characterText").value.trim() || "Maintain the same main character"}
 Scene: ${scene.prompt}
 Output the image only.`});
-        const result = await apiRequest(IMAGE_MODEL,{contents:[{parts}],generationConfig:{responseModalities:["TEXT","IMAGE"]}},activeController.signal);
+        if(cardOnly) setSceneProgress(scene.id,22,"AI가 장면을 생성하는 중…");
+        const result = await apiRequest(IMAGE_MODEL,{contents:[{parts}],generationConfig:{responseModalities:["TEXT","IMAGE"]}},signal);
+        if(cardOnly) setSceneProgress(scene.id,92,"이미지를 저장하는 중…");
         const imagePart = result.candidates?.[0]?.content?.parts?.find(part => part.inlineData?.data);
         if (!imagePart) throw new Error(`${scene.title}: 이미지 응답이 없습니다.`);
         const mimeType = imagePart.inlineData.mimeType || "image/png";
         const record = {id:uid(),dataUrl:`data:${mimeType};base64,${imagePart.inlineData.data}`,mimeType,title:scene.title,prompt:scene.prompt,createdAt:new Date().toISOString()};
         history.unshift(record);
+        scene.selectedImageId=record.id;
+        selectedIds.clear();
         selectedIds.add(record.id);
         await saveRecord(record);
-        renderHistory();
+        previewHistoryId=record.id;
+        renderHistory(); renderHistoryPreview(); renderScenes();
+        return record;
+  }
+
+  async function generateOne(sceneId) {
+    syncScenesFromUI();
+    const scene=scenes.find(item=>item.id===sceneId); if(!scene) return;
+    if(busy) return toast("진행 중인 AI 작업을 먼저 완료하거나 정지하세요.");
+    activeController=new AbortController(); setBusy(true);
+    let simulated=22;
+    const progressTimer=setInterval(()=>{
+      simulated=Math.min(88,simulated+Math.max(1,Math.round((88-simulated)*.08)));
+      setSceneProgress(scene.id,simulated,"AI가 장면을 생성하는 중…");
+    },650);
+    try {
+      await generateSceneImage(scene,0,1,activeController.signal,true);
+      setSceneProgress(scene.id,100,"장면 이미지 생성 완료");
+      toast("장면 이미지를 생성하고 히스토리에 저장했습니다.");
+    } catch(error) {
+      if(error.name==="AbortError") setSceneProgress(scene.id,0,"생성을 정지했습니다.");
+      else { setSceneProgress(scene.id,0,"생성 실패"); toast(error.message); }
+    } finally {
+      clearInterval(progressTimer);activeController=null;setBusy(false);
+      if(sceneProgress.get(scene.id)?.percent===100) setTimeout(()=>{
+        sceneProgress.delete(scene.id);
+        document.querySelector(`[data-scene-progress="${scene.id}"]`)?.classList.remove("active");
+      },2400);
+    }
+  }
+
+  async function generateAll() {
+    syncScenesFromUI();
+    if (!scenes.length) return toast("먼저 장면 구성을 만들거나 장면을 추가하세요.");
+    activeController = new AbortController(); setBusy(true);
+    try {
+      for (let index=0; index<scenes.length; index++) {
+        if (!scenes[index].prompt) continue;
+        await generateSceneImage(scenes[index],index,scenes.length,activeController.signal,false);
       }
       setStatus(`${scenes.length}개 장면 이미지 생성이 완료되었습니다.`,100);
     } catch (error) {
@@ -356,13 +758,15 @@ Output the image only.`});
     $("history").innerHTML = history.map(item => `
       <article class="card ${selectedIds.has(item.id) ? "selected" : ""}" data-card-id="${item.id}">
         <button class="check" type="button" data-toggle-id="${item.id}" title="선택">${selectedIds.has(item.id) ? "✓" : ""}</button>
-        <img src="${item.dataUrl}" alt="${escapeHtml(item.title)}">
+        <img src="${item.dataUrl}" alt="${escapeHtml(item.title)}" data-preview-id="${item.id}">
         <div class="card-info">
           <strong>${escapeHtml(item.title)}</strong>
           <small>${new Date(item.createdAt).toLocaleString("ko-KR")}</small>
           <div class="card-buttons">
             <button type="button" data-download-id="${item.id}">다운로드</button>
             <button type="button" data-delete-id="${item.id}" class="danger">삭제</button>
+            <button type="button" data-gallery-id="${item.id}">갤러리</button>
+            <button type="button" data-view-id="${item.id}">크게 보기</button>
           </div>
         </div>
       </article>`).join("");
@@ -373,20 +777,288 @@ Output the image only.`});
     link.href=item.dataUrl; link.download=`${item.title || "StoryImage"}.png`; link.click();
   }
 
+  function currentPreviewRecord() { return history.find(item=>item.id===previewHistoryId) || null; }
+
+  function renderHistoryPreview() {
+    const item=currentPreviewRecord();
+    $("historyPreview").classList.toggle("open",Boolean(item));
+    if(!item) return;
+    $("historyPreviewImage").src=item.dataUrl;
+    $("historyPreviewTitle").textContent=item.title || "생성 이미지";
+  }
+
+  function sendRecords(records,requestId=`manual-${Date.now()}`) {
+    const images=records.filter(Boolean).map((item,index)=>({
+      dataUrl:item.dataUrl,mimeType:item.mimeType||"image/png",
+      name:`StoryImage_${String(index+1).padStart(2,"0")}_${item.title||"Scene"}.png`
+    }));
+    window.parent.postMessage({type:images.length?"fma-app-images":"fma-app-error",app:"storyHtml",requestId,images,message:images.length?undefined:"선택된 Story 이미지가 없습니다."},"*");
+    if(images.length) toast(`${images.length}개 이미지를 FMA 갤러리에 추가했습니다.`);
+  }
+
   function sendImages(mode,requestId) {
     const records = mode === "all"
       ? [...history]
       : history.filter(item => selectedIds.has(item.id));
-    const images = records.map((item,index) => ({
-      dataUrl:item.dataUrl,mimeType:item.mimeType || "image/png",
-      name:`StoryImage_${String(index + 1).padStart(2,"0")}_${item.title || "Scene"}.png`
-    }));
-    window.parent.postMessage({
-      type:images.length ? "fma-app-images" : "fma-app-error",
-      app:"story",requestId,images,
-      message:images.length ? undefined : "선택된 Story 이미지가 없습니다."
-    },"*");
-    if (images.length) toast(`${images.length}개 이미지를 FMA Viewer로 보냈습니다.`);
+    sendRecords(records,requestId);
+  }
+
+  function safeFileName(value,fallback="scene") {
+    const cleaned=String(value||"").trim().replace(/[\\/:*?"<>|]+/g,"_").replace(/\s+/g,"_").slice(0,80);
+    return cleaned||fallback;
+  }
+  function exportStamp() {
+    const now=new Date(),pad=value=>String(value).padStart(2,"0");
+    return `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  }
+  function downloadBlob(blob,fileName) {
+    const link=document.createElement("a"),url=URL.createObjectURL(blob);
+    link.href=url; link.download=fileName; document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+  }
+  function dataUrlInfo(dataUrl) {
+    const match=String(dataUrl||"").match(/^data:([^;,]+);base64,(.+)$/);
+    return match?{mimeType:match[1],base64:match[2]}:null;
+  }
+  function sceneExportRows() {
+    syncScenesFromUI();
+    return scenes.map((scene,index)=>({index:index+1,scene,image:getSceneMatch(scene)}));
+  }
+  function projectPayload() {
+    syncScenesFromUI();
+    return {
+      format:"fma_story",version:1,exportedAt:new Date().toISOString(),
+      project:{characterText:$("characterText").value,storyText:$("storyText").value,sceneCount:$("sceneCount").value,aspectRatio:$("aspectRatio").value,imageStyle:$("imageStyle").value},
+      referenceImages,scenes,history
+    };
+  }
+  function loadExternalScript(src,test) {
+    if(test()) return Promise.resolve();
+    return new Promise((resolve,reject)=>{
+      const existing=document.querySelector(`script[data-story-lib="${src}"]`);
+      if(existing) { existing.addEventListener("load",resolve,{once:true}); existing.addEventListener("error",reject,{once:true}); return; }
+      const script=document.createElement("script"); script.src=src; script.dataset.storyLib=src;
+      script.onload=resolve; script.onerror=()=>reject(new Error("내보내기 라이브러리를 불러오지 못했습니다.")); document.head.appendChild(script);
+    });
+  }
+  async function ensureJsZip() {
+    await loadExternalScript("https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js",()=>Boolean(window.JSZip));
+  }
+  async function ensureJsPdf() {
+    await loadExternalScript("https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js",()=>Boolean(window.jspdf?.jsPDF));
+  }
+  function xmlEscape(value) { return String(value??"").replace(/[<>&'\"]/g,char=>({"<":"&lt;",">":"&gt;","&":"&amp;","'":"&apos;",'"':"&quot;"}[char])); }
+
+  function storyboardMarkdown(rows,imagePathForRow) {
+    const md=["# FMA Storyboard","",`Exported: ${new Date().toLocaleString("ko-KR")}`,""];
+    rows.forEach(({index,scene,image})=>{
+      const imagePath=imagePathForRow({index,scene,image});
+      md.push(`## Scene ${index}: ${scene.title}`,"");
+      if(imagePath) md.push(`![Scene ${index}](${imagePath})`,"");
+      md.push("**Prompt / Composition:**",`> ${String(scene.prompt||"").replace(/\n/g,"\n> ")}`,"","---","");
+    });
+    return md.join("\n");
+  }
+
+  function exportMdd() {
+    const rows=sceneExportRows(),images=[];
+    const content=storyboardMarkdown(rows,({index,scene,image})=>{
+      const info=image&&dataUrlInfo(image.dataUrl);
+      if(!info) return "";
+      const id=`scene-${String(index).padStart(2,"0")}`;
+      const ext=info.mimeType.includes("jpeg")?"jpg":"png";
+      images.push({id,name:`${id}-${safeFileName(scene.title)}.${ext}`,mime:info.mimeType,base64:info.base64});
+      return `indb:${id}`;
+    });
+    const stamp=exportStamp();
+    const payload={
+      format:"mdlive/mdd",version:1,exportedAt:new Date().toISOString(),
+      document:{fileName:`fma_story_${stamp}.md`,content},
+      images,
+      storyboard:projectPayload()
+    };
+    downloadBlob(new Blob([JSON.stringify(payload,null,2)],{type:"application/json;charset=utf-8"}),`fma_story_${stamp}.mdd`);
+  }
+
+  async function exportMarkdownZip() {
+    await ensureJsZip();
+    const zip=new JSZip(),rows=sceneExportRows(),folder=zip.folder("images");
+    const md=storyboardMarkdown(rows,({index,scene,image})=>{
+      const info=image&&dataUrlInfo(image.dataUrl); let relative="";
+      if(info) { const ext=info.mimeType.includes("jpeg")?"jpg":"png"; relative=`images/scene_${String(index).padStart(2,"0")}_${safeFileName(scene.title)}.${ext}`; folder.file(relative.split("/").pop(),info.base64,{base64:true}); }
+      return relative;
+    });
+    zip.file("storyboard.md",md);
+    zip.file("fma_story_project.fmj",JSON.stringify(projectPayload(),null,2));
+    downloadBlob(await zip.generateAsync({type:"blob",compression:"DEFLATE",compressionOptions:{level:6}}),`fma_story_md_${exportStamp()}.zip`);
+  }
+
+  function wordParagraph(text,style="") {
+    return `<w:p>${style?`<w:pPr><w:pStyle w:val="${style}"/></w:pPr>`:""}<w:r><w:t xml:space="preserve">${xmlEscape(text)}</w:t></w:r></w:p>`;
+  }
+  async function getDocxImageExtent(dataUrl) {
+    const image=await loadCanvasImage(dataUrl);
+    const sourceWidth=Math.max(1,image.naturalWidth||image.width||1);
+    const sourceHeight=Math.max(1,image.naturalHeight||image.height||1);
+    const maxWidthEmu=6645910;
+    const maxHeightEmu=7620000;
+    const scale=Math.min(maxWidthEmu/sourceWidth,maxHeightEmu/sourceHeight);
+    return {
+      cx:Math.max(1,Math.round(sourceWidth*scale)),
+      cy:Math.max(1,Math.round(sourceHeight*scale))
+    };
+  }
+  async function exportDocx() {
+    await ensureJsZip();
+    const zip=new JSZip(),rows=sceneExportRows(),relationships=[],media=[],body=[];
+    for(const {index,scene,image} of rows) {
+      body.push(wordParagraph(`Scene ${index}: ${scene.title}`,"Heading1"));
+      const info=image&&dataUrlInfo(image.dataUrl);
+      if(info) {
+        const ext=info.mimeType.includes("jpeg")?"jpg":"png",name=`scene_${String(index).padStart(2,"0")}.${ext}`,rId=`rId${relationships.length+1}`;
+        const {cx,cy}=await getDocxImageExtent(image.dataUrl);
+        media.push({name,base64:info.base64}); relationships.push(`<Relationship Id="${rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/${name}"/>`);
+        body.push(`<w:p><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="${index}" name="Scene ${index}"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="0" name="${name}"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${rId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`);
+      }
+      body.push(wordParagraph("Prompt / Composition:","Heading2"),wordParagraph(scene.prompt||""));
+    }
+    zip.file("[Content_Types].xml",`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="jpg" ContentType="image/jpeg"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`);
+    zip.folder("_rels").file(".rels",`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`);
+    zip.folder("word").file("document.xml",`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><w:body>${body.join("")}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720"/></w:sectPr></w:body></w:document>`);
+    zip.folder("word").folder("_rels").file("document.xml.rels",`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${relationships.join("")}</Relationships>`);
+    media.forEach(item=>zip.folder("word").folder("media").file(item.name,item.base64,{base64:true}));
+    downloadBlob(await zip.generateAsync({type:"blob",compression:"DEFLATE"}),`fma_story_${exportStamp()}.docx`);
+  }
+
+  function loadCanvasImage(src) { return new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=reject;img.src=src;}); }
+  function wrapCanvasText(ctx,text,maxWidth) {
+    const lines=[]; String(text||"").split(/\n/).forEach(paragraph=>{let line="";paragraph.split(/\s+/).forEach(word=>{const test=line?`${line} ${word}`:word;if(ctx.measureText(test).width>maxWidth&&line){lines.push(line);line=word;}else line=test;});lines.push(line);}); return lines;
+  }
+  async function exportPdf() {
+    await ensureJsPdf(); const {jsPDF}=window.jspdf,rows=sceneExportRows(),pdf=new jsPDF({unit:"pt",format:"a4",orientation:"portrait"});
+    for(let i=0;i<rows.length;i++) {
+      if(i) pdf.addPage(); const {index,scene,image}=rows[i],canvas=document.createElement("canvas"); canvas.width=1240;canvas.height=1754;
+      const ctx=canvas.getContext("2d");ctx.fillStyle="#ffffff";ctx.fillRect(0,0,canvas.width,canvas.height);ctx.fillStyle="#102132";ctx.font="700 44px 'Malgun Gothic',sans-serif";ctx.fillText(`Scene ${index}: ${scene.title}`,70,82);
+      let textTop=114;
+      if(image?.dataUrl) { const img=await loadCanvasImage(image.dataUrl);const box={x:70,y:120,w:1100,h:980};const scale=Math.min(box.w/img.width,box.h/img.height);const w=img.width*scale,h=img.height*scale;ctx.fillStyle="#eef2f6";ctx.fillRect(box.x,box.y,box.w,box.h);ctx.drawImage(img,box.x+(box.w-w)/2,box.y+(box.h-h)/2,w,h);textTop=1140; }
+      ctx.fillStyle="#1b2735";ctx.font="700 28px 'Malgun Gothic',sans-serif";ctx.fillText("Prompt / Composition",70,textTop);ctx.font="24px 'Malgun Gothic',sans-serif";ctx.fillStyle="#263648";
+      wrapCanvasText(ctx,scene.prompt,1100).slice(0,19).forEach((line,lineIndex)=>ctx.fillText(line,70,textTop+48+lineIndex*36));
+      pdf.addImage(canvas.toDataURL("image/jpeg",.9),"JPEG",0,0,595.28,841.89);
+    }
+    pdf.save(`fma_story_${exportStamp()}.pdf`);
+  }
+  function exportFmj() {
+    downloadBlob(new Blob([JSON.stringify(projectPayload(),null,2)],{type:"application/json;charset=utf-8"}),`fma_story_${exportStamp()}.fmj`);
+  }
+  async function exportStory(format) {
+    if(!scenes.length) return toast("내보낼 장면이 없습니다.");
+    const status=$("exportBusy"); status.textContent="내보내는 중…";
+    document.querySelectorAll("[data-story-export]").forEach(button=>button.disabled=true);
+    try {
+      if(format==="mdd") exportMdd();
+      else if(format==="markdown") await exportMarkdownZip();
+      else if(format==="docx") await exportDocx();
+      else if(format==="pdf") await exportPdf();
+      else exportFmj();
+      status.textContent="다운로드를 시작했습니다."; toast("스토리보드 내보내기를 완료했습니다.");
+    } catch(error) { console.error(error); status.textContent="내보내기 실패"; toast(`내보내기 실패: ${error.message}`); }
+    finally { document.querySelectorAll("[data-story-export]").forEach(button=>button.disabled=false);setTimeout(()=>{status.textContent="";},3000); }
+  }
+  async function replaceHistoryStore(records) {
+    const db=await openDb();
+    await new Promise((resolve,reject)=>{const tx=db.transaction(STORE,"readwrite"),store=tx.objectStore(STORE);store.clear();records.forEach(record=>store.put(record));tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});db.close();
+  }
+  async function applyStoryPayload(payload,sourceLabel="FMJ 백업") {
+    if(payload?.format!=="fma_story" || !Array.isArray(payload.scenes)) throw new Error("FMA Story 백업 파일이 아닙니다.");
+    if(!confirm(`현재 Story Image 작업을 ${sourceLabel} 내용으로 교체할까요?`)) return;
+    const project=payload.project||{};
+    $("characterText").value=project.characterText||"";$("storyText").value=project.storyText||"";$("sceneCount").value=project.sceneCount||payload.scenes.length||4;
+    if(project.aspectRatio) $("aspectRatio").value=project.aspectRatio;if(project.imageStyle) $("imageStyle").value=project.imageStyle;
+    referenceImages=Array.isArray(payload.referenceImages)?payload.referenceImages:[];scenes=payload.scenes;history=Array.isArray(payload.history)?payload.history:[];
+    selectedIds.clear();previewHistoryId="";await replaceHistoryStore(history);renderReferences();renderScenes();renderHistory();renderHistoryPreview();syncCharacterExtractor();
+    toast(`${scenes.length}개 장면과 ${history.length}개 이미지를 불러왔습니다.`);
+  }
+  async function importStoryProject(file) {
+    return applyStoryPayload(JSON.parse(await file.text()),"FMJ 백업");
+  }
+  function storyPayloadFromMdd(payload) {
+    if(payload?.storyboard?.format==="fma_story") return payload.storyboard;
+    const imageMap=new Map((Array.isArray(payload.images)?payload.images:[]).map(image=>[String(image.id||""),image]));
+    const content=String(payload?.document?.content||"");
+    const matches=[...content.matchAll(/^##\s+Scene\s+(\d+)\s*:\s*(.+)$/gmi)];
+    const importedScenes=[],importedHistory=[];
+    matches.forEach((match,index)=>{
+      const start=(match.index||0)+match[0].length,end=index+1<matches.length?(matches[index+1].index||content.length):content.length;
+      const block=content.slice(start,end),imageId=block.match(/\]\(indb:([^\)]+)\)/i)?.[1]||"";
+      const image=imageMap.get(imageId),historyId=image?uid():"";
+      const promptBlock=block.match(/\*\*Prompt\s*\/\s*Composition:\*\*([\s\S]*?)(?:\n---|$)/i)?.[1]||"";
+      const prompt=promptBlock.split("\n").map(line=>line.replace(/^\s*>\s?/,"")).join("\n").trim();
+      const scene={id:uid(),title:String(match[2]||`Scene ${index+1}`).trim(),prompt,fontSize:12,language:"en"};
+      if(image&&historyId) {
+        const mimeType=String(image.mime||"image/png"),base64=String(image.base64||"").replace(/^data:[^;,]+;base64,/,"");
+        importedHistory.push({id:historyId,dataUrl:`data:${mimeType};base64,${base64}`,mimeType,title:scene.title,prompt,createdAt:payload.exportedAt||new Date().toISOString()});
+        scene.selectedImageId=historyId;
+      }
+      importedScenes.push(scene);
+    });
+    if(!importedScenes.length) {
+      (Array.isArray(payload.images)?payload.images:[]).forEach((image,index)=>{
+        const id=uid(),title=String(image.name||`Scene ${index+1}`).replace(/\.[^.]+$/,"");
+        const mimeType=String(image.mime||"image/png"),base64=String(image.base64||"").replace(/^data:[^;,]+;base64,/,"");
+        importedHistory.push({id,dataUrl:`data:${mimeType};base64,${base64}`,mimeType,title,prompt:"",createdAt:payload.exportedAt||new Date().toISOString()});
+        importedScenes.push({id:uid(),title,prompt:"",fontSize:12,language:"en",selectedImageId:id});
+      });
+    }
+    if(!importedScenes.length) throw new Error("MDD에 불러올 Story 장면이나 이미지가 없습니다.");
+    return {format:"fma_story",version:1,exportedAt:payload.exportedAt||new Date().toISOString(),project:{characterText:"",storyText:content,sceneCount:importedScenes.length,aspectRatio:"9:16",imageStyle:"photorealistic"},referenceImages:[],scenes:importedScenes,history:importedHistory};
+  }
+  async function importMddProject(file) {
+    const payload=JSON.parse(await file.text());
+    if(payload?.format!=="mdlive/mdd" || !payload.document) throw new Error("지원되는 MDD 파일이 아닙니다.");
+    return applyStoryPayload(storyPayloadFromMdd(payload),"MDD 파일");
+  }
+
+  function applyViewerTransform() {
+    $("viewerImage").style.transform=`translate(calc(-50% + ${viewerState.x}px),calc(-50% + ${viewerState.y}px)) scale(${viewerState.scale})`;
+    $("viewerZoomLabel").textContent=`${Math.round(viewerState.scale*100)}%`;
+  }
+  function fitViewerToStage() {
+    const image=$("viewerImage"), stage=$("viewerStage");
+    if(!image.naturalWidth || !image.naturalHeight || !stage.clientWidth || !stage.clientHeight) return;
+    const scale=Math.min(stage.clientWidth/image.naturalWidth,stage.clientHeight/image.naturalHeight);
+    viewerState={scale:Math.max(.05,Math.min(8,scale)),x:0,y:0,dragging:false,startX:0,startY:0};
+    applyViewerTransform();
+  }
+  function resetViewer() { fitViewerToStage(); }
+  function openLargeViewer(id=previewHistoryId) {
+    previewHistoryId=id; const item=currentPreviewRecord(); if(!item) return;
+    $("viewerTitle").textContent=item.title||"생성 이미지 크게 보기";
+    $("imageViewerModal").classList.add("open");
+    $("viewerImage").src=item.dataUrl;
+    if($("viewerImage").complete) requestAnimationFrame(fitViewerToStage);
+  }
+  function closeLargeViewer() { $("imageViewerModal").classList.remove("open"); }
+
+  function requestHostEdit(tool) {
+    const item=currentPreviewRecord(); if(!item) return toast("편집할 이미지를 선택하세요.");
+    pendingEditRequestId=`story-edit-${uid()}`;
+    window.parent.postMessage({type:"fma-story-edit-request",app:"storyHtml",requestId:pendingEditRequestId,tool,image:{...item}},"*");
+    toast(`${tool} 편집 창을 여는 중입니다.`);
+  }
+
+  async function toggleAppFullscreen() {
+    try {
+      if(!document.fullscreenElement) await document.documentElement.requestFullscreen();
+      else await document.exitFullscreen();
+    } catch(error) { toast("전체화면을 시작할 수 없습니다. 브라우저의 전체화면 권한을 확인하세요."); }
+  }
+
+  async function toggleViewerFullscreen() {
+    try {
+      const box=document.querySelector("#imageViewerModal .viewer-box");
+      if(!document.fullscreenElement) await box.requestFullscreen();
+      else await document.exitFullscreen();
+    } catch(error) { toast("이미지 전체화면을 시작할 수 없습니다."); }
   }
 
   function openDb() {
@@ -427,21 +1099,62 @@ Output the image only.`});
       const tx=db.transaction(STORE,"readwrite"); tx.objectStore(STORE).clear();
       tx.oncomplete=resolve; tx.onerror=() => reject(tx.error);
     }); db.close();
-    history=[]; selectedIds.clear(); renderHistory();
+    history=[]; selectedIds.clear(); previewHistoryId=""; renderHistory(); renderHistoryPreview();
   }
 
-  function loadReference(file) {
-    if (!file?.type?.startsWith("image/")) return toast("이미지 파일을 선택하세요.");
-    const reader=new FileReader();
-    reader.onload=() => {
-      referenceDataUrl=String(reader.result); referenceMime=file.type || "image/png";
-      $("referencePreview").src=referenceDataUrl; $("referencePreview").style.display="block";
-      $("referenceHint").style.display="none";
-    };
-    reader.readAsDataURL(file);
+  function renderReferences() {
+    $("referenceHint").style.display=referenceImages.length?"none":"block";
+    $("referenceGrid").style.display=referenceImages.length?"grid":"none";
+    $("referenceGrid").innerHTML=referenceImages.map(item=>`<div class="reference-item"><img src="${item.dataUrl}" alt="${escapeHtml(item.name)}"><button type="button" data-remove-reference="${item.id}" title="참고 이미지 제거">×</button></div>`).join("");
+    syncCharacterExtractor();
+  }
+
+  function loadReferences(files) {
+    [...(files||[])].filter(file=>file.type?.startsWith("image/")).forEach(file=>{
+      const reader=new FileReader();
+      reader.onload=()=>{ referenceImages.push({id:uid(),dataUrl:String(reader.result),mimeType:file.type||"image/png",name:file.name||"reference"}); renderReferences(); };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function pasteReferenceImages() {
+    try {
+      const items=await navigator.clipboard.read();
+      const files=[];
+      for(const item of items) {
+        const type=item.types.find(value=>value.startsWith("image/"));
+        if(!type) continue;
+        const blob=await item.getType(type);
+        files.push(new File([blob],`clipboard-reference-${Date.now()}.${type.split("/")[1]||"png"}`,{type}));
+      }
+      if(!files.length) return toast("클립보드에서 이미지가 발견되지 않았습니다.");
+      loadReferences(files); toast(`${files.length}개 참고 이미지를 붙여넣었습니다.`);
+    } catch(error) {
+      $("referenceDrop").focus();
+      toast("클립보드 접근이 차단되었습니다. 참고 이미지 영역을 선택한 상태에서 Ctrl+V를 눌러주세요.");
+    }
+  }
+
+  function requestFmaReferenceImage() {
+    const requestId=`story-reference-${uid()}`;
+    window.parent.postMessage({type:"fma-app-request-source-images",app:"storyHtml",requestId,mode:"picker"},"*");
+    toast("FMA 갤러리 선택 창을 여는 중입니다.");
   }
 
   $("settingsBtn").onclick=() => { refreshKeyUI(); $("settingsModal").classList.add("open"); };
+  $("storyFontDownBtn").addEventListener("click",event=>{
+    event.preventDefault();
+    applyStoryFontSize(Number.parseInt($("storyFontValue").textContent,10)-1);
+  });
+  $("storyFontUpBtn").addEventListener("click",event=>{
+    event.preventDefault();
+    applyStoryFontSize(Number.parseInt($("storyFontValue").textContent,10)+1);
+  });
+  $("fullscreenBtn").onclick=toggleAppFullscreen;
+  $("viewerFullscreenBtn").onclick=toggleViewerFullscreen;
+  document.addEventListener("fullscreenchange",()=>{
+    $("fullscreenBtn").textContent=document.fullscreenElement?"⛶ 전체화면 종료":"⛶ 전체화면";
+  });
   $("stopAiBtn").onclick=() => { activeController?.abort(); $("stopAiBtn").textContent="정지 처리 중…"; };
   $("closeSettingsBtn").onclick=() => $("settingsModal").classList.remove("open");
   $("settingsModal").onmousedown=e => { if(e.target===$("settingsModal")) $("settingsModal").classList.remove("open"); };
@@ -453,27 +1166,96 @@ Output the image only.`});
   };
   $("useSharedKeyBtn").onclick=() => { localStorage.removeItem(DEDICATED_KEY); refreshKeyUI(); toast(getSharedKey()?"FMA Viewer 공통 키로 전환했습니다.":"공통 키가 없습니다."); };
   $("apiKeyInput").oninput=() => { $("apiKeySource").className="key-source none"; $("apiKeySource").textContent="입력 중 · 전용 키 저장을 눌러 적용"; };
-  $("referenceDrop").onclick=() => $("referenceInput").click();
+  $("referencePcBtn").onclick=() => $("referenceInput").click();
+  $("referenceFmaBtn").onclick=requestFmaReferenceImage;
+  $("referencePasteBtn").onclick=pasteReferenceImages;
+  $("extractCharacterBtn").onclick=extractCharacterFeatures;
   $("referenceDrop").ondragover=e => { e.preventDefault(); };
-  $("referenceDrop").ondrop=e => { e.preventDefault(); loadReference(e.dataTransfer.files[0]); };
-  $("referenceInput").onchange=e => loadReference(e.target.files[0]);
-  $("clearReferenceBtn").onclick=() => { referenceDataUrl=""; $("referencePreview").removeAttribute("src"); $("referencePreview").style.display="none"; $("referenceHint").style.display="block"; };
+  $("referenceDrop").ondrop=e => { e.preventDefault(); loadReferences(e.dataTransfer.files); };
+  $("referenceDrop").onpaste=e => {
+    const files=[...(e.clipboardData?.files||[])].filter(file=>file.type?.startsWith("image/"));
+    if(!files.length) return;
+    e.preventDefault(); loadReferences(files); toast(`${files.length}개 참고 이미지를 붙여넣었습니다.`);
+  };
+  $("referenceInput").onchange=e => { loadReferences(e.target.files); e.target.value=""; };
+  $("referenceGrid").onclick=e => { const id=e.target.dataset.removeReference; if(!id)return; e.stopPropagation(); referenceImages=referenceImages.filter(item=>item.id!==id); renderReferences(); };
+  $("clearReferenceBtn").onclick=() => { referenceImages=[]; renderReferences(); };
   $("makeScenesBtn").onclick=makeScenes; $("addSceneBtn").onclick=addScene; $("generateBtn").onclick=generateAll;
+  $("readScenesBtn").onclick=()=>renderReader();
+  $("closeReaderBtn").onclick=()=>$("readerPanel").classList.remove("open");
+  $("translateAllBtn").onclick=translateAllScenes;
   $("selectedToFmaBtn").onclick=() => sendImages("current",`manual-${Date.now()}`);
   $("allToFmaBtn").onclick=() => sendImages("all",`manual-${Date.now()}`);
   $("selectAllBtn").onclick=() => { history.forEach(item => selectedIds.add(item.id)); renderHistory(); };
   $("clearSelectBtn").onclick=() => { selectedIds.clear(); renderHistory(); };
   $("clearHistoryBtn").onclick=clearHistory;
   $("sceneList").onclick=e => {
-    const id=e.target.dataset.removeScene;
-    if(!id) return;
-    scenes=scenes.filter(scene => scene.id!==id); renderScenes();
+    const remove=e.target.dataset.removeScene;
+    if(remove) { scenes=scenes.filter(scene=>scene.id!==remove); return renderScenes(); }
+    const move=e.target.dataset.moveScene;
+    if(move) return moveScene(move,e.target.dataset.moveDirection);
+    const down=e.target.dataset.fontDown,up=e.target.dataset.fontUp;
+    if(down||up) { syncScenesFromUI(); const scene=scenes.find(item=>item.id===(down||up)); if(scene)scene.fontSize=Math.max(9,Math.min(24,(Number(scene.fontSize)||12)+(up?1:-1))); return renderScenes(); }
+    const translate=e.target.dataset.translateScene; if(translate) return translateScene(translate);
+    const read=e.target.dataset.readScene; if(read) return renderReader(read);
+    const generate=e.target.dataset.generateScene; if(generate) return generateOne(generate);
+    const match=e.target.dataset.matchScene; if(match) return selectBestImageForScene(match);
+    const clearMatch=e.target.dataset.clearMatchScene; if(clearMatch) return clearBestImageForScene(clearMatch);
+    const matchView=e.target.dataset.sceneMatchView; if(matchView) { previewHistoryId=matchView; renderHistoryPreview(); return openLargeViewer(matchView); }
   };
   $("history").onclick=async e => {
     const toggle=e.target.dataset.toggleId, download=e.target.dataset.downloadId, remove=e.target.dataset.deleteId;
     if(toggle) { selectedIds.has(toggle)?selectedIds.delete(toggle):selectedIds.add(toggle); return renderHistory(); }
     if(download) return downloadRecord(history.find(item => item.id===download));
-    if(remove) { await deleteRecord(remove); history=history.filter(item => item.id!==remove); selectedIds.delete(remove); renderHistory(); }
+    const gallery=e.target.dataset.galleryId; if(gallery) return sendRecords([history.find(item=>item.id===gallery)]);
+    const view=e.target.dataset.viewId||e.target.dataset.previewId;
+    if(view) {
+      previewHistoryId=view;
+      if(e.target.dataset.previewId) {
+        selectedIds.clear();
+        selectedIds.add(view);
+        renderHistory();
+      }
+      renderHistoryPreview();
+      if(e.target.dataset.viewId)openLargeViewer(view);
+      return;
+    }
+    if(remove) { await deleteRecord(remove); history=history.filter(item => item.id!==remove); selectedIds.delete(remove); if(previewHistoryId===remove)previewHistoryId=""; renderHistory(); renderHistoryPreview(); }
+  };
+  $("historyPreviewImage").onclick=()=>openLargeViewer();
+  $("openLargeViewerBtn").onclick=()=>openLargeViewer();
+  $("previewToGalleryBtn").onclick=()=>sendRecords([currentPreviewRecord()]);
+  $("previewEditBtn").onclick=()=>requestHostEdit("edit");
+  $("previewCropBtn").onclick=()=>requestHostEdit("crop");
+  $("previewBgBtn").onclick=()=>requestHostEdit("bgr");
+  $("closeViewerBtn").onclick=closeLargeViewer;
+  $("imageViewerModal").onmousedown=e=>{if(e.target===$("imageViewerModal"))closeLargeViewer();};
+  $("viewerZoomIn").onclick=()=>{viewerState.scale=Math.min(8,viewerState.scale*1.2);applyViewerTransform();};
+  $("viewerZoomOut").onclick=()=>{viewerState.scale=Math.max(.05,viewerState.scale/1.2);applyViewerTransform();};
+  $("viewerReset").onclick=resetViewer;
+  $("viewerImage").onload=()=>requestAnimationFrame(fitViewerToStage);
+  $("viewerToGalleryBtn").onclick=()=>sendRecords([currentPreviewRecord()]);
+  $("viewerEditBtn").onclick=()=>requestHostEdit("edit");
+  $("viewerCropBtn").onclick=()=>requestHostEdit("crop");
+  $("viewerBgBtn").onclick=()=>requestHostEdit("bgr");
+  $("viewerStage").onwheel=e=>{e.preventDefault();viewerState.scale=Math.max(.05,Math.min(8,viewerState.scale*(e.deltaY<0?1.12:.89)));applyViewerTransform();};
+  $("viewerStage").onpointerdown=e=>{viewerState.dragging=true;viewerState.startX=e.clientX-viewerState.x;viewerState.startY=e.clientY-viewerState.y;$("viewerStage").classList.add("dragging");$("viewerStage").setPointerCapture(e.pointerId);};
+  $("viewerStage").onpointermove=e=>{if(!viewerState.dragging)return;viewerState.x=e.clientX-viewerState.startX;viewerState.y=e.clientY-viewerState.startY;applyViewerTransform();};
+  $("viewerStage").onpointerup=()=>{viewerState.dragging=false;$("viewerStage").classList.remove("dragging");};
+  $("exportDockToggle").onclick=()=>$("exportDock").classList.toggle("open");
+  $("exportDock").onclick=event=>{
+    const format=event.target.closest("[data-story-export]")?.dataset.storyExport;
+    if(format) exportStory(format);
+  };
+  $("importMddBtn").onclick=()=>$("importMddInput").click();
+  $("importMddInput").onchange=async event=>{
+    const file=event.target.files?.[0];event.target.value="";if(!file)return;
+    try { await importMddProject(file); } catch(error) { toast(`MDD 불러오기 실패: ${error.message}`); }
+  };
+  $("importStoryBtn").onclick=()=>$("importStoryInput").click();
+  $("importStoryInput").onchange=async event=>{
+    const file=event.target.files?.[0];event.target.value="";if(!file)return;
+    try { await importStoryProject(file); } catch(error) { toast(`불러오기 실패: ${error.message}`); }
   };
   window.addEventListener("message",event => {
     const data=event.data || {};
@@ -488,15 +1270,38 @@ Output the image only.`});
       refreshKeyUI(hostSharedKey);
       return;
     }
-    if(data.type==="fma-app-request-images" && data.app==="story") sendImages(data.mode,data.requestId);
+    if(data.type==="fma-app-source-images" && data.app==="storyHtml") {
+      const incoming=Array.isArray(data.images)?data.images:[];
+      incoming.filter(item=>String(item.dataUrl||"").startsWith("data:image")).forEach(item=>{
+        referenceImages.push({id:uid(),dataUrl:item.dataUrl,mimeType:item.mimeType||item.dataUrl.slice(5,item.dataUrl.indexOf(";"))||"image/png",name:item.name||"FMA reference"});
+      });
+      renderReferences();
+      toast(incoming.length?`${incoming.length}개 FMA 참고 이미지를 추가했습니다.`:"참고 이미지 선택을 취소했습니다.");
+      return;
+    }
+    if(data.type==="fma-story-edit-result" && data.app==="storyHtml" && data.requestId===pendingEditRequestId) {
+      pendingEditRequestId="";
+      if(!data.dataUrl) return toast(data.message||"편집 결과를 받지 못했습니다.");
+      const source=currentPreviewRecord();
+      const record={id:uid(),dataUrl:data.dataUrl,mimeType:"image/png",title:`${source?.title||"Scene"} · ${data.tool||"Edit"}`,prompt:source?.prompt||"",createdAt:new Date().toISOString()};
+      history.unshift(record); selectedIds.add(record.id); previewHistoryId=record.id;
+      saveRecord(record).then(()=>{renderHistory();renderHistoryPreview();openLargeViewer(record.id);toast("편집 결과가 Story Image 히스토리에 저장되었습니다.");});
+      return;
+    }
+    if(data.type==="fma-app-request-images" && data.app==="storyHtml") sendImages(data.mode,data.requestId);
   });
 
   addScene();
+  let savedStoryFontSize=10;
+  try { savedStoryFontSize=localStorage.getItem(STORY_FONT_KEY)||10; } catch (_) {}
+  applyStoryFontSize(savedStoryFontSize);
+  renderStylePrompts();
+  renderReferences();
   loadHistory().catch(error => { console.error(error); toast("히스토리 저장소를 열지 못했습니다."); });
   refreshKeyUI();
   if(window.parent!==window) {
-    window.parent.postMessage({type:"fma-app-ready",app:"story"},"*");
-    window.parent.postMessage({type:"fma-app-request-shared-api-key",app:"story"},"*");
+    window.parent.postMessage({type:"fma-app-ready",app:"storyHtml"},"*");
+    window.parent.postMessage({type:"fma-app-request-shared-api-key",app:"storyHtml"},"*");
   }
 })();
 </script>

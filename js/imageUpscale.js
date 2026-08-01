@@ -12,6 +12,7 @@ const AI_RESOLUTION_STORAGE = "fma_ai_upscale_resolution";
 const AI_UPSCALE_PROMPT_STORAGE = "fma_ai_upscale_prompt";
 const AI_BG_REMOVE_PROMPT_STORAGE = "fma_ai_bg_remove_prompt";
 const STORY_APP_ENABLED_STORAGE = "fma_story_app_enabled";
+const STORY_HTML_APP_ENABLED_STORAGE = "fma_story_html_app_enabled";
 const AURA_APP_ENABLED_STORAGE = "fma_aura_app_enabled";
 const AURA_GEMINI_APP_ENABLED_STORAGE = "fma_aura_gemini_app_enabled";
 const BACKGROUND_GEMINI_APP_ENABLED_STORAGE = "fma_background_gemini_app_enabled";
@@ -218,6 +219,10 @@ function isStoryAppEnabled() {
     return readUpscaleSetting(STORY_APP_ENABLED_STORAGE, "false") === "true";
 }
 
+function isStoryHtmlAppEnabled() {
+    return readUpscaleSetting(STORY_HTML_APP_ENABLED_STORAGE, "true") === "true";
+}
+
 function isAuraAppEnabled() {
     return readUpscaleSetting(AURA_APP_ENABLED_STORAGE, "false") === "true";
 }
@@ -254,6 +259,7 @@ function openUpscaleSettings() {
     dom.enableAiUpscale.checked = isAiUpscaleEnabled();
     dom.enableAiBgRemove.checked = isAiBackgroundRemoveEnabled();
     dom.enableStoryApp.checked = isStoryAppEnabled();
+    dom.enableStoryHtmlApp.checked = isStoryHtmlAppEnabled();
     dom.enableAuraApp.checked = isAuraAppEnabled();
     dom.enableAuraGeminiApp.checked = isAuraGeminiAppEnabled();
     dom.enableBackgroundGeminiApp.checked = isBackgroundGeminiAppEnabled();
@@ -262,11 +268,7 @@ function openUpscaleSettings() {
     dom.aiStudioApiKey.type = "password";
     dom.btnToggleApiKey.innerText = "표시";
     refreshAiKeyUsageButton();
-    setSharedApiKeyStatus(
-        getAiStudioApiKey()
-            ? "저장된 공통 키가 FMA Viewer, Aura Local, BG Remover에 연결되어 있습니다."
-            : "공통 키를 입력한 뒤 AI API Key 적용을 누르세요."
-    );
+    refreshAiKeyUsageStatus();
     dom.settingsModal.style.display = "flex";
     dom.aiStudioApiKey.focus();
 }
@@ -281,16 +283,22 @@ function refreshAiKeyUsageButton() {
         : "저장된 키의 AI 사용을 다시 허용합니다.";
 }
 
+function refreshAiKeyUsageStatus() {
+    const hasKey = Boolean(getAiStudioApiKey());
+    if (!hasKey) {
+        setSharedApiKeyStatus("API 키가 저장되어 있지 않습니다.");
+    } else if (isAiKeyUsageEnabled()) {
+        setSharedApiKeyStatus("● 키가 사용 중입니다.", "success");
+    } else {
+        setSharedApiKeyStatus("● 키가 중지되었습니다.", "error");
+    }
+}
+
 function toggleAiKeyUsage() {
     const nextEnabled = !isAiKeyUsageEnabled();
     writeUpscaleSetting(AI_KEY_USAGE_ENABLED_STORAGE, String(nextEnabled));
     refreshAiKeyUsageButton();
-    setSharedApiKeyStatus(
-        nextEnabled
-            ? "AI 키 사용을 다시 시작했습니다. 저장된 공통 키와 앱별 전용 키를 사용할 수 있습니다."
-            : "AI 키 사용을 중지했습니다. 키는 보관되지만 모든 AI 요청이 차단됩니다.",
-        nextEnabled ? "success" : "error"
-    );
+    refreshAiKeyUsageStatus();
     if (!nextEnabled) {
         upscaleState.abortController?.abort();
         if (typeof bgRemoveState !== "undefined") bgRemoveState.abortController?.abort();
@@ -298,6 +306,8 @@ function toggleAiKeyUsage() {
     if (typeof notifyExternalAppSharedApiKey === "function") {
         notifyExternalAppSharedApiKey();
     }
+    if (typeof updateAiJenaKeyStatus === "function") updateAiJenaKeyStatus();
+    if (images.length > 0 && typeof renderDynamicMeta === "function") renderDynamicMeta(currentIndex);
 }
 
 function setSharedApiKeyStatus(message, type = "") {
@@ -317,13 +327,12 @@ function applySharedAiApiKey() {
     writeUpscaleSetting(AI_API_KEY_STORAGE, key);
     writeUpscaleSetting(AI_KEY_USAGE_ENABLED_STORAGE, "true");
     refreshAiKeyUsageButton();
-    setSharedApiKeyStatus(
-        "공통 키 적용 완료 · FMA Viewer, Aura Local, BG Remover에서 사용할 수 있습니다.",
-        "success"
-    );
+    setSharedApiKeyStatus("● 키가 사용 중입니다.", "success");
     if (typeof notifyExternalAppSharedApiKey === "function") {
         notifyExternalAppSharedApiKey();
     }
+    if (typeof updateAiJenaKeyStatus === "function") updateAiJenaKeyStatus();
+    if (images.length > 0 && typeof renderDynamicMeta === "function") renderDynamicMeta(currentIndex);
 }
 
 function closeUpscaleSettings() {
@@ -340,6 +349,7 @@ function saveUpscaleSettings() {
     writeUpscaleSetting(AI_ENABLED_STORAGE, String(dom.enableAiUpscale.checked));
     writeUpscaleSetting(AI_BG_REMOVE_ENABLED_STORAGE, String(dom.enableAiBgRemove.checked));
     writeUpscaleSetting(STORY_APP_ENABLED_STORAGE, String(dom.enableStoryApp.checked));
+    writeUpscaleSetting(STORY_HTML_APP_ENABLED_STORAGE, String(dom.enableStoryHtmlApp.checked));
     writeUpscaleSetting(AURA_APP_ENABLED_STORAGE, String(dom.enableAuraApp.checked));
     writeUpscaleSetting(AURA_GEMINI_APP_ENABLED_STORAGE, String(dom.enableAuraGeminiApp.checked));
     writeUpscaleSetting(BACKGROUND_GEMINI_APP_ENABLED_STORAGE, String(dom.enableBackgroundGeminiApp.checked));
@@ -720,9 +730,11 @@ function saveUpscaleResult(saveMode) {
     let resultIndex = sourceIndex;
 
     if (saveMode === "replace") {
+        const editTime = Date.now();
+        sourceItem.createdAt = sourceItem.createdAt || sourceItem.date || editTime;
         sourceItem.src = upscaleState.resultSrc;
         sourceItem.size = estimateDataUrlBytes(upscaleState.resultSrc);
-        sourceItem.date = Date.now();
+        sourceItem.modifiedAt = editTime;
         sourceItem.mimeType = upscaleState.resultMimeType;
         sourceItem.upscaleInfo = {
             method: method,
@@ -746,6 +758,7 @@ function saveUpscaleResult(saveMode) {
             path: `${sourcePath}.${suffix}_${count}`,
             group: method === "ai" ? "ai-upscaled" : method === "resize" ? "resized" : "upscaled",
             date: Date.now(),
+            createdAt: Date.now(),
             size: estimateDataUrlBytes(upscaleState.resultSrc),
             mimeType: upscaleState.resultMimeType,
             isFav: false,

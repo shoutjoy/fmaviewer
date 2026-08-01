@@ -63,7 +63,9 @@ function createPreviewImageSlot(index, imageId) {
     if (media.tagName === "VIDEO") {
         media.controls = true;
         media.playsInline = true;
-        media.preload = "metadata";
+        media.preload = "auto";
+        media.setAttribute("playsinline", "");
+        media.setAttribute("webkit-playsinline", "");
         media.setAttribute("aria-label", item.metadata?.title || `video ${index + 1}`);
     } else {
         media.alt = item.metadata?.title || `preview ${index + 1}`;
@@ -109,8 +111,10 @@ function renderDynamicMeta(i) {
         actionsDiv.style.gap = "5px";
 
         const favBtn = document.createElement("button");
-        favBtn.innerText = item.isFav ? "★ Favorited" : "☆ Favorite";
+        favBtn.innerText = item.isFav ? "★" : "☆";
         favBtn.className = "meta-action-button meta-favorite-button";
+        favBtn.title = item.isFav ? "즐겨찾기 해제" : "즐겨찾기 추가";
+        favBtn.setAttribute("aria-label", favBtn.title);
         favBtn.style.color = item.isFav ? "#ffd700" : "#fff";
         favBtn.onclick = () => {
             toggleFav(idx);
@@ -119,8 +123,10 @@ function renderDynamicMeta(i) {
 
         const downBtn = document.createElement("button");
         const videoItem = isVideoMedia(item);
-        downBtn.innerText = videoItem ? "Download Video" : "Download Image";
+        downBtn.innerText = "⇩";
         downBtn.className = "meta-action-button meta-download-button";
+        downBtn.title = videoItem ? "영상 다운로드" : "이미지 다운로드";
+        downBtn.setAttribute("aria-label", downBtn.title);
         downBtn.onclick = () => {
             const a = document.createElement("a");
             a.href = item.src;
@@ -150,7 +156,10 @@ function renderDynamicMeta(i) {
 
         actionsDiv.appendChild(favBtn);
         actionsDiv.appendChild(downBtn);
-        if (!videoItem) {
+        if (videoItem) {
+            editBtn.onclick = () => openVideoEditor(idx);
+            actionsDiv.appendChild(editBtn);
+        } else {
             actionsDiv.appendChild(editBtn);
             actionsDiv.appendChild(cropBtn);
             actionsDiv.appendChild(bgRemoveBtn);
@@ -168,17 +177,18 @@ function renderDynamicMeta(i) {
 
         const aiJenaBtn = document.createElement("button");
         aiJenaBtn.className = "meta-action-button ai-jena-header-button ai-jena-image-button";
-        aiJenaBtn.onclick = () => openAiJena(idx);
         const aiJenaReady = typeof getUsableAiStudioApiKey === "function" &&
             Boolean(getUsableAiStudioApiKey());
+        const aiJenaHasKey = typeof getAiStudioApiKey === "function" && Boolean(getAiStudioApiKey());
         aiJenaBtn.classList.toggle("ready", aiJenaReady);
         aiJenaBtn.classList.toggle("unavailable", !aiJenaReady);
-        aiJenaBtn.innerText = aiJenaReady
-            ? "✦ AI Jena"
-            : "✦ AI Jena · API키를 먼저 설정하세요";
+        aiJenaBtn.style.display = aiJenaHasKey ? "inline-flex" : "none";
+        aiJenaBtn.disabled = !aiJenaReady;
+        aiJenaBtn.onclick = aiJenaReady ? () => openAiJena(idx) : null;
+        aiJenaBtn.innerText = aiJenaReady ? "✦ AI Jena" : "✦";
         aiJenaBtn.title = aiJenaReady
             ? "이 이미지로 AI Jena 열기"
-            : "Settings에서 AI Studio 키를 설정하세요.";
+            : "AI API 키 사용이 중지되어 있습니다.";
         if (!videoItem) actionsDiv.appendChild(aiJenaBtn);
 
         if (!videoItem && typeof isAiUpscaleEnabled === "function" && isAiUpscaleEnabled()) {
@@ -196,6 +206,7 @@ function renderDynamicMeta(i) {
 
     dom.metaDynamicArea.appendChild(createMetaItem(i));
     const secondIndex = getSecondVisibleImageIndex(i);
+    dom.previewMeta?.classList.toggle("dual-meta", secondIndex >= 0);
     if (secondIndex >= 0) {
         const divider = document.createElement("div");
         divider.className = "meta-divider";
@@ -208,8 +219,10 @@ function renderDynamicMeta(i) {
 
 function switchViewMode(mode) {
     viewMode = mode;
+    navStep = mode === 2 ? 2 : 1;
     dom.previewContainer.classList.toggle("dual-view", mode === 2);
     updateModeButtons();
+    updateStepButtons();
     showImage(currentIndex);
 }
 

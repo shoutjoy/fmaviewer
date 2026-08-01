@@ -59,6 +59,8 @@ function initBackgroundMaskEditor() {
         maskEditorState.strength = (Number(dom.maskBrushStrength.value) || 100) / 100;
         dom.maskBrushStrengthValue.innerText = Math.round(maskEditorState.strength * 100) + "%";
     };
+    bindMaskRangeStepper(dom.maskBrushSize, dom.btnMaskBrushSizeDown, dom.btnMaskBrushSizeUp);
+    bindMaskRangeStepper(dom.maskBrushStrength, dom.btnMaskBrushStrengthDown, dom.btnMaskBrushStrengthUp);
     dom.maskBrushType.onchange = () => {
         maskEditorState.brushType = dom.maskBrushType.value;
         dom.maskEditorCursor.style.borderRadius =
@@ -509,6 +511,17 @@ function applyDirectMaskBrush(centerX, centerY) {
                 if (maskEditorState.brushType === "soft") {
                     weight = Math.max(0, 1 - distance / radius);
                     weight = weight * weight * (3 - 2 * weight);
+                } else if (maskEditorState.brushType === "spread") {
+                    const normalized = distance / Math.max(1, radius);
+                    weight = Math.exp(-normalized * normalized * 3.2);
+                } else if (maskEditorState.brushType === "watercolor") {
+                    const normalized = distance / Math.max(1, radius);
+                    const angle = Math.atan2(dy, dx);
+                    const edge = .78 + .14 * Math.sin(angle * 9 + radius * .11) +
+                        .08 * maskBrushNoise(absoluteX * .11, absoluteY * .11);
+                    if (normalized > edge) continue;
+                    const grain = maskBrushNoise(absoluteX * .37, absoluteY * .37);
+                    weight = (.2 + (1 - normalized) * .42) * (.58 + grain * .42);
                 }
             } else if (Math.abs(dx) > radius || Math.abs(dy) > radius) {
                 continue;
@@ -533,12 +546,42 @@ function applyDirectMaskBrush(centerX, centerY) {
     context.putImageData(current, left, top);
 }
 
+function maskBrushNoise(x, y) {
+    const value = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+    return value - Math.floor(value);
+}
+
 function paintMaskSelection(centerX, centerY) {
     const context = dom.maskSelectionCanvas.getContext("2d");
     const radius = maskEditorState.brushSize / 2;
-    context.fillStyle = maskEditorState.action === "erase" ? "#ff4364" : "#52f1ba";
+    const rgb = maskEditorState.action === "erase" ? "255,67,100" : "82,241,186";
+    context.fillStyle = `rgb(${rgb})`;
     if (maskEditorState.brushType === "square") {
         context.fillRect(centerX - radius, centerY - radius, radius * 2, radius * 2);
+    } else if (maskEditorState.brushType === "spread") {
+        const gradient = context.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius);
+        gradient.addColorStop(0, `rgba(${rgb},.9)`);
+        gradient.addColorStop(.42, `rgba(${rgb},.55)`);
+        gradient.addColorStop(1, `rgba(${rgb},0)`);
+        context.fillStyle = gradient;
+        context.fillRect(centerX - radius, centerY - radius, radius * 2, radius * 2);
+    } else if (maskEditorState.brushType === "watercolor") {
+        context.save();
+        context.globalAlpha = .2;
+        for (let index = 0; index < 9; index++) {
+            const angle = index * 2.399963;
+            const offset = radius * (.04 + (index % 3) * .035);
+            context.beginPath();
+            context.ellipse(
+                centerX + Math.cos(angle) * offset,
+                centerY + Math.sin(angle) * offset,
+                radius * (.78 + (index % 4) * .035),
+                radius * (.72 + ((index + 2) % 4) * .04),
+                angle * .3, 0, Math.PI * 2
+            );
+            context.fill();
+        }
+        context.restore();
     } else {
         context.beginPath();
         context.arc(centerX, centerY, radius, 0, Math.PI * 2);
@@ -625,6 +668,46 @@ function refreshMaskPolygonPresetSelect(selectedId) {
     const available = presets.length > 0;
     dom.btnLoadMaskPolygon.disabled = !available;
     dom.btnDeleteMaskPolygon.disabled = !available;
+    renderMaskPolygonPresetList(presets, dom.maskPolygonPresetSelect.value);
+}
+
+function bindMaskRangeStepper(input, decreaseButton, increaseButton) {
+    if (!input || !decreaseButton || !increaseButton) return;
+    const changeBy = delta => {
+        const min = Number(input.min);
+        const max = Number(input.max);
+        const current = Number(input.value) || 0;
+        input.value = String(maskClamp(current + delta, min, max));
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    decreaseButton.onclick = () => changeBy(-1);
+    increaseButton.onclick = () => changeBy(1);
+}
+
+function renderMaskPolygonPresetList(presets, selectedId) {
+    if (!dom.maskPolygonPresetList) return;
+    dom.maskPolygonPresetList.innerHTML = "";
+    if (!presets.length) {
+        const empty = document.createElement("div");
+        empty.className = "mask-polygon-preset-empty";
+        empty.textContent = "저장된 다각형 영역이 없습니다.";
+        dom.maskPolygonPresetList.appendChild(empty);
+        return;
+    }
+    presets.forEach(preset => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "mask-polygon-preset-item";
+        button.classList.toggle("active", preset.id === selectedId);
+        button.dataset.presetId = preset.id;
+        button.innerHTML = `<span>${escapeHtml(preset.name)}</span><small>${preset.points.length}점 · 불러오기</small>`;
+        button.onclick = () => {
+            dom.maskPolygonPresetSelect.value = preset.id;
+            loadSelectedMaskPolygonPreset();
+            renderMaskPolygonPresetList(presets, preset.id);
+        };
+        dom.maskPolygonPresetList.appendChild(button);
+    });
 }
 
 function saveMaskPolygonPreset() {
@@ -675,8 +758,13 @@ function loadSelectedMaskPolygonPreset() {
     clearMaskSelection();
     paintMaskPolygonSelection(points);
     maskEditorState.lastPolygonPoints = points;
+    maskEditorState.polygonPoints = points.map(point => ({ ...point }));
+    maskEditorState.polygonHoverPoint = null;
+    maskEditorState.polygonNearStart = false;
+    setMaskEditorTool("polygon");
+    renderMaskPolygonGuide();
     updateMaskUndoButton();
-    updateMaskEditorStatus(`'${preset.name}' 영역 불러옴 · 선택영역 적용을 누르세요.`);
+    updateMaskEditorStatus(`'${preset.name}' 영역을 다시 활성화했습니다 · 이동하거나 선택영역 적용을 누르세요.`);
 }
 
 function deleteSelectedMaskPolygonPreset() {

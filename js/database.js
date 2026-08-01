@@ -529,6 +529,8 @@ function readMetadataEntries(db, imageIds) {
 function normalizeRestoredImages(list) {
     list.forEach(item => {
         if (!item.date) item.date = Date.now();
+        if (!item.createdAt) item.createdAt = item.date;
+        if (!item.modifiedAt) item.modifiedAt = item.createdAt;
         if (!item.size) item.size = 0;
         if (!item.metadata) item.metadata = {};
         if (!item.mediaType) item.mediaType = String(item.mimeType || "").startsWith("video/")
@@ -537,7 +539,7 @@ function normalizeRestoredImages(list) {
 }
 
 function restoreViewerState(state) {
-    sortMode = ["latest", "oldest", "size", "type", "group"].includes(state.sortMode)
+    sortMode = ["latest", "modified", "oldest", "size", "type", "group"].includes(state.sortMode)
         ? state.sortMode : "latest";
     dom.sortSelect.value = sortMode;
     mediaFilter = ["all", "image", "video"].includes(state.mediaFilter)
@@ -545,7 +547,7 @@ function restoreViewerState(state) {
     if (dom.mediaFilterSelect) dom.mediaFilterSelect.value = mediaFilter;
     orientation = state.orientation === "vert" ? "vert" : "horz";
     viewMode = state.viewMode === 2 ? 2 : 1;
-    navStep = state.navStep === 2 ? 2 : 1;
+    navStep = viewMode === 2 ? 2 : 1;
     zoom = Number.isFinite(Number(state.zoom)) ? Number(state.zoom) : 1;
     changeGrid([1, 2, 3, 4].includes(Number(state.gridColumns)) ? Number(state.gridColumns) : 2);
     currentIndex = images.length

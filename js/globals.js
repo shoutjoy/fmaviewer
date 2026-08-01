@@ -69,13 +69,16 @@ var dom = {
     btnCenterPreview: document.getElementById("btnCenterPreview"),
     btnResetZoom: document.getElementById("btnResetZoom"),
     btnAddImg: document.getElementById("btnAddImg"),
+    btnOpenFolder: document.getElementById("btnOpenFolder"),
     btnSettings: document.getElementById("btnSettings"),
     btnThemeToggle: document.getElementById("btnThemeToggle"),
     themeToggleIcon: document.getElementById("themeToggleIcon"),
     addImgInput: document.getElementById("addImgInput"),
     zipImgInput: document.getElementById("zipImgInput"),
+    folderImgInput: document.getElementById("folderImgInput"),
     btnImportImages: document.getElementById("btnImportImages"),
     btnImportZip: document.getElementById("btnImportZip"),
+    btnImportFolder: document.getElementById("btnImportFolder"),
     btnPasteImg: document.getElementById("btnPasteImg"),
     importStatus: document.getElementById("importStatus"),
     btnSave: document.getElementById("btnSave"),
@@ -84,6 +87,7 @@ var dom = {
     btnZoomIn: document.getElementById("btnZoomIn"),
     btnZoomOut: document.getElementById("btnZoomOut"),
     zoomText: document.getElementById("zoomText"),
+    previewBottomControls: document.getElementById("previewBottomControls"),
     btnRestoreRemove: document.getElementById("btnRestoreRemove"),
     btnRestore: document.getElementById("btnRestore"),
     imageCount: document.getElementById("imageCount"),
@@ -101,6 +105,10 @@ var dom = {
     loadingTitle: document.getElementById("loadingTitle"),
     progressBar: document.getElementById("progressBar"),
     progressPercent: document.getElementById("progressPercent"),
+    backgroundImportProgress: document.getElementById("backgroundImportProgress"),
+    backgroundImportTitle: document.getElementById("backgroundImportTitle"),
+    backgroundImportBar: document.getElementById("backgroundImportBar"),
+    backgroundImportPercent: document.getElementById("backgroundImportPercent"),
     cropModal: document.getElementById("cropModal"),
     cropCanvas: document.getElementById("cropCanvas"),
     cropSelectionInfo: document.getElementById("cropSelectionInfo"),
@@ -131,6 +139,7 @@ var dom = {
     enableAiUpscale: document.getElementById("enableAiUpscale"),
     enableAiBgRemove: document.getElementById("enableAiBgRemove"),
     enableStoryApp: document.getElementById("enableStoryApp"),
+    enableStoryHtmlApp: document.getElementById("enableStoryHtmlApp"),
     enableAuraApp: document.getElementById("enableAuraApp"),
     enableAuraGeminiApp: document.getElementById("enableAuraGeminiApp"),
     enableBackgroundGeminiApp: document.getElementById("enableBackgroundGeminiApp"),
@@ -174,6 +183,7 @@ var dom = {
     bgRemoveFooterText: document.getElementById("bgRemoveFooterText"),
     btnBgRemoveClose: document.getElementById("btnBgRemoveClose"),
     btnBgRemoveCancel: document.getElementById("btnBgRemoveCancel"),
+    btnBgRemoveAddGallery: document.getElementById("btnBgRemoveAddGallery"),
     btnRunBgRemove: document.getElementById("btnRunBgRemove"),
     btnBgEngineWebgl: document.getElementById("btnBgEngineWebgl"),
     btnBgEngineOnnx: document.getElementById("btnBgEngineOnnx"),
@@ -209,8 +219,12 @@ var dom = {
     maskBrushControlsSection: document.getElementById("maskBrushControlsSection"),
     maskBrushSize: document.getElementById("maskBrushSize"),
     maskBrushSizeValue: document.getElementById("maskBrushSizeValue"),
+    btnMaskBrushSizeDown: document.getElementById("btnMaskBrushSizeDown"),
+    btnMaskBrushSizeUp: document.getElementById("btnMaskBrushSizeUp"),
     maskBrushStrength: document.getElementById("maskBrushStrength"),
     maskBrushStrengthValue: document.getElementById("maskBrushStrengthValue"),
+    btnMaskBrushStrengthDown: document.getElementById("btnMaskBrushStrengthDown"),
+    btnMaskBrushStrengthUp: document.getElementById("btnMaskBrushStrengthUp"),
     maskBrushType: document.getElementById("maskBrushType"),
     maskActionHelp: document.getElementById("maskActionHelp"),
     maskSelectionActions: document.getElementById("maskSelectionActions"),
@@ -220,6 +234,7 @@ var dom = {
     maskPolygonPresetControls: document.getElementById("maskPolygonPresetControls"),
     maskPolygonPresetName: document.getElementById("maskPolygonPresetName"),
     maskPolygonPresetSelect: document.getElementById("maskPolygonPresetSelect"),
+    maskPolygonPresetList: document.getElementById("maskPolygonPresetList"),
     btnSaveMaskPolygon: document.getElementById("btnSaveMaskPolygon"),
     btnLoadMaskPolygon: document.getElementById("btnLoadMaskPolygon"),
     btnDeleteMaskPolygon: document.getElementById("btnDeleteMaskPolygon"),
@@ -311,16 +326,23 @@ var dom = {
     btnDuplicateImageLayer: document.getElementById("btnDuplicateImageLayer"),
     btnDeleteImageLayer: document.getElementById("btnDeleteImageLayer"),
     imageLayerOpacity: document.getElementById("imageLayerOpacity"),
+    imageLayerOpacityValue: document.getElementById("imageLayerOpacityValue"),
     imageLayerRotation: document.getElementById("imageLayerRotation"),
+    imageLayerRotationValue: document.getElementById("imageLayerRotationValue"),
     imageLayerX: document.getElementById("imageLayerX"),
+    imageLayerXValue: document.getElementById("imageLayerXValue"),
     imageLayerY: document.getElementById("imageLayerY"),
+    imageLayerYValue: document.getElementById("imageLayerYValue"),
     imageLayerWidth: document.getElementById("imageLayerWidth"),
+    imageLayerWidthValue: document.getElementById("imageLayerWidthValue"),
     imageLayerHeight: document.getElementById("imageLayerHeight"),
+    imageLayerHeightValue: document.getElementById("imageLayerHeightValue"),
     btnCropImageLayer: document.getElementById("btnCropImageLayer"),
     btnBgRemoveImageLayer: document.getElementById("btnBgRemoveImageLayer"),
     btnDuplicateImageAlpha: document.getElementById("btnDuplicateImageAlpha"),
     btnDuplicateImageMask: document.getElementById("btnDuplicateImageMask"),
     baseImageLayerVisible: document.getElementById("baseImageLayerVisible"),
+    baseImageLayerSelectable: document.getElementById("baseImageLayerSelectable"),
     baseImageLayerOpacity: document.getElementById("baseImageLayerOpacity"),
     baseImageLayerOpacityValue: document.getElementById("baseImageLayerOpacityValue"),
     btnDuplicateBaseLayer: document.getElementById("btnDuplicateBaseLayer"),
@@ -346,6 +368,8 @@ var dom = {
     imageEditorDrawingStatus: document.getElementById("imageEditorDrawingStatus"),
     imageEditorFontSize: document.getElementById("imageEditorFontSize"),
     imageEditorFontSizeValue: document.getElementById("imageEditorFontSizeValue"),
+    btnImageEditorMagnet: document.getElementById("btnImageEditorMagnet"),
+    btnImageEditorPanMode: document.getElementById("btnImageEditorPanMode"),
     btnImageEditorReset: document.getElementById("btnImageEditorReset"),
     btnImageEditorClose: document.getElementById("btnImageEditorClose"),
     btnResetImageAdjustments: document.getElementById("btnResetImageAdjustments"),
@@ -414,6 +438,7 @@ var dom = {
     aiJenaVideoOptions: document.getElementById("aiJenaVideoOptions"),
     aiJenaVideoModel: document.getElementById("aiJenaVideoModel"),
     aiJenaVideoAspect: document.getElementById("aiJenaVideoAspect"),
+    aiJenaVideoDuration: document.getElementById("aiJenaVideoDuration"),
     aiJenaVideoUseSource: document.getElementById("aiJenaVideoUseSource"),
     aiJenaKeyStatus: document.getElementById("aiJenaKeyStatus"),
     aiJenaBrushControls: document.getElementById("aiJenaBrushControls"),
@@ -478,6 +503,7 @@ var dom = {
     btnAiJenaNew: document.getElementById("btnAiJenaNew"),
     externalAppButtons: document.getElementById("externalAppButtons"),
     btnOpenStoryApp: document.getElementById("btnOpenStoryApp"),
+    btnOpenStoryHtmlApp: document.getElementById("btnOpenStoryHtmlApp"),
     btnOpenAuraApp: document.getElementById("btnOpenAuraApp"),
     btnOpenAuraGeminiApp: document.getElementById("btnOpenAuraGeminiApp"),
     btnOpenBackgroundGeminiApp: document.getElementById("btnOpenBackgroundGeminiApp"),
@@ -491,13 +517,23 @@ var dom = {
     externalAppProgress: document.getElementById("externalAppProgress"),
     externalAppProgressPercent: document.getElementById("externalAppProgressPercent"),
     externalAppProgressBar: document.getElementById("externalAppProgressBar"),
+    externalAppTaskProgress: document.getElementById("externalAppTaskProgress"),
+    externalAppTaskStatus: document.getElementById("externalAppTaskStatus"),
+    externalAppTaskPercent: document.getElementById("externalAppTaskPercent"),
+    externalAppTaskBar: document.getElementById("externalAppTaskBar"),
     externalAppImportHint: document.getElementById("externalAppImportHint"),
     btnDockExternalApp: document.getElementById("btnDockExternalApp"),
     btnMinimizeExternalApp: document.getElementById("btnMinimizeExternalApp"),
     btnReloadExternalApp: document.getElementById("btnReloadExternalApp"),
     btnCloseExternalApp: document.getElementById("btnCloseExternalApp"),
     btnImportExternalCurrent: document.getElementById("btnImportExternalCurrent"),
-    btnImportExternalAll: document.getElementById("btnImportExternalAll")
+    btnImportExternalAll: document.getElementById("btnImportExternalAll"),
+    externalAppFmaPicker: document.getElementById("externalAppFmaPicker"),
+    externalAppFmaPickerGrid: document.getElementById("externalAppFmaPickerGrid"),
+    externalAppFmaPickerStatus: document.getElementById("externalAppFmaPickerStatus"),
+    btnCloseExternalAppFmaPicker: document.getElementById("btnCloseExternalAppFmaPicker"),
+    btnCancelExternalAppFmaPicker: document.getElementById("btnCancelExternalAppFmaPicker"),
+    btnApplyExternalAppFmaPicker: document.getElementById("btnApplyExternalAppFmaPicker")
 };
 
 function showLoading(title) {
@@ -517,5 +553,38 @@ function updateLoading(percent) {
 
 function hideLoading() {
     if (dom.loadingOverlay) dom.loadingOverlay.style.display = "none";
+}
+
+let backgroundImportHideTimer = null;
+
+function showBackgroundImportProgress(title) {
+    if (!dom.backgroundImportProgress) return;
+    clearTimeout(backgroundImportHideTimer);
+    dom.backgroundImportProgress.hidden = false;
+    dom.backgroundImportProgress.classList.remove("is-complete", "is-error");
+    dom.backgroundImportTitle.textContent = title || "갤러리에 추가하는 중…";
+    dom.backgroundImportBar.style.width = "0%";
+    dom.backgroundImportPercent.textContent = "0%";
+}
+
+function updateBackgroundImportProgress(percent, title) {
+    if (!dom.backgroundImportProgress) return;
+    const value = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
+    dom.backgroundImportProgress.hidden = false;
+    if (title) dom.backgroundImportTitle.textContent = title;
+    dom.backgroundImportBar.style.width = `${value}%`;
+    dom.backgroundImportPercent.textContent = `${value}%`;
+}
+
+function finishBackgroundImportProgress(title, options = {}) {
+    if (!dom.backgroundImportProgress) return;
+    const isError = Boolean(options.error);
+    updateBackgroundImportProgress(isError ? 0 : 100, title);
+    dom.backgroundImportProgress.classList.toggle("is-complete", !isError);
+    dom.backgroundImportProgress.classList.toggle("is-error", isError);
+    clearTimeout(backgroundImportHideTimer);
+    backgroundImportHideTimer = setTimeout(() => {
+        dom.backgroundImportProgress.hidden = true;
+    }, isError ? 4200 : 1800);
 }
 

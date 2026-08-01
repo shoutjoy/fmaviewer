@@ -94,8 +94,11 @@
                     <button id="uploadBtn" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition-all">
                         <i data-lucide="folder-plus" class="w-4 h-4 text-indigo-400"></i> 이미지 추가
                     </button>
+                    <button id="pasteImageBtn" type="button" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition-all">
+                        <i data-lucide="clipboard-paste" class="w-4 h-4 text-fuchsia-300"></i> 붙여넣기
+                    </button>
                     <button id="importFromFmaBtn" class="px-4 py-2 bg-cyan-950/50 hover:bg-cyan-900/60 text-cyan-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 border border-cyan-700/60 transition-all">
-                        <i data-lucide="image-down" class="w-4 h-4 text-cyan-400"></i> FMA 현재 이미지
+                        <i data-lucide="images" class="w-4 h-4 text-cyan-400"></i> FMA 갤러리에서 선택
                     </button>
                     <button id="clearAllDbBtn" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 hover:text-rose-400 text-slate-400 rounded-xl text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition-all">
                         <i data-lucide="trash-2" class="w-4 h-4"></i> 모두 지우기
@@ -109,13 +112,19 @@
                     <div id="dropZone" class="border-2 border-dashed border-slate-700 hover:border-indigo-500 bg-slate-950/40 rounded-xl p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center min-h-[120px] group">
                         <i data-lucide="upload-cloud" class="w-8 h-8 text-slate-500 group-hover:scale-110 transition-transform text-indigo-400 mb-2"></i>
                         <p class="text-xs font-medium text-slate-300">이곳에 파일을 드래그 앤 드롭하거나 클릭하여 추가</p>
-                        <p class="text-[10px] text-slate-500 mt-1">다중 선택을 지원하며 로컬 브라우저에 안전히 보존된다.</p>
+                        <p class="text-[10px] text-slate-500 mt-1">다중 선택 · Ctrl+V 붙여넣기를 지원하며 로컬 브라우저에 안전히 보존된다.</p>
                     </div>
 
                     <div class="space-y-1.5">
-                        <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                            <i data-lucide="images" class="w-3 h-3"></i> 보관소 갤러리 (<span id="galleryCount">0</span>)
-                        </p>
+                        <div class="flex items-center justify-between gap-3">
+                            <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                                <i data-lucide="images" class="w-3 h-3"></i> 보관소 갤러리 (<span id="galleryCount">0</span>)
+                            </p>
+                            <button id="clearGalleryDbBtn" type="button"
+                                class="px-2.5 py-1 rounded-lg border border-rose-500/35 bg-rose-950/30 text-[10px] font-semibold text-rose-300 hover:bg-rose-900/50 hover:text-rose-100 transition-colors">
+                                <i data-lucide="trash-2" class="w-3 h-3 inline-block mr-1"></i>전체 지우기
+                            </button>
+                        </div>
                         <div id="imageGalleryGrid" class="flex gap-3 overflow-x-auto py-2 px-1 border border-slate-800/60 bg-slate-950/20 rounded-xl min-h-[90px] items-center">
                             <div class="text-xs text-slate-600 italic px-4 w-full text-center py-4">대기 중인 미디어가 없다.</div>
                         </div>
@@ -460,8 +469,10 @@
         // DOM 객체 바인딩
         const imageInput = document.getElementById('imageInput');
         const uploadBtn = document.getElementById('uploadBtn');
+        const pasteImageBtn = document.getElementById('pasteImageBtn');
         const importFromFmaBtn = document.getElementById('importFromFmaBtn');
         const clearAllDbBtn = document.getElementById('clearAllDbBtn');
+        const clearGalleryDbBtn = document.getElementById('clearGalleryDbBtn');
         const dropZone = document.getElementById('dropZone');
         const imageGalleryGrid = document.getElementById('imageGalleryGrid');
         const galleryCount = document.getElementById('galleryCount');
@@ -571,6 +582,36 @@
                 tx.objectStore(STORE_NAME).clear();
                 tx.oncomplete = () => resolve(true);
             });
+        }
+
+        function countImagesInDB() {
+            return new Promise((resolve) => {
+                if (!dbInstance) return resolve(0);
+                const req = dbInstance.transaction([STORE_NAME], "readonly").objectStore(STORE_NAME).count();
+                req.onsuccess = () => resolve(Number(req.result) || 0);
+                req.onerror = () => resolve(0);
+            });
+        }
+
+        async function clearBgRemoverGallery() {
+            const count = Math.max(state.images.length, await countImagesInDB());
+            if (!count) {
+                showToast('보관소 비어 있음', '지울 이미지가 없습니다.', 'info');
+                return;
+            }
+            if (!confirm(`보관소 갤러리의 이미지 ${count}개를 모두 지울까요?\n이 작업은 되돌릴 수 없습니다.`)) return;
+            if (state.isProcessing) stopCurrentProcessing();
+            await clearAllImagesFromDB();
+            state.images = [];
+            state.selectedImageId = null;
+            state.cleanCutoutCanvas = null;
+            state.maskCanvas = null;
+            state.customBgImage = null;
+            renderGallery();
+            updateActiveTargetUI();
+            noActiveImagePlaceholder.classList.remove('hidden');
+            workspaceView.classList.add('hidden');
+            showToast('보관소 전체 삭제', `이미지 ${count}개를 모두 지웠습니다.`, 'success');
         }
 
         // --- 백그라운드 DB 스케줄러 (성능 과부하 방지 디바운싱) ---
@@ -739,7 +780,11 @@
             } else {
                 try {
                     await initIndexedDB();
-                    state.images = await loadImagesFromDB();
+                    // 일반 BG App은 항상 빈 작업 상태로 시작합니다.
+                    // IndexedDB 보관소는 자동 복원하지 않고 사용자가 FMA 갤러리에서
+                    // 명시적으로 고른 이미지만 현재 세션으로 가져옵니다.
+                    state.images = [];
+                    state.selectedImageId = null;
                     renderGallery();
                 } catch (err) {
                     console.error(`DB 연동 에러: ${err}`);
@@ -764,7 +809,8 @@
 
         function initEventListeners() {
             uploadBtn.addEventListener('click', () => imageInput.click());
-            importFromFmaBtn.addEventListener('click', requestCurrentFmaImage);
+            pasteImageBtn.addEventListener('click', pasteImagesFromClipboard);
+            importFromFmaBtn.addEventListener('click', requestFmaGalleryImage);
             dropZone.addEventListener('click', () => imageInput.click());
             imageInput.addEventListener('change', handleFileSelection);
 
@@ -773,6 +819,18 @@
             dropZone.addEventListener('drop', (e) => {
                 e.preventDefault(); dropZone.classList.remove('border-indigo-500');
                 if (e.dataTransfer.files.length > 0) processMultipleFiles(e.dataTransfer.files);
+            });
+
+            window.addEventListener('paste', (event) => {
+                const target = event.target;
+                if (target && (target.matches('input, textarea, [contenteditable="true"]') || target.closest('[contenteditable="true"]'))) return;
+                const imageFiles = Array.from(event.clipboardData?.items || [])
+                    .filter(item => item.kind === 'file' && item.type.startsWith('image/'))
+                    .map(item => item.getAsFile())
+                    .filter(Boolean);
+                if (!imageFiles.length) return;
+                event.preventDefault();
+                processMultipleFiles(imageFiles, 'clipboard');
             });
 
             customApiKeyInput.addEventListener('input', () => {
@@ -800,14 +858,8 @@
                     : '공통 API 키가 없습니다. FMA Viewer 설정에서 먼저 적용하세요.', getSharedApiKey() ? 'success' : 'info');
             });
 
-            clearAllDbBtn.addEventListener('click', async () => {
-                if (confirm("보관소 원본을 전량 파기하시겠습니까? (되돌릴 수 없습니다)")) {
-                    await clearAllImagesFromDB();
-                    state.images = []; state.selectedImageId = null; state.cleanCutoutCanvas = null; state.maskCanvas = null;
-                    renderGallery(); updateActiveTargetUI();
-                    noActiveImagePlaceholder.classList.remove('hidden'); workspaceView.classList.add('hidden');
-                }
-            });
+            clearAllDbBtn.addEventListener('click', clearBgRemoverGallery);
+            clearGalleryDbBtn.addEventListener('click', clearBgRemoverGallery);
 
             globalRunBtn.addEventListener('click', triggerProcessing);
             stopProcessingBtn.addEventListener('click', stopCurrentProcessing);
@@ -1103,11 +1155,47 @@
             scheduleSave();
         }
 
-        function handleFileSelection(e) { if (e.target.files.length > 0) processMultipleFiles(e.target.files); }
+        function handleFileSelection(e) {
+            if (e.target.files.length > 0) processMultipleFiles(e.target.files);
+            e.target.value = '';
+        }
 
-        async function processMultipleFiles(files) {
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
+        async function pasteImagesFromClipboard() {
+            if (!navigator.clipboard?.read) {
+                showToast('붙여넣기 안내', 'Ctrl+V를 눌러 클립보드 이미지를 추가해 주세요.', 'info');
+                return;
+            }
+            try {
+                const clipboardItems = await navigator.clipboard.read();
+                const files = [];
+                for (const clipboardItem of clipboardItems) {
+                    const imageTypes = clipboardItem.types.filter(type => type.startsWith('image/'));
+                    for (const type of imageTypes) {
+                        const blob = await clipboardItem.getType(type);
+                        const extension = type.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+                        files.push(new File([blob], `clipboard_${Date.now()}_${files.length + 1}.${extension}`, { type }));
+                    }
+                }
+                if (!files.length) {
+                    showToast('붙여넣기 실패', '클립보드에 이미지가 없습니다.', 'error');
+                    return;
+                }
+                await processMultipleFiles(files, 'clipboard');
+            } catch (error) {
+                console.warn('Clipboard image read failed:', error);
+                showToast('붙여넣기 권한 필요', '브라우저의 클립보드 권한을 허용하거나 Ctrl+V를 사용해 주세요.', 'error');
+            }
+        }
+
+        async function processMultipleFiles(files, source = 'file') {
+            const imageFiles = Array.from(files).filter(file => file && String(file.type || '').startsWith('image/'));
+            if (!imageFiles.length) {
+                showToast('등록 불가', '추가할 이미지 파일이 없습니다.', 'error');
+                return;
+            }
+            let savedCount = 0;
+            for (let i = 0; i < imageFiles.length; i++) {
+                const file = imageFiles[i];
                 await new Promise((resolve) => {
                     const reader = new FileReader();
                     reader.onload = async (e) => {
@@ -1115,13 +1203,16 @@
                         const imageRecord = { id: imgId, name: file.name, size: Math.round(file.size / 1024), dataUrl: e.target.result, maskDataUrl: null, cutoutUrl: null };
                         await saveImageToDB(imageRecord);
                         state.images.push(imageRecord);
+                        savedCount++;
                         resolve();
                     };
+                    reader.onerror = () => resolve();
                     reader.readAsDataURL(file);
                 });
             }
             renderGallery();
-            showToast("등록 완료", "DB 보관소에 이미지가 적재되었다.", "success");
+            const sourceLabel = source === 'clipboard' ? '클립보드' : '파일';
+            showToast("등록 완료", `${sourceLabel} 이미지 ${savedCount}개를 DB 보관소에 추가했습니다.`, "success");
         }
 
         function renderGallery() {
@@ -1561,7 +1652,7 @@
         // FMA Viewer iframe bridge
         let activeFmaSourceRequestId = '';
 
-        function requestCurrentFmaImage() {
+        function requestFmaGalleryImage() {
             if (window.parent === window) {
                 showToast('FMA 연결 필요', 'FMA Viewer 안에서 BG Remover 앱을 열어 사용하세요.', 'error');
                 return;
@@ -1573,21 +1664,15 @@
             window.parent.postMessage({
                 type: 'fma-app-request-source-images',
                 app: 'bg',
-                mode: 'current',
+                mode: 'picker',
                 requestId: activeFmaSourceRequestId
             }, '*');
             window.parent.postMessage({
                 type: 'fma-app-progress',
                 app: 'bg',
                 percent: 18,
-                message: 'FMA Viewer의 현재 이미지를 가져오는 중…'
+                message: 'FMA Viewer 갤러리에서 가져올 이미지를 선택하세요.'
             }, '*');
-            window.setTimeout(() => {
-                if (!activeFmaSourceRequestId) return;
-                activeFmaSourceRequestId = '';
-                setFmaImportButtonReady();
-                showToast('FMA 응답 지연', 'FMA Viewer에서 이미지를 받지 못했습니다. 다시 시도하세요.', 'error');
-            }, 10000);
         }
 
         function setFmaImportButtonReady() {
@@ -1602,7 +1687,7 @@
             if (!entries.length) {
                 activeFmaSourceRequestId = '';
                 setFmaImportButtonReady();
-                showToast('가져오기 실패', 'FMA Viewer에 선택된 이미지가 없습니다.', 'error');
+                showToast('선택 취소', 'FMA 갤러리 이미지 선택을 취소했습니다.', 'info');
                 return;
             }
             const imported = [];

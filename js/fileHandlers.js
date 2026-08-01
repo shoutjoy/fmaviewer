@@ -31,6 +31,7 @@ async function processFMAData(data) {
                 path: item.path || `$.images[${index}].src`,
                 group: item.group || groupFromPath(item.path),
                 date: item.date || fallbackDate,
+                createdAt: item.createdAt || item.date || fallbackDate,
                 size: item.size || item.src.length,
                 mimeType: item.mimeType || String(item.src).match(/^data:([^;,]+)/)?.[1] || "",
                 mediaType: item.mediaType || (String(item.mimeType || item.src).includes("video/") ? "video" : "image"),
@@ -99,6 +100,8 @@ async function walkAsync(obj, path) {
                         path: p,
                         group: groupFromPath(p),
                         date: Date.now(),
+                        createdAt: Date.now(),
+                        modifiedAt: Date.now(),
                         size: o.length,
                         mimeType,
                         mediaType: mimeType.startsWith("video/") ? "video" : "image",
@@ -140,58 +143,119 @@ function groupFromPath(p) {
     return "other";
 }
 
-async function handleAddImages(files) {
+async function handleAddImages(files, options = {}) {
     files = files.filter(isMediaFile);
     if (files.length === 0) return;
 
     const total = files.length;
     let current = 0;
-    showLoading(`Importing ${total} Media...`);
+    const background = Boolean(options.background);
+    const loadingTitle = options.loadingTitle || `Importing ${total} Media...`;
+    const reportProgress = (percent) => {
+        if (background) updateBackgroundImportProgress(percent);
+        else updateLoading(percent);
+    };
+    if (background) showBackgroundImportProgress(loadingTitle);
+    else showLoading(loadingTitle);
 
-    const readers = files.map(file => {
-        return new Promise((resolve) => {
+    try {
+        const readers = files.map(file => {
+            return new Promise((resolve, reject) => {
             if (isVideoFile(file)) {
+                const relativePath = getImportRelativePath(file);
                 images.push({
                     src: URL.createObjectURL(file),
-                    path: "$.added." + file.name,
-                    group: "added-video",
+                    path: "$.added." + relativePath,
+                    group: getImportGroup(file, "added-video"),
                     date: file.lastModified || Date.now(),
+                    createdAt: file.lastModified || Date.now(),
+                    modifiedAt: file.lastModified || Date.now(),
                     size: file.size,
                     mimeType: file.type || getMimeTypeFromName(file.name),
                     mediaType: "video",
                     isFav: false
                 });
                 current++;
-                updateLoading((current / total) * 100);
+                reportProgress((current / total) * 85);
                 resolve();
                 return;
             }
             const reader = new FileReader();
             reader.onload = (e) => {
+                const relativePath = getImportRelativePath(file);
                 images.push({
                     src: e.target.result,
-                    path: "$.added." + file.name,
-                    group: "added",
+                    path: "$.added." + relativePath,
+                    group: getImportGroup(file, "added"),
                     date: file.lastModified || Date.now(),
+                    createdAt: file.lastModified || Date.now(),
+                    modifiedAt: file.lastModified || Date.now(),
                     size: file.size,
                     mimeType: file.type,
                     mediaType: isVideoFile(file) ? "video" : "image",
                     isFav: false
                 });
                 current++;
-                updateLoading((current / total) * 100);
+                reportProgress((current / total) * 85);
                 resolve();
             };
+            reader.onerror = () => reject(reader.error || new Error(`${file.name} 파일을 읽지 못했습니다.`));
             reader.readAsDataURL(file);
         });
+        });
+        await Promise.all(readers);
+        renderGallery();
+        if (dom.imageCount) dom.imageCount.innerText = "Media: " + images.length;
+        reportProgress(90);
+        await saveCurrentImagesToDB(true);
+        const videoCount = files.filter(isVideoFile).length;
+        const statusMessage = options.statusMessage || `${total - videoCount}개 이미지 · ${videoCount}개 영상을 추가했습니다.`;
+        updateImportStatus(statusMessage);
+        if (background) finishBackgroundImportProgress(statusMessage);
+        return true;
+    } catch (error) {
+        console.error("Media import failed:", error);
+        const message = `갤러리 추가 실패: ${error?.message || error}`;
+        updateImportStatus(message, true);
+        if (background) finishBackgroundImportProgress(message, { error: true });
+        throw error;
+    } finally {
+        if (!background) hideLoading();
+    }
+}
+
+function getImportRelativePath(file) {
+    return String(file?.webkitRelativePath || file?.name || "media")
+        .replace(/\\/g, "/");
+}
+
+function getImportGroup(file, fallback) {
+    const relativePath = getImportRelativePath(file);
+    const parts = relativePath.split("/").filter(Boolean);
+    return parts.length > 1 ? parts[0] : fallback;
+}
+
+async function handleImportFolder(files) {
+    const mediaFiles = files.filter(isMediaFile);
+    if (!mediaFiles.length) {
+        updateImportStatus("선택한 폴더와 하위 폴더에 지원되는 이미지나 영상이 없습니다.", true);
+        return;
+    }
+    const firstPath = getImportRelativePath(mediaFiles[0]);
+    const rootName = firstPath.split("/").filter(Boolean)[0] || "선택 폴더";
+    const folders = new Set();
+    mediaFiles.forEach(file => {
+        const parts = getImportRelativePath(file).split("/").filter(Boolean);
+        for (let depth = 1; depth < parts.length; depth++) {
+            folders.add(parts.slice(0, depth).join("/"));
+        }
     });
-    await Promise.all(readers);
-    renderGallery();
-    dom.imageCount.innerText = "Media: " + images.length;
-    await saveCurrentImagesToDB(true);
-    const videoCount = files.filter(isVideoFile).length;
-    updateImportStatus(`${total - videoCount}개 이미지 · ${videoCount}개 영상을 추가했습니다.`);
-    hideLoading();
+    const imageCount = mediaFiles.filter(isImageFile).length;
+    const videoCount = mediaFiles.filter(isVideoFile).length;
+    await handleAddImages(mediaFiles, {
+        loadingTitle: `${rootName} 폴더와 하위 폴더 읽는 중…`,
+        statusMessage: `${rootName}: 하위 폴더 ${Math.max(0, folders.size - 1)}개에서 이미지 ${imageCount}개 · 영상 ${videoCount}개를 추가했습니다.`
+    });
 }
 
 async function handleImportFiles(files) {
@@ -429,6 +493,7 @@ async function saveFMA() {
                     src: exportedSources[index],
                     group: img.group,
                     date: img.date,
+                    createdAt: img.createdAt || img.date,
                     size: img.size,
                     mimeType: img.mimeType,
                     mediaType: isVideoMedia(img) ? "video" : "image",

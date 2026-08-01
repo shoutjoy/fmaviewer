@@ -12,6 +12,7 @@ const IMAGE_EDITOR_UI_FONT_DEFAULT = 12;
 const IMAGE_EDITOR_TEXT_DEFAULTS_STORAGE = "fma_image_editor_text_defaults";
 const IMAGE_EDITOR_DRAWING_SETTINGS_STORAGE = "fma_image_editor_drawing_settings";
 const IMAGE_EDITOR_QUICK_CONTROLS_POSITION_STORAGE = "fma_image_editor_quick_controls_position";
+const IMAGE_EDITOR_MAGNET_STORAGE = "fma_image_editor_magnetic_snap";
 const IMAGE_EDITOR_DRAWING_DEFAULTS = {
     pencil: { size: 3, color: "#252525", opacity: .85, tip: "round" },
     brush: { size: 24, color: "#ff5577", opacity: .75, tip: "round" },
@@ -89,6 +90,7 @@ var imageEditorState = {
     selectedEmptyLayerId: null,
     selectedShapeLayerId: null,
     selectedBaseLayer: false,
+    baseSelectable: false,
     baseBounds: null,
     fmaPickerSelectedIndex: -1,
     bypass: false,
@@ -115,9 +117,12 @@ var imageEditorState = {
     panX: 0,
     panY: 0,
     panning: false,
+    panMode: false,
     panPointerStart: null,
+    externalReturn: null,
     quickControlsDragging: false,
-    quickControlsDragStart: null
+    quickControlsDragStart: null,
+    magneticSnap: true
 };
 
 function createDefaultImageEditorConfig() {
@@ -255,6 +260,15 @@ function normalizeShapeLayer(layer) {
 }
 
 function normalizeImageLayer(layer) {
+    const adjustments = {};
+    const effects = {};
+    IMAGE_EDITOR_PARAMS.forEach(key => {
+        const minimum = key === "sharpness" ? 0 : -1;
+        adjustments[key] = editorClamp(Number(layer?.adjustments?.[key]) || 0, minimum, 1);
+    });
+    IMAGE_EDITOR_EFFECTS.forEach(key => {
+        effects[key] = editorClamp(Number(layer?.effects?.[key]) || 0, 0, 1);
+    });
     return {
         id: String(layer?.id || `image-layer-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`),
         name: String(layer?.name || "Image Layer"),
@@ -266,7 +280,10 @@ function normalizeImageLayer(layer) {
         x: Number(layer?.x) || 0,
         y: Number(layer?.y) || 0,
         width: Math.max(1, Number(layer?.width) || 100),
-        height: Math.max(1, Number(layer?.height) || 100)
+        height: Math.max(1, Number(layer?.height) || 100),
+        preset: typeof layer?.preset === "string" ? layer.preset : "original",
+        adjustments,
+        effects
     };
 }
 
@@ -306,15 +323,15 @@ function initImageEditorFeature() {
     enhanceImageEditorNumericControls();
     document.querySelectorAll(".editor-preset").forEach(button => {
         button.onclick = () => {
-            selectImageEditorBaseForAdjustments();
             applyImageEditorPreset(button.dataset.editorPreset);
         };
     });
     dom.imageAdjustmentControls.querySelectorAll("label[data-param]").forEach(label => {
         const input = label.querySelector("input");
-        input.addEventListener("pointerdown", selectImageEditorBaseForAdjustments);
         input.oninput = () => {
-            imageEditorState.config.adjustments[label.dataset.param] = Number(input.value) / 100;
+            const target = getImageEditorAdjustmentTarget();
+            if (!target) return;
+            target.adjustments[label.dataset.param] = Number(input.value) / 100;
             setImageEditorPreset("custom", "Custom");
             label.querySelector("b").innerText = formatEditorControlValue(input.value);
             requestImageEditorRender();
@@ -329,9 +346,10 @@ function initImageEditorFeature() {
     });
     dom.imageEffectControls.querySelectorAll("label[data-effect]").forEach(label => {
         const input = label.querySelector("input");
-        input.addEventListener("pointerdown", selectImageEditorBaseForAdjustments);
         input.oninput = () => {
-            imageEditorState.config.effects[label.dataset.effect] = Number(input.value) / 100;
+            const target = getImageEditorAdjustmentTarget();
+            if (!target) return;
+            target.effects[label.dataset.effect] = Number(input.value) / 100;
             setImageEditorPreset("custom", "Custom");
             label.querySelector("b").innerText = input.value;
             requestImageEditorRender();
@@ -359,6 +377,8 @@ function initImageEditorFeature() {
     initImageEditorPanelResizers();
     initImageEditorFontManager();
     initImageEditorDrawingTools();
+    initImageEditorMagneticSnap();
+    initImageEditorPanMode();
     dom.btnMoveLayerUp.onclick = () => moveSelectedTextLayer(1);
     dom.btnMoveLayerDown.onclick = () => moveSelectedTextLayer(-1);
     dom.btnDuplicateTextLayer.onclick = duplicateSelectedTextLayer;
@@ -498,9 +518,30 @@ function enhanceImageEditorNumericControls() {
         wrapper.classList.toggle("range-stepper", input.type === "range");
         const minus = createImageEditorStepButton("−", -1, input);
         const plus = createImageEditorStepButton("+", 1, input);
+        const zero = input.dataset.zeroStepper === "true"
+            ? createImageEditorZeroButton(input)
+            : null;
+        wrapper.classList.toggle("has-zero", Boolean(zero));
         input.parentNode.insertBefore(wrapper, input);
+        if (zero) wrapper.append(zero);
         wrapper.append(minus, input, plus);
     });
+}
+
+function createImageEditorZeroButton(input) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "editor-step-button editor-zero-button";
+    button.innerText = "0";
+    button.title = "값을 0으로 설정";
+    button.setAttribute("aria-label", button.title);
+    button.onclick = event => {
+        event.preventDefault();
+        input.value = "0";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.focus();
+    };
+    return button;
 }
 
 function createImageEditorStepButton(label, direction, input) {
@@ -533,8 +574,8 @@ function initImageEditorFontSize() {
     }
     const size = editorClamp(
         Number.isFinite(stored) && stored > 0 ? stored : IMAGE_EDITOR_UI_FONT_DEFAULT,
-        10,
-        18
+        6,
+        15
     );
     applyImageEditorFontSize(size, false);
     dom.imageEditorFontSize.oninput = () => {
@@ -543,7 +584,7 @@ function initImageEditorFontSize() {
 }
 
 function applyImageEditorFontSize(value, persist) {
-    const size = Math.round(editorClamp(Number(value) || IMAGE_EDITOR_UI_FONT_DEFAULT, 10, 18));
+    const size = Math.round(editorClamp(Number(value) || IMAGE_EDITOR_UI_FONT_DEFAULT, 6, 15));
     dom.imageEditorFontSize.value = String(size);
     dom.imageEditorFontSizeValue.innerText = size + "px";
     dom.imageEditorModal.style.setProperty("--editor-ui-font-size", size + "px");
@@ -554,6 +595,96 @@ function applyImageEditorFontSize(value, persist) {
             // The size still applies for the current session when storage is unavailable.
         }
     }
+}
+
+function initImageEditorMagneticSnap() {
+    try {
+        imageEditorState.magneticSnap =
+            localStorage.getItem(IMAGE_EDITOR_MAGNET_STORAGE) !== "false";
+    } catch (error) {
+        imageEditorState.magneticSnap = true;
+    }
+    dom.btnImageEditorMagnet.onclick = () => {
+        imageEditorState.magneticSnap = !imageEditorState.magneticSnap;
+        updateImageEditorMagnetButton();
+        try {
+            localStorage.setItem(
+                IMAGE_EDITOR_MAGNET_STORAGE,
+                String(imageEditorState.magneticSnap)
+            );
+        } catch (error) {}
+    };
+    updateImageEditorMagnetButton();
+}
+
+function updateImageEditorMagnetButton(snapping = false) {
+    const enabled = Boolean(imageEditorState.magneticSnap);
+    dom.btnImageEditorMagnet.classList.toggle("active", enabled);
+    dom.btnImageEditorMagnet.classList.toggle("snapping", enabled && snapping);
+    dom.btnImageEditorMagnet.setAttribute("aria-pressed", String(enabled));
+    dom.btnImageEditorMagnet.title = enabled
+        ? "자석 맞춤 켜짐 · 이미지 레이어를 경계나 중앙 가까이 이동하면 자동 정렬됩니다."
+        : "자석 맞춤 꺼짐";
+}
+
+function snapImageEditorLayerPosition(layer, rawX, rawY) {
+    if (!imageEditorState.magneticSnap || !imageEditorState.sourceImage) {
+        return { x: rawX, y: rawY, snapped: false };
+    }
+    const canvasWidth = imageEditorState.sourceImage.naturalWidth;
+    const canvasHeight = imageEditorState.sourceImage.naturalHeight;
+    const baseCorners = imageEditorState.baseBounds?.corners || [];
+    const baseBoundary = baseCorners.length === 4
+        ? {
+            left: Math.min(...baseCorners.map(point => point.x)),
+            right: Math.max(...baseCorners.map(point => point.x)),
+            top: Math.min(...baseCorners.map(point => point.y)),
+            bottom: Math.max(...baseCorners.map(point => point.y)),
+            centerX: imageEditorState.baseBounds.centerX,
+            centerY: imageEditorState.baseBounds.centerY
+        }
+        : {
+            left: 0,
+            right: canvasWidth,
+            top: 0,
+            bottom: canvasHeight,
+            centerX: canvasWidth / 2,
+            centerY: canvasHeight / 2
+        };
+    const radians = (Number(layer.rotation) || 0) * Math.PI / 180;
+    const cosine = Math.abs(Math.cos(radians));
+    const sine = Math.abs(Math.sin(radians));
+    const halfWidth = (layer.width * cosine + layer.height * sine) / 2;
+    const halfHeight = (layer.width * sine + layer.height * cosine) / 2;
+    const centerOffsetX = layer.width / 2;
+    const centerOffsetY = layer.height / 2;
+    // Keep the magnetic capture distance visually consistent at every zoom level.
+    const threshold = 22 / Math.max(.05,
+        imageEditorState.previewScale * imageEditorState.zoom
+    );
+    const xTargets = [
+        baseBoundary.left + halfWidth - centerOffsetX,
+        baseBoundary.centerX - centerOffsetX,
+        baseBoundary.right - halfWidth - centerOffsetX
+    ];
+    const yTargets = [
+        baseBoundary.top + halfHeight - centerOffsetY,
+        baseBoundary.centerY - centerOffsetY,
+        baseBoundary.bottom - halfHeight - centerOffsetY
+    ];
+    const nearest = (value, targets) => targets.reduce((best, target) => {
+        const distance = Math.abs(value - target);
+        return distance < best.distance ? { value: target, distance } : best;
+    }, { value, distance: Infinity });
+    const snapX = nearest(rawX, xTargets);
+    const snapY = nearest(rawY, yTargets);
+    const useX = snapX.distance <= threshold;
+    const useY = snapY.distance <= threshold;
+    return {
+        x: useX ? snapX.value : rawX,
+        y: useY ? snapY.value : rawY,
+        snapped: useX || useY
+    };
 }
 
 function getImageEditorTextDefaults() {
@@ -728,13 +859,32 @@ function getCurrentImageEditorDrawingSetting() {
 }
 
 function selectImageEditorDrawingTool(tool) {
+    if (tool === "hand") {
+        setImageEditorDrawingActive(false);
+        syncImageEditorDrawingToolButtons();
+        dom.imageEditorDrawingStatus.innerText =
+            "일반 선택 모드 · 오른쪽 도구에서 레이어·텍스트·도형을 선택해 편집하세요.";
+        return;
+    }
     if (!IMAGE_EDITOR_DRAWING_DEFAULTS[tool]) tool = "pencil";
+    if (imageEditorState.drawingActive && imageEditorState.drawingTool === tool) {
+        setImageEditorDrawingActive(false);
+        return;
+    }
     imageEditorState.drawingTool = tool;
-    document.querySelectorAll(".editor-drawing-tool").forEach(button => {
-        button.classList.toggle("active", button.dataset.drawingTool === tool);
-    });
+    syncImageEditorDrawingToolButtons();
     syncImageEditorDrawingControls();
     setImageEditorDrawingActive(true);
+}
+
+function syncImageEditorDrawingToolButtons() {
+    document.querySelectorAll(".editor-drawing-tool").forEach(button => {
+        const buttonTool = button.dataset.drawingTool;
+        const active = buttonTool !== "hand" &&
+            imageEditorState.drawingActive && buttonTool === imageEditorState.drawingTool;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", String(active));
+    });
 }
 
 function syncImageEditorDrawingControls() {
@@ -765,6 +915,7 @@ function setImageEditorDrawingActive(active) {
     imageEditorState.drawingActive = Boolean(active);
     dom.imageEditorDrawingCanvas.classList.toggle("active", imageEditorState.drawingActive);
     dom.btnImageEditorDrawingDone.classList.toggle("active", !imageEditorState.drawingActive);
+    syncImageEditorDrawingToolButtons();
     if (!active) {
         imageEditorState.drawing = false;
         imageEditorState.drawingLastPoint = null;
@@ -943,6 +1094,25 @@ function updateImageEditorUndoButton() {
     dom.btnImageEditorUndo.disabled = imageEditorState.drawingUndo.length === 0;
 }
 
+function initImageEditorPanMode() {
+    if (!dom.btnImageEditorPanMode) return;
+    dom.btnImageEditorPanMode.onclick = () => {
+        imageEditorState.panMode = !imageEditorState.panMode;
+        updateImageEditorPanModeButton();
+    };
+    updateImageEditorPanModeButton();
+}
+
+function updateImageEditorPanModeButton() {
+    if (!dom.btnImageEditorPanMode) return;
+    const enabled = imageEditorState.panMode === true;
+    dom.btnImageEditorPanMode.classList.toggle("active", enabled);
+    dom.btnImageEditorPanMode.setAttribute("aria-pressed", String(enabled));
+    dom.btnImageEditorPanMode.title = enabled
+        ? "이동 모드 끄기 · 현재 드래그로 편집 화면 이동"
+        : "이동 모드 켜기 · Alt+드래그와 동일";
+}
+
 function handleImageEditorWheel(event) {
     if (!event.altKey || imageEditorState.imageIndex < 0) return;
     event.preventDefault();
@@ -952,7 +1122,19 @@ function handleImageEditorWheel(event) {
 }
 
 function beginImageEditorPan(event) {
-    if (!event.altKey || !event.target.closest(".image-editor-canvas-wrap")) return;
+    const clickedCanvas = event.target.closest(".image-editor-canvas-wrap");
+    const clickedQuickControls = event.target.closest(".editor-text-quick-controls");
+
+    // 캔버스 밖의 빈 작업대를 누르면 현재 레이어 선택을 해제한다.
+    // 캔버스 안쪽은 레이어 hit-test가 담당하고, 빠른 텍스트 컨트롤은 유지한다.
+    const panRequested = event.altKey || imageEditorState.panMode;
+    if (!panRequested) {
+        if (!clickedCanvas && !clickedQuickControls) {
+            clearImageEditorLayerSelection();
+        }
+        return;
+    }
+    if (!clickedCanvas) return;
     imageEditorState.panning = true;
     imageEditorState.panPointerStart = {
         x: event.clientX,
@@ -1029,7 +1211,8 @@ async function openImageEditor(index) {
             selectedStackLayer?.type === "empty" ? selectedStackLayer.id : null;
         imageEditorState.selectedShapeLayerId =
             selectedStackLayer?.type === "shape" ? selectedStackLayer.id : null;
-        imageEditorState.selectedBaseLayer = !selectedStackLayer;
+        imageEditorState.selectedBaseLayer = false;
+        imageEditorState.baseSelectable = false;
         imageEditorState.bypass = false;
         imageEditorState.processing = false;
         imageEditorState.drawingUndo = [];
@@ -1052,8 +1235,36 @@ async function openImageEditor(index) {
     }
 }
 
+async function openImageEditorForExternal(src, onApply) {
+    if (!src || typeof onApply !== "function") return;
+    const tempIndex = images.length;
+    images.push({
+        src,
+        path: `$.temporary.story_edit_${Date.now()}`,
+        group: "temporary-story-edit",
+        date: Date.now(),
+        size: estimateDataUrlBytes(src),
+        mimeType: "image/png",
+        isFav: false
+    });
+    imageEditorState.externalReturn = { tempIndex, onApply };
+    await openImageEditor(tempIndex);
+    dom.imageEditorModal?.classList.add("story-external-child");
+}
+
+function clearImageEditorExternalReturn(removeTemporary = true) {
+    const external = imageEditorState.externalReturn;
+    imageEditorState.externalReturn = null;
+    dom.imageEditorModal?.classList.remove("story-external-child");
+    if (!external || !removeTemporary) return;
+    if (images[external.tempIndex]?.group === "temporary-story-edit") {
+        images.splice(external.tempIndex, 1);
+    }
+}
+
 function closeImageEditor() {
     if (imageEditorState.processing) return;
+    clearImageEditorExternalReturn(true);
     dom.imageEditorModal.style.display = "none";
     closeImageEditorFmaPicker();
     closeImageEditorSaveChoice();
@@ -1066,6 +1277,7 @@ function closeImageEditor() {
     imageEditorState.selectedEmptyLayerId = null;
     imageEditorState.selectedShapeLayerId = null;
     imageEditorState.selectedBaseLayer = false;
+    imageEditorState.baseSelectable = false;
     imageEditorState.textBounds.clear();
     imageEditorState.imageBounds.clear();
     imageEditorState.shapeBounds.clear();
@@ -1143,7 +1355,8 @@ function renderImageEditorCanvas(canvas, image, config, bypass, scale, showSelec
         applyImageEditorAdjustments(canvas, config.adjustments);
         applyImageEditorAtmosphere(canvas, config.effects);
     }
-    if (showSelection && imageEditorState.selectedBaseLayer && config.baseLayer?.visible !== false) {
+    if (showSelection && imageEditorState.baseSelectable &&
+        imageEditorState.selectedBaseLayer && config.baseLayer?.visible !== false) {
         drawImageLayerSelection(canvas.getContext("2d"), imageEditorState.baseBounds, scale);
     }
     drawImageEditorStackLayers(canvas, config, scale, showSelection);
@@ -1456,6 +1669,8 @@ function createTextTransformBounds(centerX, centerY, width, height, scaleX, scal
             scaleY: transform(0, halfHeight),
             uniform: transform(halfWidth, halfHeight),
             uniformTopRight: transform(halfWidth, -halfHeight),
+            uniformTopLeft: transform(-halfWidth, -halfHeight),
+            uniformBottomLeft: transform(-halfWidth, halfHeight),
             rotate: transform(0, -halfHeight - handleGap)
         }
     };
@@ -1504,6 +1719,8 @@ function drawTextTransformSelection(context, bounds, scale) {
             scaleY: "↕",
             uniform: "↘",
             uniformTopRight: "↗",
+            uniformTopLeft: "↖",
+            uniformBottomLeft: "↙",
             rotate: "↻"
         }[type], point.x, point.y);
     });
@@ -1513,11 +1730,13 @@ function drawTextTransformSelection(context, bounds, scale) {
 function applyImageEditorPreset(key) {
     const preset = IMAGE_EDITOR_PRESETS[key];
     if (!preset || !imageEditorState.config) return;
+    const target = getImageEditorAdjustmentTarget();
+    if (!target) return;
     IMAGE_EDITOR_PARAMS.forEach(name => {
-        imageEditorState.config.adjustments[name] = Number(preset.values[name]) || 0;
+        target.adjustments[name] = Number(preset.values[name]) || 0;
     });
     IMAGE_EDITOR_EFFECTS.forEach(name => {
-        imageEditorState.config.effects[name] = Number(preset.values[name]) || 0;
+        target.effects[name] = Number(preset.values[name]) || 0;
     });
     setImageEditorPreset(key, preset.name);
     syncImageAdjustmentControls();
@@ -1532,7 +1751,9 @@ function selectImageEditorBaseForAdjustments() {
 }
 
 function setImageEditorPreset(key, displayName) {
-    imageEditorState.config.preset = key;
+    const target = getImageEditorAdjustmentTarget();
+    if (!target) return;
+    target.preset = key;
     dom.imageEditorPresetName.innerText = displayName;
     document.querySelectorAll(".editor-preset").forEach(button => {
         button.classList.toggle("active", button.dataset.editorPreset === key);
@@ -1550,21 +1771,27 @@ function syncImageEditorControls() {
 }
 
 function syncImageAdjustmentControls() {
+    const target = getImageEditorAdjustmentTarget();
+    const enabled = Boolean(target);
     dom.imageAdjustmentControls.querySelectorAll("label[data-param]").forEach(label => {
-        const value = Math.round(imageEditorState.config.adjustments[label.dataset.param] * 100);
+        const value = Math.round((target?.adjustments?.[label.dataset.param] || 0) * 100);
         label.querySelector("input").value = String(value);
+        label.querySelector("input").disabled = !enabled;
         label.querySelector("b").innerText = formatEditorControlValue(value);
     });
     dom.imageEffectControls.querySelectorAll("label[data-effect]").forEach(label => {
-        const value = Math.round(imageEditorState.config.effects[label.dataset.effect] * 100);
+        const value = Math.round((target?.effects?.[label.dataset.effect] || 0) * 100);
         label.querySelector("input").value = String(value);
+        label.querySelector("input").disabled = !enabled;
         label.querySelector("b").innerText = value;
     });
 }
 
 function resetImageEditorAdjustments() {
-    IMAGE_EDITOR_PARAMS.forEach(key => imageEditorState.config.adjustments[key] = 0);
-    IMAGE_EDITOR_EFFECTS.forEach(key => imageEditorState.config.effects[key] = 0);
+    const target = getImageEditorAdjustmentTarget();
+    if (!target) return;
+    IMAGE_EDITOR_PARAMS.forEach(key => target.adjustments[key] = 0);
+    IMAGE_EDITOR_EFFECTS.forEach(key => target.effects[key] = 0);
     setImageEditorPreset("original", "Original");
     syncImageAdjustmentControls();
     requestImageEditorRender();
@@ -1705,6 +1932,15 @@ function initImageLayerControls() {
     dom.btnDuplicateBaseAlpha.onclick = () => duplicateImageEditorBaseSegmentation("alpha");
     dom.btnDuplicateBaseMask.onclick = () => duplicateImageEditorBaseSegmentation("mask");
     dom.baseImageLayerVisible.onchange = updateImageEditorBaseLayer;
+    dom.baseImageLayerSelectable.onchange = () => {
+        imageEditorState.baseSelectable = dom.baseImageLayerSelectable.checked;
+        if (!imageEditorState.baseSelectable && imageEditorState.selectedBaseLayer) {
+            selectImageEditorStackLayer(null, "none");
+            renderImageLayerList();
+            renderImageEditorLayerList();
+        }
+        requestImageEditorRender();
+    };
     dom.baseImageLayerOpacity.oninput = updateImageEditorBaseLayer;
     [
         [dom.imageLayerOpacity, "opacity", value => editorClamp(Number(value) / 100, 0, 1)],
@@ -1718,6 +1954,7 @@ function initImageLayerControls() {
             const layer = getSelectedImageLayer();
             if (!layer || layer.locked) return;
             layer[key] = parse(input.value);
+            syncImageLayerRangeValues(layer);
             requestImageEditorRender();
         };
     });
@@ -1744,9 +1981,28 @@ function syncImageEditorBaseLayerControls() {
     const base = imageEditorState.config?.baseLayer;
     if (!base) return;
     dom.baseImageLayerVisible.checked = base.visible;
+    dom.baseImageLayerSelectable.checked = imageEditorState.baseSelectable;
     dom.baseImageLayerOpacity.value = Math.round(base.opacity * 100);
     dom.baseImageLayerOpacityValue.value = `${Math.round(base.opacity * 100)}%`;
     dom.baseImageLayerOpacityValue.innerText = `${Math.round(base.opacity * 100)}%`;
+}
+
+function syncImageLayerRangeValues(layer) {
+    if (!layer) return;
+    const sourceWidth = imageEditorState.sourceImage?.naturalWidth || layer.width || 1;
+    const sourceHeight = imageEditorState.sourceImage?.naturalHeight || layer.height || 1;
+    dom.imageLayerX.min = String(-sourceWidth * 2);
+    dom.imageLayerX.max = String(sourceWidth * 3);
+    dom.imageLayerY.min = String(-sourceHeight * 2);
+    dom.imageLayerY.max = String(sourceHeight * 3);
+    dom.imageLayerWidth.max = String(Math.max(1000, sourceWidth * 4, layer.width));
+    dom.imageLayerHeight.max = String(Math.max(1000, sourceHeight * 4, layer.height));
+    dom.imageLayerOpacityValue.innerText = `${Math.round(layer.opacity * 100)}%`;
+    dom.imageLayerRotationValue.innerText = `${Math.round(layer.rotation)}°`;
+    dom.imageLayerXValue.innerText = `${Math.round(layer.x)}`;
+    dom.imageLayerYValue.innerText = `${Math.round(layer.y)}`;
+    dom.imageLayerWidthValue.innerText = `${Math.round(layer.width)}px`;
+    dom.imageLayerHeightValue.innerText = `${Math.round(layer.height)}px`;
 }
 
 function addEmptyImageEditorLayer() {
@@ -2081,39 +2337,23 @@ function cropSelectedImageEditorLayer() {
     });
 }
 
-async function removeBackgroundFromSelectedImageEditorLayer() {
+function removeBackgroundFromSelectedImageEditorLayer() {
     const layer = getSelectedImageLayer();
     if (!layer || layer.locked || imageEditorState.processing) return;
-    imageEditorState.processing = true;
-    dom.btnBgRemoveImageLayer.disabled = true;
-    try {
-        showLoading("선택 레이어의 배경을 제거하는 중입니다...");
-        updateLoading(5);
-        const automaticResult = await runWebGlBackgroundRemoval(layer.src, null, 8, 90);
-        updateLoading(96);
-        dom.bgMaskEditorModal.classList.add("editor-child-workspace");
-        await openBackgroundMaskEditor({
-            originalSrc: layer.src,
-            resultSrc: automaticResult,
-            applyLabel: "이미지 편집으로 보내기",
-            skipLabel: "보정 없이 이미지 편집으로 보내기",
-            onApply: async resultSrc => {
-                await replaceImageEditorLayerSource(layer, resultSrc, " · BG Removed");
-                dom.bgMaskEditorModal.classList.remove("editor-child-workspace");
-            },
-            onCancel: () => {
-                dom.bgMaskEditorModal.classList.remove("editor-child-workspace");
-            }
-        });
-        updateLoading(100);
-    } catch (error) {
-        console.error("Image layer background removal failed:", error);
-        alert("레이어 배경 제거 중 오류가 발생했습니다: " + error.message);
-    } finally {
-        hideLoading();
-        imageEditorState.processing = false;
-        dom.btnBgRemoveImageLayer.disabled = Boolean(getSelectedImageLayer()?.locked);
+    if (typeof openBackgroundRemoveEditorForExternal !== "function") {
+        alert("배경 제거 설정 창을 불러오지 못했습니다.");
+        return;
     }
+    const layerId = layer.id;
+    openBackgroundRemoveEditorForExternal(layer.src, async resultSrc => {
+        const target = imageEditorState.config?.imageLayers.find(item => item.id === layerId);
+        if (!target) throw new Error("배경 제거 결과를 적용할 레이어가 없습니다.");
+        await replaceImageEditorLayerSource(target, resultSrc, " · BG Removed");
+        dom.imageEditorModal.style.display = "flex";
+    }, {
+        className: "editor-child-workspace",
+        applyLabel: "이미지 편집으로 보내기"
+    });
 }
 
 function drawImageEditorImageLayers(canvas, layers, scale, showSelection) {
@@ -2126,11 +2366,20 @@ function drawImageEditorImageLayers(canvas, layers, scale, showSelection) {
         const y = layer.y * scale;
         const width = layer.width * scale;
         const height = layer.height * scale;
+        const layerCanvas = document.createElement("canvas");
+        layerCanvas.width = Math.max(1, image.naturalWidth || image.width);
+        layerCanvas.height = Math.max(1, image.naturalHeight || image.height);
+        const layerContext = layerCanvas.getContext("2d", { willReadFrequently: true });
+        layerContext.imageSmoothingEnabled = true;
+        layerContext.imageSmoothingQuality = "high";
+        layerContext.drawImage(image, 0, 0, layerCanvas.width, layerCanvas.height);
+        applyImageEditorAdjustments(layerCanvas, layer.adjustments || createDefaultImageEditorConfig().adjustments);
+        applyImageEditorAtmosphere(layerCanvas, layer.effects || createDefaultImageEditorConfig().effects);
         context.save();
         context.globalAlpha = layer.opacity;
         context.translate(x + width / 2, y + height / 2);
         context.rotate(layer.rotation * Math.PI / 180);
-        context.drawImage(image, -width / 2, -height / 2, width, height);
+        context.drawImage(layerCanvas, -width / 2, -height / 2, width, height);
         context.restore();
         const bounds = createTextTransformBounds(
             layer.x + layer.width / 2,
@@ -2331,6 +2580,24 @@ function selectImageEditorStackLayer(id, type) {
     imageEditorState.selectedShapeLayerId = type === "shape" ? id : null;
     imageEditorState.selectedEmptyLayerId = type === "empty" ? id : null;
     imageEditorState.selectedBaseLayer = type === "base";
+    if (imageEditorState.config) syncImageAdjustmentControls();
+}
+
+function getImageEditorAdjustmentTarget() {
+    if (!imageEditorState.config) return null;
+    if (imageEditorState.selectedImageLayerId) return getSelectedImageLayer();
+    if (imageEditorState.selectedBaseLayer) return imageEditorState.config;
+    return null;
+}
+
+function clearImageEditorLayerSelection() {
+    selectImageEditorStackLayer(null, "none");
+    renderImageLayerList();
+    renderImageEditorLayerList();
+    syncImageLayerInspector();
+    syncTextLayerInspector();
+    syncShapeLayerInspector();
+    requestImageEditorRender();
 }
 
 function getSelectedShapeLayer() {
@@ -2464,6 +2731,7 @@ function syncImageLayerInspector() {
     dom.imageLayerY.value = Math.round(layer.y);
     dom.imageLayerWidth.value = Math.round(layer.width);
     dom.imageLayerHeight.value = Math.round(layer.height);
+    syncImageLayerRangeValues(layer);
 }
 
 function duplicateSelectedImageEditorStackLayer() {
@@ -3095,22 +3363,8 @@ function syncTextLayerInspector() {
 }
 
 function beginTextLayerDrag(event) {
-    if (imageEditorState.bypass || imageEditorState.drawingActive || event.altKey) return;
+    if (imageEditorState.bypass || imageEditorState.drawingActive || event.altKey || imageEditorState.panMode) return;
     const point = getImageEditorSourcePoint(event);
-    const selectedBase = imageEditorState.selectedBaseLayer
-        ? imageEditorState.config?.baseLayer
-        : null;
-    if (
-        selectedBase?.visible && imageEditorState.baseBounds &&
-        isPointInsideTextTransformBounds(point, imageEditorState.baseBounds, 8)
-    ) {
-        if (!selectedBase.locked) beginImageEditorBaseMove(event, point, selectedBase);
-        else {
-            requestImageEditorRender();
-            event.preventDefault();
-        }
-        return;
-    }
     const selectedShape = getSelectedShapeLayer();
     const selectedShapeBounds = selectedShape
         ? imageEditorState.shapeBounds.get(selectedShape.id)
@@ -3208,6 +3462,13 @@ function beginTextLayerDrag(event) {
     const selectedEntry = selectedId
         ? imageEditorState.config.layerOrder.find(entry => entry.id === selectedId)
         : null;
+    const directTextEntry = [...imageEditorState.config.layerOrder].reverse().find(entry => {
+        if (entry.type !== "text") return false;
+        const textLayer = getImageEditorStackLayer(entry);
+        const textBounds = imageEditorState.textBounds.get(entry.id);
+        return textLayer?.visible && textBounds &&
+            isPointInsideTextTransformBounds(point, textBounds, 8);
+    });
     const selectedStackLayer = getImageEditorStackLayer(selectedEntry);
     const selectedStackBounds = selectedEntry?.type === "text"
         ? imageEditorState.textBounds.get(selectedId)
@@ -3217,6 +3478,7 @@ function beginTextLayerDrag(event) {
                 ? imageEditorState.imageBounds.get(selectedId)
                 : null;
     if (
+        (!directTextEntry || directTextEntry.id === selectedId) &&
         selectedStackLayer?.visible &&
         selectedStackBounds &&
         isPointInsideTextTransformBounds(point, selectedStackBounds, 8)
@@ -3241,7 +3503,7 @@ function beginTextLayerDrag(event) {
     });
     if (!hitEntry) {
         const base = imageEditorState.config?.baseLayer;
-        if (base?.visible && imageEditorState.baseBounds &&
+        if (imageEditorState.baseSelectable && base?.visible && imageEditorState.baseBounds &&
             isPointInsideTextTransformBounds(point, imageEditorState.baseBounds, 8)) {
             selectImageEditorStackLayer("__base__", "base");
             renderImageLayerList();
@@ -3251,6 +3513,8 @@ function beginTextLayerDrag(event) {
                 requestImageEditorRender();
                 event.preventDefault();
             }
+        } else {
+            clearImageEditorLayerSelection();
         }
         return;
     }
@@ -3322,7 +3586,7 @@ function continueTextLayerDrag(event) {
             shape.rotation = normalizeEditorRotation(
                 start.rotation + (angle - start.pointerAngle) * 180 / Math.PI
             );
-        } else if (["uniform", "uniformTopRight"].includes(transformMode)) {
+        } else if (transformMode.startsWith("uniform")) {
             const distance = Math.hypot(point.x - start.centerX, point.y - start.centerY);
             const factor = editorClamp(distance / start.pointerDistance, .05, 20);
             shape.width = Math.max(1, start.width * factor);
@@ -3358,7 +3622,7 @@ function continueTextLayerDrag(event) {
             imageLayer.rotation = normalizeEditorRotation(
                 start.rotation + (angle - start.pointerAngle) * 180 / Math.PI
             );
-        } else if (["uniform", "uniformTopRight"].includes(transformMode)) {
+        } else if (transformMode.startsWith("uniform")) {
             const distance = Math.hypot(point.x - start.centerX, point.y - start.centerY);
             const factor = editorClamp(distance / start.pointerDistance, .05, 20);
             imageLayer.width = Math.max(1, start.width * factor);
@@ -3381,18 +3645,23 @@ function continueTextLayerDrag(event) {
     if (mode === "image-move") {
         const imageLayer = getSelectedImageLayer();
         if (!imageLayer || imageLayer.locked) return;
-        imageLayer.x = editorClamp(
+        const rawX = editorClamp(
             point.x - imageEditorState.dragOffsetX,
             -imageLayer.width,
             imageEditorState.sourceImage.naturalWidth
         );
-        imageLayer.y = editorClamp(
+        const rawY = editorClamp(
             point.y - imageEditorState.dragOffsetY,
             -imageLayer.height,
             imageEditorState.sourceImage.naturalHeight
         );
+        const snapped = snapImageEditorLayerPosition(imageLayer, rawX, rawY);
+        imageLayer.x = snapped.x;
+        imageLayer.y = snapped.y;
+        updateImageEditorMagnetButton(snapped.snapped);
         dom.imageLayerX.value = Math.round(imageLayer.x);
         dom.imageLayerY.value = Math.round(imageLayer.y);
+        syncImageLayerRangeValues(imageLayer);
         requestImageEditorRender();
         event.preventDefault();
         return;
@@ -3430,7 +3699,7 @@ function continueTextLayerDrag(event) {
             );
             dom.editorTextScaleY.value = Math.round(layer.scaleY * 100);
         }
-    } else if (start && ["uniform", "uniformTopRight"].includes(mode)) {
+    } else if (start && mode.startsWith("uniform")) {
         const distance = Math.hypot(
             point.x - start.bounds.centerX,
             point.y - start.bounds.centerY
@@ -3451,12 +3720,6 @@ function updateTextTransformHoverCursor(event) {
         return;
     }
     const point = getImageEditorSourcePoint(event);
-    const base = imageEditorState.selectedBaseLayer ? imageEditorState.config?.baseLayer : null;
-    if (base?.visible && imageEditorState.baseBounds &&
-        isPointInsideTextTransformBounds(point, imageEditorState.baseBounds, 8)) {
-        dom.imageEditorCanvas.dataset.transformMode = base.locked ? "locked" : "move";
-        return;
-    }
     const shape = getSelectedShapeLayer();
     const shapeBounds = shape ? imageEditorState.shapeBounds.get(shape.id) : null;
     const shapeHandle = shape && !shape.locked && shapeBounds
@@ -3494,6 +3757,14 @@ function updateTextTransformHoverCursor(event) {
             dom.imageEditorCanvas.dataset.transformMode = shape.locked ? "locked" : "move";
             return;
         }
+        const base = imageEditorState.selectedBaseLayer && imageEditorState.baseSelectable
+            ? imageEditorState.config?.baseLayer
+            : null;
+        if (base?.visible && imageEditorState.baseBounds &&
+            isPointInsideTextTransformBounds(point, imageEditorState.baseBounds, 8)) {
+            dom.imageEditorCanvas.dataset.transformMode = base.locked ? "locked" : "move";
+            return;
+        }
         delete dom.imageEditorCanvas.dataset.transformMode;
     }
 }
@@ -3504,6 +3775,7 @@ function endTextLayerDrag(event) {
     imageEditorState.transformStart = null;
     dom.imageEditorCanvas.classList.remove("dragging-text");
     delete dom.imageEditorCanvas.dataset.transformMode;
+    updateImageEditorMagnetButton(false);
     try {
         dom.imageEditorCanvas.releasePointerCapture?.(event.pointerId);
     } catch (error) {
@@ -3513,7 +3785,10 @@ function endTextLayerDrag(event) {
 
 function getTextTransformHandleAtPoint(point, bounds) {
     const radius = 13 / Math.max(.1, getImageEditorDisplayScale());
-    const order = ["rotate", "uniform", "uniformTopRight", "scaleX", "scaleY"];
+    const order = [
+        "rotate", "uniform", "uniformTopRight", "uniformTopLeft",
+        "uniformBottomLeft", "scaleX", "scaleY"
+    ];
     return order.find(name => {
         const handle = bounds.handles[name];
         return Math.hypot(point.x - handle.x, point.y - handle.y) <= radius;
@@ -3612,12 +3887,22 @@ async function saveImageEditorResult(saveMode) {
             ? dom.imageEditorDrawingCanvas.toDataURL("image/png")
             : "";
         const config = cloneImageEditorConfig(imageEditorState.config);
+        if (imageEditorState.externalReturn) {
+            const callback = imageEditorState.externalReturn.onApply;
+            clearImageEditorExternalReturn(true);
+            imageEditorState.processing = false;
+            closeImageEditor();
+            await Promise.resolve(callback(resultSrc));
+            updateLoading(100);
+            return;
+        }
         let resultIndex = sourceIndex;
 
         if (saveMode === "replace") {
             sourceItem.src = resultSrc;
             sourceItem.size = estimateDataUrlBytes(resultSrc);
-            sourceItem.date = Date.now();
+            sourceItem.createdAt = sourceItem.createdAt || sourceItem.date || Date.now();
+            sourceItem.modifiedAt = Date.now();
             sourceItem.mimeType = "image/png";
             sourceItem.imageEditSourceSrc = imageEditorState.sourceSrc;
             sourceItem.imageEditConfig = config;

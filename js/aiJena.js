@@ -148,6 +148,17 @@ function initAiJenaFeature() {
         else dom.aiJenaPrompt.focus();
     };
     dom.btnDownloadAiJenaVideo.onclick = downloadAiJenaVideo;
+    if (dom.aiJenaVideoDuration) {
+        dom.aiJenaVideoDuration.value = String(normalizeAiJenaVideoDuration(
+            localStorage.getItem("fmaAiJenaVideoDuration"),
+            8
+        ));
+        dom.aiJenaVideoDuration.addEventListener("change", () => {
+            const duration = normalizeAiJenaVideoDuration(dom.aiJenaVideoDuration.value, 8);
+            dom.aiJenaVideoDuration.value = String(duration);
+            localStorage.setItem("fmaAiJenaVideoDuration", String(duration));
+        });
+    }
     dom.aiJenaPrompt.addEventListener("keydown", event => {
         if (event.key !== "Enter" || !event.ctrlKey || event.isComposing) return;
         event.preventDefault();
@@ -273,16 +284,18 @@ function initAiJenaFeature() {
 }
 
 function updateAiJenaKeyStatus() {
+    const hasKey = Boolean(getAiStudioApiKey());
+    const usageEnabled = isAiKeyUsageEnabled();
     const ready = Boolean(getUsableAiStudioApiKey());
     document.querySelectorAll(".ai-jena-image-button").forEach(button => {
+        button.style.display = hasKey ? "inline-flex" : "none";
+        button.disabled = !ready;
         button.classList.toggle("ready", ready);
         button.classList.toggle("unavailable", !ready);
-        button.innerText = ready
-            ? "✦ AI Jena"
-            : "✦ AI Jena · API키를 먼저 설정하세요";
+        button.innerText = ready ? "✦ AI Jena" : "✦";
         button.title = ready
             ? "AI Studio 키 연결됨 · 이 이미지로 AI Jena 열기"
-            : "Settings에서 AI Studio 키를 설정하세요.";
+            : usageEnabled ? "" : "AI API 키 사용이 중지되어 있습니다.";
     });
     if (dom.aiJenaKeyStatus) {
         dom.aiJenaKeyStatus.innerText = ready ? "● AI Studio 키 연결됨" : "○ AI Studio 키 필요";
@@ -293,15 +306,12 @@ function updateAiJenaKeyStatus() {
 async function openAiJena(imageIndex = currentIndex) {
     updateAiJenaKeyStatus();
     if (!getUsableAiStudioApiKey()) {
-        alert(isAiKeyUsageEnabled()
-            ? "[API키를 먼저 설정하세요]\nSettings에서 Google AI Studio API 키를 입력하세요."
-            : "[API키 사용이 중지되어 있습니다]\nSettings에서 AI 키 사용을 다시 시작하세요.");
-        openUpscaleSettings();
         return;
     }
     aiJenaState.open = true;
     aiJenaState.sourceIndex = images[imageIndex] ? imageIndex : -1;
     aiJenaState.sourceItem = images[aiJenaState.sourceIndex] || null;
+    await markAiJenaRawSource(aiJenaState.sourceItem);
     aiJenaState.resultSrc = "";
     clearAiJenaVideoResult();
     aiJenaState.processing = false;
@@ -346,6 +356,13 @@ async function openAiJena(imageIndex = currentIndex) {
     dom.aiJenaPrompt.focus();
 }
 
+async function markAiJenaRawSource(item) {
+    if (!item || item.aiJenaRaw || isVideoMedia(item)) return;
+    item.aiJenaRaw = true;
+    renderGallery();
+    if (typeof saveCurrentImagesToDB === "function") await saveCurrentImagesToDB();
+}
+
 function closeAiJena() {
     if (aiJenaState.processing) {
         stopAiJena();
@@ -371,6 +388,7 @@ function setAiJenaMode(mode) {
     dom.aiJenaMaskCanvas.style.pointerEvents = maskMode ? "auto" : "none";
     dom.aiJenaPoseLibrary.style.display = ["pose", "tryon"].includes(aiJenaState.mode) ? "flex" : "none";
     dom.aiJenaVideoOptions.style.display = aiJenaState.mode === "video" ? "flex" : "none";
+    dom.btnRunAiJenaVideo.style.display = aiJenaState.mode === "video" ? "inline-flex" : "none";
     dom.btnRunAiJena.innerText = aiJenaState.mode === "video" ? "▶ 영상 생성" : "AI 실행";
     dom.btnAddAiJenaResult.style.display = "inline-block";
     dom.btnAddAiJenaResult.innerText = aiJenaState.mode === "video"
@@ -880,6 +898,7 @@ async function replaceAiJenaOriginal(index) {
     const sourceImage = await loadUpscaleImage(item.src);
     aiJenaState.sourceIndex = index;
     aiJenaState.sourceItem = item;
+    await markAiJenaRawSource(item);
     aiJenaState.sourceImage = sourceImage;
     aiJenaState.resultSrc = "";
     aiJenaState.resultMimeType = item.mimeType || "image/png";
@@ -1152,10 +1171,11 @@ function drawAiJenaSource() {
 }
 
 function applyAiJenaViewportTransform() {
-    dom.aiJenaCanvasStack.style.transform =
-        `translate(${aiJenaState.panX}px, ${aiJenaState.panY}px) scale(${aiJenaState.zoom})`;
+    const transform = `translate(${aiJenaState.panX}px, ${aiJenaState.panY}px) scale(${aiJenaState.zoom})`;
+    dom.aiJenaCanvasStack.style.transform = transform;
+    dom.aiJenaResultPreview.style.transform = transform;
     dom.btnAiJenaResetZoom.innerText =
-        `${Math.round(aiJenaState.zoom * 100)}% · Alt+휠`;
+        `${Math.round(aiJenaState.zoom * 100)}% · 휠`;
 }
 
 function resetAiJenaZoom(event) {
@@ -1170,7 +1190,7 @@ function resetAiJenaZoom(event) {
 }
 
 function zoomAiJenaStage(event) {
-    if (!event.altKey || !aiJenaState.open) return;
+    if (!aiJenaState.open) return;
     if (event.target.closest?.(".ai-jena-history-panel, .ai-jena-zoom-badge")) return;
     event.preventDefault();
     const oldZoom = aiJenaState.zoom;
@@ -1190,8 +1210,11 @@ function zoomAiJenaStage(event) {
 }
 
 function beginAiJenaStagePan(event) {
-    if (!event.altKey || event.button !== 0 || !aiJenaState.open) return;
+    if (event.button !== 0 || !aiJenaState.open) return;
     if (event.target.closest?.(".ai-jena-history-panel, .ai-jena-zoom-badge")) return;
+    // 선택영역 모드의 일반 드래그는 붓/다각형 편집에 양보하고,
+    // 이때만 기존 Alt+드래그로 화면을 이동한다.
+    if (aiJenaState.mode === "clothes" && !event.altKey) return;
     aiJenaState.panning = true;
     aiJenaState.panPointerId = event.pointerId;
     aiJenaState.panStartX = event.clientX;
@@ -1884,9 +1907,10 @@ async function requestAiJenaVideo(prompt, signal) {
 }
 
 function buildAiJenaVideoParameters(model, usesSourceImage) {
+    const durationSeconds = getAiJenaVideoDuration();
     const parameters = {
         aspectRatio: dom.aiJenaVideoAspect.value || "16:9",
-        durationSeconds: normalizeAiJenaVideoDuration(8),
+        durationSeconds,
         resolution: "720p",
         personGeneration: usesSourceImage ? "allow_adult" : "allow_all"
     };
@@ -1901,6 +1925,15 @@ function buildAiJenaVideoParameters(model, usesSourceImage) {
         }
     });
     return parameters;
+}
+
+function getAiJenaVideoDuration() {
+    const duration = Number(dom.aiJenaVideoDuration?.value ?? 8);
+    if (!Number.isFinite(duration) || ![4, 6, 8].includes(duration)) {
+        throw new Error("Veo 영상 시간은 4초, 6초 또는 8초로 입력해 주세요.");
+    }
+    localStorage.setItem("fmaAiJenaVideoDuration", String(duration));
+    return duration;
 }
 
 function normalizeAiJenaVideoDuration(value, fallback = 8) {
@@ -2188,7 +2221,7 @@ function renderAiJenaHistory() {
         const galleryButton = document.createElement("button");
         galleryButton.type = "button";
         galleryButton.className = "ai-jena-history-send";
-        galleryButton.innerText = "갤러리";
+        galleryButton.innerText = "To 갤러리";
         galleryButton.title = `${entry.label}을 새 ${entry.mediaType === "video" ? "영상" : "이미지"}으로 갤러리에 넣기`;
         galleryButton.onclick = event => {
             event.stopPropagation();
@@ -2203,8 +2236,26 @@ function renderAiJenaHistory() {
             event.stopPropagation();
             openAiJenaHistoryInEditor(index);
         };
+        const cropButton = document.createElement("button");
+        cropButton.type = "button";
+        cropButton.className = "ai-jena-history-crop";
+        cropButton.innerText = "Crop";
+        cropButton.title = `${entry.label}을 Crop으로 가져가기`;
+        cropButton.onclick = event => {
+            event.stopPropagation();
+            openAiJenaHistoryInCrop(index);
+        };
+        const bgrButton = document.createElement("button");
+        bgrButton.type = "button";
+        bgrButton.className = "ai-jena-history-bgr";
+        bgrButton.innerText = "BGR";
+        bgrButton.title = `${entry.label}을 배경 제거로 가져가기`;
+        bgrButton.onclick = event => {
+            event.stopPropagation();
+            openAiJenaHistoryInBackgroundRemove(index);
+        };
         actions.appendChild(galleryButton);
-        if (entry.mediaType !== "video") actions.appendChild(editButton);
+        if (entry.mediaType !== "video") actions.append(editButton, cropButton, bgrButton);
         if (entry.original && entry.mediaType !== "video") {
             const replaceButton = document.createElement("button");
             replaceButton.type = "button";
@@ -2336,8 +2387,27 @@ async function sendAllAiJenaHistoryToGallery() {
 }
 
 async function openAiJenaHistoryInEditor(index) {
+    return openAiJenaHistoryInTool(index, "edit");
+}
+
+async function openAiJenaHistoryInCrop(index) {
+    return openAiJenaHistoryInTool(index, "crop");
+}
+
+async function openAiJenaHistoryInBackgroundRemove(index) {
+    return openAiJenaHistoryInTool(index, "bgr");
+}
+
+async function openAiJenaHistoryInTool(index, tool) {
     const entry = aiJenaState.history[index];
-    if (!entry || aiJenaState.saving || typeof openImageEditor !== "function") return;
+    if (!entry || entry.mediaType === "video" || aiJenaState.saving) return;
+    const openTool = tool === "crop"
+        ? (typeof openCropEditor === "function" ? openCropEditor : null)
+        : tool === "bgr"
+            ? (typeof openBackgroundRemoveEditor === "function"
+                ? targetIndex => openBackgroundRemoveEditor(targetIndex, "local") : null)
+            : (typeof openImageEditor === "function" ? openImageEditor : null);
+    if (!openTool) return;
     aiJenaState.saving = true;
     renderAiJenaHistory();
     try {
@@ -2346,11 +2416,17 @@ async function openAiJenaHistoryInEditor(index) {
         renderFavorites();
         dom.imageCount.innerText = "Images: " + images.length;
         await saveCurrentImagesToDB();
-        closeAiJena();
-        await openImageEditor(resultIndex);
+        const keepAiJenaOpen = tool === "crop" || tool === "bgr";
+        if (keepAiJenaOpen) {
+            const childModal = tool === "crop" ? dom.cropModal : dom.bgRemoveModal;
+            childModal?.classList.add("ai-jena-child-workspace");
+        } else {
+            closeAiJena();
+        }
+        await openTool(resultIndex);
     } catch (error) {
-        console.error("AI Jena history editor transfer failed:", error);
-        alert("히스토리 이미지를 Edit로 가져오지 못했습니다: " + error.message);
+        console.error(`AI Jena history ${tool} transfer failed:`, error);
+        alert(`히스토리 이미지를 ${tool === "bgr" ? "BGR" : tool === "crop" ? "Crop" : "Edit"}로 가져오지 못했습니다: ${error.message}`);
     } finally {
         aiJenaState.saving = false;
         if (aiJenaState.open) renderAiJenaHistory();
@@ -2496,7 +2572,8 @@ async function saveAiJenaResult(saveMode) {
         let resultIndex;
         if (saveMode === "replace" && source) {
             source.src = aiJenaState.resultSrc;
-            source.date = Date.now();
+            source.createdAt = source.createdAt || source.date || Date.now();
+            source.modifiedAt = Date.now();
             source.size = estimateDataUrlBytes(aiJenaState.resultSrc);
             source.mimeType = aiJenaState.resultMimeType;
             source.aiJenaInfo = aiJenaInfo;

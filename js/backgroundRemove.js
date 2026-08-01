@@ -47,7 +47,8 @@ var bgRemoveState = {
     localEngine: "webgl",
     boundaryStrength: 50,
     customBackgroundEnabled: false,
-    customBackgroundColor: "#3197a3"
+    customBackgroundColor: "#3197a3",
+    externalReturn: null
 };
 
 function initBackgroundRemoveFeature() {
@@ -55,6 +56,7 @@ function initBackgroundRemoveFeature() {
 
     dom.btnBgRemoveClose.onclick = closeBackgroundRemoveEditor;
     dom.btnBgRemoveCancel.onclick = closeBackgroundRemoveEditor;
+    dom.btnBgRemoveAddGallery.onclick = addBackgroundRemoveResultToGallery;
     dom.btnRunBgRemove.onclick = runBackgroundRemoval;
     dom.btnBgEngineWebgl.onclick = () => setBackgroundRemoveLocalEngine("webgl");
     dom.btnBgEngineOnnx.onclick = () => setBackgroundRemoveLocalEngine("onnx");
@@ -134,6 +136,7 @@ function openBackgroundRemoveEditor(index, mode) {
         : "모든 이미지 처리는 현재 브라우저에서 실행됩니다.";
     dom.btnRunBgRemove.innerText = isAI ? "AI 배경 제거 실행" : "배경 제거 실행";
     dom.btnRunBgRemove.disabled = false;
+    setBackgroundRemoveGalleryButtonVisible(false);
     updateBackgroundRemoveEngineUi(false);
     updateBackgroundBoundaryControl();
     updateCustomBackgroundControls();
@@ -141,6 +144,45 @@ function openBackgroundRemoveEditor(index, mode) {
     setBgRemoveProgress(0, "실행 준비");
     dom.bgRemoveModal.style.display = "flex";
     dom.btnRunBgRemove.focus();
+}
+
+function openBackgroundRemoveEditorForExternal(src, onApply, options = {}) {
+    if (!src || typeof onApply !== "function") return;
+    const tempIndex = images.length;
+    images.push({
+        src,
+        path: `$.temporary.story_bg_${Date.now()}`,
+        group: "temporary-story-bg",
+        date: Date.now(),
+        size: estimateDataUrlBytes(src),
+        mimeType: "image/png",
+        isFav: false
+    });
+    openBackgroundRemoveEditor(tempIndex, "local");
+    bgRemoveState.externalReturn = {
+        tempIndex,
+        onApply,
+        className: String(options.className || "story-external-child")
+    };
+    dom.bgRemoveModal.classList.add(bgRemoveState.externalReturn.className);
+    if (dom.btnBgRemoveAddGallery) {
+        dom.btnBgRemoveAddGallery.innerText = options.applyLabel || "Story Image로 보내기";
+    }
+}
+
+function clearBackgroundRemoveExternalReturn(removeTemporary = true) {
+    const external = bgRemoveState.externalReturn;
+    bgRemoveState.externalReturn = null;
+    dom.bgRemoveModal?.classList.remove("story-external-child");
+    dom.bgRemoveModal?.classList.remove("editor-child-workspace");
+    if (external?.className) dom.bgRemoveModal?.classList.remove(external.className);
+    if (dom.btnBgRemoveAddGallery) {
+        dom.btnBgRemoveAddGallery.innerText = "갤러리에 추가";
+    }
+    if (!external || !removeTemporary) return;
+    if (images[external.tempIndex]?.group === "temporary-story-bg") {
+        images.splice(external.tempIndex, 1);
+    }
 }
 
 function readBackgroundBoundarySetting() {
@@ -210,8 +252,11 @@ function resetAiBackgroundRemovePrompt() {
 
 function closeBackgroundRemoveEditor() {
     if (bgRemoveState.processing) return;
+    clearBackgroundRemoveExternalReturn(true);
     dom.bgRemoveModal.style.display = "none";
+    dom.bgRemoveModal.classList.remove("ai-jena-child-workspace");
     closeBgRemoveSaveChoice();
+    setBackgroundRemoveGalleryButtonVisible(false);
     bgRemoveState.imageIndex = -1;
     bgRemoveState.resultSrc = null;
     bgRemoveState.transparentResultSrc = null;
@@ -924,6 +969,9 @@ async function runBackgroundRemoval() {
     }
     if (!item) return;
 
+    bgRemoveState.resultSrc = null;
+    bgRemoveState.transparentResultSrc = null;
+    setBackgroundRemoveGalleryButtonVisible(false);
     bgRemoveState.processing = true;
     bgRemoveState.abortController = new AbortController();
     dom.btnRunBgRemove.disabled = false;
@@ -1061,8 +1109,22 @@ async function acceptBackgroundMaskResult(resultSrc) {
     } catch (error) {
         console.warn("Edited background result dimensions unavailable:", error);
     }
+    setBackgroundRemoveGalleryButtonVisible(true);
     dom.bgRemoveSaveChoice.style.display = "flex";
     dom.btnBgRemoveNew.focus();
+}
+
+function setBackgroundRemoveGalleryButtonVisible(visible) {
+    if (!dom.btnBgRemoveAddGallery) return;
+    dom.btnBgRemoveAddGallery.disabled = !visible;
+}
+
+function addBackgroundRemoveResultToGallery() {
+    if (!bgRemoveState.resultSrc || bgRemoveState.processing) return;
+    saveBackgroundRemoveResult("new");
+    if (typeof updateImportStatus === "function") {
+        updateImportStatus("배경 제거 결과를 갤러리에 새 이미지로 추가했습니다.");
+    }
 }
 
 function getBackgroundRemoveErrorMessage(error) {
@@ -1145,6 +1207,17 @@ function saveBackgroundRemoveResult(saveMode) {
     const sourceItem = images[sourceIndex];
     if (!sourceItem || !bgRemoveState.resultSrc) return;
 
+    if (bgRemoveState.externalReturn) {
+        const callback = bgRemoveState.externalReturn.onApply;
+        const resultSrc = bgRemoveState.resultSrc;
+        clearBackgroundRemoveExternalReturn(true);
+        closeBackgroundRemoveEditor();
+        Promise.resolve(callback(resultSrc)).catch(error => {
+            console.error("Story background result callback failed:", error);
+        });
+        return;
+    }
+
     const method = bgRemoveState.mode === "ai"
         ? "ai"
         : bgRemoveState.localEngine === "onnx"
@@ -1153,9 +1226,11 @@ function saveBackgroundRemoveResult(saveMode) {
     let resultIndex = sourceIndex;
 
     if (saveMode === "replace") {
+        const editTime = Date.now();
+        sourceItem.createdAt = sourceItem.createdAt || sourceItem.date || editTime;
         sourceItem.src = bgRemoveState.resultSrc;
         sourceItem.size = estimateDataUrlBytes(bgRemoveState.resultSrc);
-        sourceItem.date = Date.now();
+        sourceItem.modifiedAt = editTime;
         sourceItem.mimeType = "image/png";
         sourceItem.backgroundRemoveSourcePath =
             sourceItem.backgroundRemoveSourcePath || sourceItem.path;
@@ -1194,6 +1269,7 @@ function saveBackgroundRemoveResult(saveMode) {
             path: `${sourcePath}.${suffix}_${count}`,
             group: method === "ai" ? "ai-bg-removed" : "background-removed",
             date: Date.now(),
+            createdAt: Date.now(),
             size: estimateDataUrlBytes(bgRemoveState.resultSrc),
             mimeType: "image/png",
             isFav: false,

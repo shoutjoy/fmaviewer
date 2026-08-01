@@ -302,7 +302,7 @@ async function deleteAllHistorySnapshots() {
 }
 
 function historySortLabel(value) {
-    return ({ latest: "최신순", oldest: "오래된순", size: "크기순", type: "종류별", group: "그룹별" })[value] || "최신순";
+    return ({ latest: "최신순(생성)", modified: "최신순(수정)", oldest: "오래된순", size: "크기순", type: "종류별", group: "그룹별" })[value] || "최신순(생성)";
 }
 
 function formatHistoryBytes(bytes) {

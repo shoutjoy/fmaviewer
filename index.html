@@ -7,7 +7,7 @@
     <title>FMA Viewer Ultra</title>
 
     <!-- Project Styles -->
-    <link rel="stylesheet" href="css/styles.css?v=20260731-72">
+    <link rel="stylesheet" href="css/styles.css?v=20260801-23">
 
     <!-- JSZip CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -35,6 +35,7 @@
                 <button id="btnSave" type="button"><span>◇</span> Save FMA</button>
                 <button id="btnZip" type="button"><span>ZIP</span> Download ZIP</button>
                 <button id="btnAddImg" type="button"><span>＋</span> Add Image</button>
+                <button id="btnOpenFolder" type="button"><span>▤</span> Open Folder</button>
             </div>
         </div>
         <div class="header-dropdown db-menu">
@@ -62,6 +63,8 @@
         </button>
         <input type="file" id="addImgInput" accept="image/*,video/*,.mp4,.webm,.mov,.m4v,.ogv" multiple style="display:none">
         <input type="file" id="zipImgInput" accept=".zip,application/zip" multiple style="display:none">
+        <input type="file" id="folderImgInput" accept="image/*,video/*,.mp4,.webm,.mov,.m4v,.ogv"
+            webkitdirectory directory multiple style="display:none">
 
         <!-- Restoration -->
         <button id="btnRestore" hidden aria-hidden="true"
@@ -70,7 +73,8 @@
         <!-- Sorting -->
         <select id="sortSelect"
             style="background:#252a36; color:#fff; border:1px solid rgba(255,255,255,.12); border-radius:10px; padding:7px; font-size:12px; cursor:pointer;">
-            <option value="latest">정렬: 최신순</option>
+            <option value="latest">정렬: 최신순(생성)</option>
+            <option value="modified">정렬: 최신순(수정)</option>
             <option value="oldest">정렬: 오래된순</option>
             <option value="size">정렬: 크기순</option>
             <option value="type">정렬: 종류별</option>
@@ -92,8 +96,6 @@
 
             <div style="width:1px; height:20px; background:#333; margin:0 5px;"></div>
 
-            <button id="btnOrientationTop" style="min-width:70px;">Dir: Horz</button>
-
             <button id="btnViewModeCycle" class="header-cycle-button" type="button"
                 title="클릭하여 Single/Two 전환">View: Single</button>
 
@@ -101,49 +103,49 @@
             <button id="btnStepCycle" class="header-cycle-button" type="button"
                 title="클릭하여 이동 간격 1/2 전환">Skip: 1</button>
 
-            <!-- Header Navigation (<< N >>) -->
-            <div id="navMenu"
-                style="display:flex; align-items:center; gap:5px; background:#252a36; border-radius:10px; padding:2px 8px; border:1px solid rgba(255,255,255,.12); margin-left:10px;">
-                <button id="btnPrevMenu"
-                    style="background:transparent; border:none; color:#00d1ff; cursor:pointer; font-size:14px; font-weight:bold; padding:4px;">&lt;&lt;</button>
-                <span id="pageText" style="font-size:11px; min-width:60px; text-align:center; opacity:0.9;">0 / 0</span>
-                <button id="btnNextMenu"
-                    style="background:transparent; border:none; color:#00d1ff; cursor:pointer; font-size:14px; font-weight:bold; padding:4px;">&gt;&gt;</button>
-            </div>
-
-            <!-- Zoom Controls -->
-            <div id="zoomMenu"
-                style="display:flex; align-items:center; background:#252a36; border-radius:10px; padding:2px; padding-right:8px; border:1px solid rgba(255,255,255,.12); margin-left:10px;">
-                <button id="btnZoomOut"
-                    style="background:transparent; border:none; padding:5px 10px; font-size:16px;">-</button>
-                <span id="zoomText"
-                    style="font-size:12px; min-width:35px; text-align:center; font-weight:bold;">100%</span>
-                <button id="btnZoomIn"
-                    style="background:transparent; border:none; padding:5px 10px; font-size:14px;">+</button>
-            </div>
         </div>
 
-        <span id="imageCount">Images: 0</span>
-        <div id="externalAppButtons" class="external-app-buttons" style="display:none;">
-            <button id="btnOpenStoryApp" class="external-app-button story" type="button"
-                style="display:none;" title="공유 Gemini Story 앱을 새 탭에서 열기">Story Gemini ↗</button>
-            <button id="btnOpenAuraApp" class="external-app-button aura" type="button"
-                style="display:none;">Aura Local</button>
-            <button id="btnOpenAuraGeminiApp" class="external-app-button aura-gemini" type="button"
-                style="display:none;" title="공유 Gemini Aura 앱을 새 탭에서 열기">Aura Gemini ↗</button>
-            <button id="btnOpenBackgroundGeminiApp" class="external-app-button background-gemini" type="button"
-                style="display:none;" title="공유 Gemini 배경생성 앱을 새 탭에서 열기">배경생성 Gemini ↗</button>
-            <button id="btnOpenBgApp" class="external-app-button bg" type="button"
-                style="display:none;">BG App</button>
+        <span id="imageCount" hidden aria-hidden="true">Images: 0</span>
+        <div class="actions preview-global-actions header-view-actions" aria-label="이미지 보기 도구">
+            <button id="btnTogglePreviewMenu" class="view-icon-button view-collapse" type="button"
+                title="이미지 작업 메뉴 접기" aria-label="이미지 작업 메뉴 접기"
+                aria-expanded="true">⌃</button>
+            <button id="btnFullscreen" class="view-icon-button view-fullscreen" type="button"
+                title="전체화면" aria-label="전체화면">⛶</button>
+            <button id="btnCenterPreview" class="view-icon-button view-center" type="button"
+                title="현재 배율을 유지하고 이미지를 가운데로 이동" aria-label="이미지 원위치">⌖</button>
+            <button id="btnResetZoom" class="view-icon-button view-reset" type="button"
+                title="확대·축소 초기화" aria-label="확대·축소 초기화">↺</button>
         </div>
         <div class="header-restore-actions">
-            <button id="btnRestoreRemove"
-                style="background: #2e354a; color: #ffca28; border-color: rgba(255, 202, 40, 0.3);">Restore
-                Remove</button>
+            <button id="btnOrientationTop" style="min-width:70px;">Dir: Horz</button>
+            <button id="btnRestoreRemove" class="restore-remove-icon" type="button"
+                title="마지막으로 삭제한 이미지 복원" aria-label="마지막으로 삭제한 이미지 복원">↶</button>
             <button id="btnClear" type="button"
                 style="background: #2e354a; color: #ff5252; border-color: rgba(255, 82, 82, 0.3);">초기화</button>
         </div>
     </header>
+
+    <nav id="externalAppButtons" class="external-app-buttons" style="display:none;"
+        aria-label="내장 이미지 앱">
+        <div class="external-app-drag-handle" title="드래그하여 앱 도크 이동" aria-label="앱 도크 이동">
+            <span aria-hidden="true">✦</span><b>APPS</b><i aria-hidden="true">⠿</i>
+            <button class="external-app-compact-toggle" type="button" title="앱 도크 축소/확장"
+                aria-label="앱 도크 축소 또는 확장">◉</button>
+        </div>
+        <button id="btnOpenStoryApp" class="external-app-button story" type="button"
+            style="display:none;" title="공유 Gemini Story 앱을 새 탭에서 열기"><span class="app-icon">S</span><span class="app-label">Story Gemini ↗</span></button>
+        <button id="btnOpenStoryHtmlApp" class="external-app-button story-html" type="button"
+            style="display:none;" title="Story Image HTML 내장 앱 열기"><span class="app-icon">H</span><span class="app-label">Story Image</span></button>
+        <button id="btnOpenAuraApp" class="external-app-button aura" type="button"
+            style="display:none;" title="Aura Local 열기"><span class="app-icon">A</span><span class="app-label">Aura Local</span></button>
+        <button id="btnOpenAuraGeminiApp" class="external-app-button aura-gemini" type="button"
+            style="display:none;" title="공유 Gemini Aura 앱을 새 탭에서 열기"><span class="app-icon">G</span><span class="app-label">Aura Gemini ↗</span></button>
+        <button id="btnOpenBackgroundGeminiApp" class="external-app-button background-gemini" type="button"
+            style="display:none;" title="공유 Gemini 배경생성 앱을 새 탭에서 열기"><span class="app-icon">B</span><span class="app-label">배경생성 Gemini ↗</span></button>
+        <button id="btnOpenBgApp" class="external-app-button bg" type="button"
+            style="display:none;" title="BG Remover App 열기"><span class="app-icon">✂</span><span class="app-label">BG App</span></button>
+    </nav>
 
     <div class="layout">
         <!-- Gallery Panel -->
@@ -181,6 +183,9 @@
                             <button id="btnImportZip" class="import-button import-zip" type="button">
                                 <span>ZIP</span> ZIP 추가
                             </button>
+                            <button id="btnImportFolder" class="import-button import-folder" type="button">
+                                <span>▤</span> 폴더 열기
+                            </button>
                             <button id="btnPasteImg" class="import-button import-paste" type="button">
                                 <span>⌘</span> 붙여넣기
                             </button>
@@ -201,20 +206,22 @@
                 <div class="placeholder" id="placeholder">이미지를 클릭하면 오른쪽에서 크게 표시됩니다</div>
                 <div class="previewMeta" id="previewMeta">
                     <div id="metaDynamicArea"><!-- Dynamic image action buttons --></div>
-                    <div class="actions preview-global-actions">
-                        <button id="btnTogglePreviewMenu" class="view-icon-button" type="button"
-                            title="이미지 작업 메뉴 접기" aria-label="이미지 작업 메뉴 접기"
-                            aria-expanded="true">⌃</button>
-                        <button id="btnFullscreen" class="view-icon-button" title="전체화면" aria-label="전체화면">⛶</button>
-                        <button id="btnCenterPreview" class="view-icon-button"
-                            title="현재 배율을 유지하고 이미지를 가운데로 이동" aria-label="이미지 원위치">⌖</button>
-                        <button id="btnResetZoom" class="view-icon-button" title="확대·축소 초기화"
-                            aria-label="확대·축소 초기화">↺</button>
-                    </div>
                 </div>
                 <div id="previewContainer">
                     <img id="preview" alt="preview" draggable="false">
                     <img id="preview2" alt="preview2" style="display:none;" draggable="false">
+                </div>
+                <div id="previewBottomControls" class="preview-bottom-controls" hidden>
+                    <div id="navMenu" class="preview-bottom-nav" aria-label="이미지 이동">
+                        <button id="btnPrevMenu" type="button" title="이전 이미지">&lt;&lt;</button>
+                        <span id="pageText">0 / 0</span>
+                        <button id="btnNextMenu" type="button" title="다음 이미지">&gt;&gt;</button>
+                    </div>
+                    <div id="zoomMenu" class="preview-bottom-zoom" aria-label="이미지 확대 축소">
+                        <button id="btnZoomOut" type="button" title="축소">-</button>
+                        <span id="zoomText">100%</span>
+                        <button id="btnZoomIn" type="button" title="확대">+</button>
+                    </div>
                 </div>
                 <div class="zoomInfo" id="zoomInfo"></div>
                 <div class="navButtons">
@@ -354,8 +361,15 @@
                 <label class="settings-check">
                     <input id="enableStoryApp" type="checkbox">
                     <span>
-                        <strong>Story 앱 버튼 표시</strong>
+                        <strong>Story Gemini 앱 버튼 표시</strong>
                         <small>공유 Gemini Story 앱을 새 탭에서 엽니다. FMA API 키를 사용하지 않습니다.</small>
+                    </span>
+                </label>
+                <label class="settings-check">
+                    <input id="enableStoryHtmlApp" type="checkbox">
+                    <span>
+                        <strong>Story Image HTML 앱 버튼 표시</strong>
+                        <small>로컬 Story Image 앱을 내부 창에서 열고 장면 이미지와 편집 결과를 가져옵니다.</small>
                     </span>
                 </label>
                 <label class="settings-check">
@@ -393,7 +407,15 @@
                 </div>
             </div>
             <div class="utility-footer">
-                <button id="btnClearApiKey" class="danger-subtle" type="button">API 키 삭제</button>
+                <div class="settings-footer-links">
+                    <button id="btnClearApiKey" class="danger-subtle" type="button">API 키 삭제</button>
+                    <a class="settings-privacy-link" href="PRIVACY_POLICY.md" target="_blank"
+                        rel="noopener noreferrer">개인정보 처리방침</a>
+                    <a class="settings-usage-link" href="https://aistudio.google.com/spend" target="_blank"
+                        rel="noopener noreferrer" aria-label="Google AI Studio 사용량 확인 페이지 열기">
+                        <span aria-hidden="true">↗</span> 사용량 체크
+                    </a>
+                </div>
                 <div>
                     <button id="btnSettingsCancel" type="button">취소</button>
                     <button id="btnSettingsSave" class="primary-action" type="button">설정 저장</button>
@@ -413,31 +435,58 @@
                 </div>
                 <div class="external-app-header-actions">
                     <button id="btnDockExternalApp" type="button" title="우측에 붙여 갤러리와 함께 보기">▣ 우측 Dock</button>
-                    <button id="btnMinimizeExternalApp" type="button" title="앱 창 접기">— 최소화</button>
+                    <button id="btnMinimizeExternalApp" type="button" title="앱 내부 전체화면으로 확대">□ 최대화</button>
                     <button id="btnReloadExternalApp" type="button" title="앱 다시 불러오기">↻</button>
                     <button id="btnCloseExternalApp" class="utility-close" type="button"
                         aria-label="이미지 앱 닫기">×</button>
                 </div>
             </header>
-            <div id="externalAppProgress" class="external-app-progress" aria-live="polite">
-                <div class="external-app-progress-copy">
-                    <strong id="externalAppStatus">앱 로딩 중…</strong>
-                    <b id="externalAppProgressPercent">0%</b>
+            <div id="externalAppTaskProgress" class="external-app-task-progress" aria-live="polite" hidden>
+                <div class="external-app-task-progress-copy">
+                    <strong id="externalAppTaskStatus">처리 중…</strong>
+                    <b id="externalAppTaskPercent">0%</b>
                 </div>
-                <div class="external-app-progress-track" role="progressbar" aria-valuemin="0"
+                <div class="external-app-task-progress-track" role="progressbar" aria-valuemin="0"
                     aria-valuemax="100" aria-valuenow="0">
-                    <span id="externalAppProgressBar"></span>
+                    <span id="externalAppTaskBar"></span>
                 </div>
             </div>
             <div class="external-app-frame-wrap">
-                <iframe id="externalAppFrame" title="내장 이미지 앱" allow="clipboard-read; clipboard-write"
+                <iframe id="externalAppFrame" title="내장 이미지 앱" allow="clipboard-read; clipboard-write; fullscreen" allowfullscreen
                     referrerpolicy="same-origin"></iframe>
             </div>
             <footer class="external-app-footer">
-                <span id="externalAppImportHint">앱에서 이미지를 만든 뒤 가져오기 버튼을 누르세요.</span>
+                <div id="externalAppProgress" class="external-app-connection" aria-live="polite">
+                    <i class="external-app-connection-dot" aria-hidden="true"></i>
+                    <strong id="externalAppStatus">연결 중</strong>
+                    <b id="externalAppProgressPercent" hidden>0%</b>
+                    <span id="externalAppProgressBar" hidden></span>
+                </div>
+                <span id="externalAppImportHint" hidden>앱에서 이미지를 만든 뒤 가져오기 버튼을 누르세요.</span>
                 <div>
                     <button id="btnImportExternalCurrent" type="button">현재 이미지 넣기</button>
                     <button id="btnImportExternalAll" class="primary-action" type="button">히스토리 모두 넣기</button>
+                </div>
+            </footer>
+        </div>
+    </div>
+
+    <div id="externalAppFmaPicker" class="editor-fma-picker-modal external-app-fma-picker" role="dialog"
+        aria-modal="true" aria-labelledby="externalAppFmaPickerTitle" style="display:none;">
+        <div class="editor-fma-picker-dialog">
+            <header>
+                <div>
+                    <h2 id="externalAppFmaPickerTitle">FMA 갤러리에서 이미지 선택</h2>
+                    <p>BG Remover로 가져갈 이미지를 선택하세요.</p>
+                </div>
+                <button id="btnCloseExternalAppFmaPicker" type="button" aria-label="FMA 이미지 선택 닫기">×</button>
+            </header>
+            <div id="externalAppFmaPickerGrid" class="editor-fma-picker-grid"></div>
+            <footer>
+                <span id="externalAppFmaPickerStatus">이미지를 선택하세요.</span>
+                <div>
+                    <button id="btnCancelExternalAppFmaPicker" type="button">취소</button>
+                    <button id="btnApplyExternalAppFmaPicker" class="primary-action" type="button" disabled>BG App으로 가져오기</button>
                 </div>
             </footer>
         </div>
@@ -672,6 +721,7 @@
                 <span id="bgRemoveFooterText">모든 처리는 현재 브라우저에서 실행됩니다.</span>
                 <div>
                     <button id="btnBgRemoveCancel" type="button">취소</button>
+                    <button id="btnBgRemoveAddGallery" class="primary-action" type="button" disabled>갤러리에 추가</button>
                     <button id="btnRunBgRemove" class="primary-action" type="button">배경 제거 실행</button>
                 </div>
             </div>
@@ -744,17 +794,27 @@
                     <div id="maskBrushControlsSection" class="mask-tool-section">
                         <label class="mask-range-label">
                             <span>붓 크기 <b id="maskBrushSizeValue">48px</b></span>
-                            <input id="maskBrushSize" type="range" min="3" max="300" step="1" value="48">
+                            <span class="mask-range-stepper">
+                                <button id="btnMaskBrushSizeDown" type="button" aria-label="붓 크기 1 줄이기">−</button>
+                                <input id="maskBrushSize" type="range" min="3" max="300" step="1" value="48">
+                                <button id="btnMaskBrushSizeUp" type="button" aria-label="붓 크기 1 늘리기">＋</button>
+                            </span>
                         </label>
                         <label class="mask-range-label">
                             <span>지움·복구 강도 <b id="maskBrushStrengthValue">100%</b></span>
-                            <input id="maskBrushStrength" type="range" min="5" max="100" step="5" value="100">
+                            <span class="mask-range-stepper">
+                                <button id="btnMaskBrushStrengthDown" type="button" aria-label="강도 1 줄이기">−</button>
+                                <input id="maskBrushStrength" type="range" min="1" max="100" step="1" value="100">
+                                <button id="btnMaskBrushStrengthUp" type="button" aria-label="강도 1 늘리기">＋</button>
+                            </span>
                         </label>
                         <label class="mask-select-label">
                             <span>붓 종류</span>
                             <select id="maskBrushType">
                                 <option value="hard">하드 원형</option>
                                 <option value="soft">소프트 원형</option>
+                                <option value="watercolor">수채화 붓</option>
+                                <option value="spread">퍼짐 붓</option>
                                 <option value="square">사각 붓</option>
                             </select>
                         </label>
@@ -783,6 +843,8 @@
                             <button id="btnLoadMaskPolygon" type="button">불러오기</button>
                             <button id="btnDeleteMaskPolygon" class="danger-subtle" type="button">삭제</button>
                         </div>
+                        <div id="maskPolygonPresetList" class="mask-polygon-preset-list"
+                            aria-label="저장된 다각형 영역 목록"></div>
                         <small>좌표를 비율로 저장해 다른 크기의 이미지에도 맞춰 불러옵니다.</small>
                     </div>
 
@@ -922,6 +984,12 @@
                             <option value="16:9">16:9 가로</option>
                             <option value="9:16">9:16 세로</option>
                         </select></label>
+                        <label><span>시간</span><span class="ai-jena-video-duration">
+                            <input id="aiJenaVideoDuration" type="number" min="4" max="8" step="2" value="8"
+                                inputmode="numeric" aria-describedby="aiJenaVideoDurationHelp">
+                            <em>초</em>
+                        </span></label>
+                        <small id="aiJenaVideoDurationHelp" class="ai-jena-video-duration-help">지원 시간: 4초, 6초, 8초</small>
                         <label class="ai-jena-video-source"><input id="aiJenaVideoUseSource" type="checkbox" checked>
                             <span>현재 이미지를 첫 프레임으로 사용</span></label>
                         <small>Veo는 유료 API 사용 권한이 필요할 수 있으며 생성에 수 분이 걸릴 수 있습니다.</small>
@@ -1018,7 +1086,7 @@
                 </aside>
                 <main id="aiJenaStage" class="ai-jena-stage">
                     <button id="btnAiJenaResetZoom" class="ai-jena-zoom-badge" type="button"
-                        title="확대 상태 초기화">100% · Alt+휠</button>
+                        title="확대 상태 초기화">100% · 휠</button>
                     <div id="aiJenaCanvasStack" class="ai-jena-canvas-stack">
                         <canvas id="aiJenaCanvas"></canvas>
                         <canvas id="aiJenaMaskCanvas"></canvas>
@@ -1062,7 +1130,7 @@
                         <button id="btnStopAiJena" class="danger-subtle" type="button" style="display:none;">■ 정지</button>
                         <button id="btnRunAiJena" class="primary-action" type="button"
                             title="AI 실행 (Ctrl+Enter)">AI 실행</button>
-                        <button id="btnRunAiJenaVideo" class="ai-jena-video-action" type="button"
+                        <button id="btnRunAiJenaVideo" class="ai-jena-video-action" type="button" style="display:none;"
                             title="Veo 영상 생성 (작업 모드를 영상 생성으로 전환)">▶ Veo 영상</button>
                         <button id="btnAddAiJenaResult" type="button" disabled>갤러리로 보내기</button>
                         <button id="btnDownloadAiJenaVideo" type="button" style="display:none;">↓ 영상 다운로드</button>
@@ -1120,9 +1188,13 @@
                 <div class="image-editor-header-actions">
                     <label class="editor-ui-font-control" title="이미지 편집 메뉴의 글자 크기">
                         <span>UI 글자</span>
-                        <input id="imageEditorFontSize" type="range" min="10" max="18" step="1" value="12">
+                        <input id="imageEditorFontSize" type="range" min="6" max="15" step="1" value="12">
                         <b id="imageEditorFontSizeValue">12px</b>
                     </label>
+                    <button id="btnImageEditorMagnet" class="editor-magnet-toggle" type="button"
+                        aria-pressed="true" title="이미지 레이어 경계·중앙 자동 맞춤">🧲</button>
+                    <button id="btnImageEditorPanMode" class="editor-pan-toggle" type="button"
+                        aria-pressed="false" title="이동 모드 켜기 · Alt+드래그와 동일">✋</button>
                     <button id="btnImageEditorBypass" class="editor-bypass" type="button"
                         aria-pressed="false">◉ Bypass · 원본 보기</button>
                     <button id="btnImageEditorUndo" type="button" disabled title="최근 그리기 실행 취소 (Ctrl+Z)">↶ Undo</button>
@@ -1215,7 +1287,7 @@
                             <button id="btnImageEditorDrawingDone" type="button">선택·레이어 편집</button>
                         </div>
                         <div class="editor-drawing-tools" role="group" aria-label="그리기 도구">
-                            <button class="editor-drawing-tool active" data-drawing-tool="pencil"
+                            <button class="editor-drawing-tool" data-drawing-tool="pencil"
                                 type="button">✎ 연필</button>
                             <button class="editor-drawing-tool" data-drawing-tool="brush"
                                 type="button">● 붓</button>
@@ -1225,6 +1297,8 @@
                                 type="button">▰ 형광펜</button>
                             <button class="editor-drawing-tool" data-drawing-tool="eraser"
                                 type="button">⌫ 지우개</button>
+                            <button class="editor-drawing-tool editor-hand-tool" data-drawing-tool="hand"
+                                type="button">🖱 마우스</button>
                         </div>
                         <label class="editor-drawing-field">
                             <span>촉 모양</span>
@@ -1309,25 +1383,33 @@
                                 <button id="btnDuplicateImageAlpha" type="button">◐ 알파 복제</button>
                                 <button id="btnDuplicateImageMask" type="button">◩ 마스크 복제</button>
                             </div>
-                            <div class="text-inspector-grid">
-                                <label><span>Alpha(%)</span><input id="imageLayerOpacity" type="number"
-                                        min="0" max="100" value="100"></label>
-                                <label><span>회전(°)</span><input id="imageLayerRotation" type="number"
-                                        min="-180" max="180" value="0"></label>
-                                <label><span>X</span><input id="imageLayerX" type="number"></label>
-                                <label><span>Y</span><input id="imageLayerY" type="number"></label>
-                                <label><span>가로(px)</span><input id="imageLayerWidth" type="number"
-                                        min="1"></label>
-                                <label><span>세로(px)</span><input id="imageLayerHeight" type="number"
-                                        min="1"></label>
+                            <div class="image-layer-range-grid">
+                                <label><span>Alpha</span><div><input id="imageLayerOpacity" type="range"
+                                        min="0" max="100" step="1" value="100"><output id="imageLayerOpacityValue">100%</output></div></label>
+                                <label><span>회전</span><div><input id="imageLayerRotation" type="range"
+                                        min="-180" max="180" step="1" value="0"><output id="imageLayerRotationValue">0°</output></div></label>
+                                <label><span>X</span><div><input id="imageLayerX" type="range"
+                                        min="-4000" max="4000" step="1" value="0"><output id="imageLayerXValue">0</output></div></label>
+                                <label><span>Y</span><div><input id="imageLayerY" type="range"
+                                        min="-4000" max="4000" step="1" value="0"><output id="imageLayerYValue">0</output></div></label>
+                                <label><span>가로</span><div><input id="imageLayerWidth" type="range"
+                                        min="1" max="8000" step="1" value="1"><output id="imageLayerWidthValue">1px</output></div></label>
+                                <label><span>세로</span><div><input id="imageLayerHeight" type="range"
+                                        min="1" max="8000" step="1" value="1"><output id="imageLayerHeightValue">1px</output></div></label>
                             </div>
                         </section>
                         <section class="editor-panel base-layer-controls">
                             <div class="editor-panel-title"><span>베이스 이미지</span><em>잠금</em></div>
-                            <label class="editor-check">
-                                <input id="baseImageLayerVisible" type="checkbox" checked>
-                                베이스 이미지 보이기
-                            </label>
+                            <div class="base-layer-toggle-row">
+                                <label class="editor-check">
+                                    <input id="baseImageLayerVisible" type="checkbox" checked>
+                                    베이스 이미지 보이기
+                                </label>
+                                <label class="editor-check base-selectable-check">
+                                    <input id="baseImageLayerSelectable" type="checkbox">
+                                    선택 가능
+                                </label>
+                            </div>
                             <label class="base-layer-opacity">
                                 <span>Alpha</span>
                                 <input id="baseImageLayerOpacity" type="range" min="0" max="100" value="100">
@@ -1458,11 +1540,11 @@
                                     <option value="band">띠</option>
                                     <option value="arrow">화살표</option>
                                 </select></label>
-                                <label><span>전체 Alpha(%)</span><input id="editorShapeOpacity" type="number" min="0" max="100" value="100"></label>
+                                <label><span>전체 Alpha(%)</span><input id="editorShapeOpacity" type="number" min="0" max="100" value="100" data-zero-stepper="true"></label>
                                 <label><span>채우기 색</span><input id="editorShapeFillColor" type="color" value="#57e6c1"></label>
-                                <label><span>채우기 Alpha(%)</span><input id="editorShapeFillOpacity" type="number" min="0" max="100" value="80"></label>
+                                <label><span>채우기 Alpha(%)</span><input id="editorShapeFillOpacity" type="number" min="0" max="100" value="80" data-zero-stepper="true"></label>
                                 <label><span>테두리 색</span><input id="editorShapeStrokeColor" type="color" value="#ffffff"></label>
-                                <label><span>테두리 두께(px)</span><input id="editorShapeStrokeWidth" type="number" min="0" max="100" value="4"></label>
+                                <label><span>테두리 두께(px)</span><input id="editorShapeStrokeWidth" type="number" min="0" max="100" value="4" data-zero-stepper="true"></label>
                                 <label><span>X</span><input id="editorShapeX" type="number"></label>
                                 <label><span>Y</span><input id="editorShapeY" type="number"></label>
                                 <label><span>가로(px)</span><input id="editorShapeWidth" type="number" min="1"></label>
@@ -1579,7 +1661,7 @@
             <div class="crop-header">
                 <div>
                     <h2 id="cropTitle">이미지 Crop</h2>
-                    <p>영역을 새로 드래그하거나 선택 영역 내부를 드래그하여 이동하세요.</p>
+                    <p>영역을 새로 드래그하거나 이동하고, 하단 양쪽 모서리 핸들로 크기를 조절하세요.</p>
                 </div>
                 <button id="btnCropClose" class="crop-close" type="button" aria-label="Crop 창 닫기">×</button>
             </div>
@@ -1652,6 +1734,161 @@
         </div>
     </div>
 
+    <!-- Video Trim & Tone Editor -->
+    <div id="videoEditorModal" class="video-editor-modal" role="dialog" aria-modal="true"
+        aria-labelledby="videoEditorTitle" style="display:none;">
+        <div class="video-editor-dialog">
+            <header class="video-editor-header">
+                <div>
+                    <h2 id="videoEditorTitle">동영상 편집</h2>
+                    <p>앞·뒤 구간을 줄이고 영상의 톤을 조절합니다.</p>
+                </div>
+                <button id="btnVideoEditorClose" type="button" aria-label="동영상 편집 닫기">×</button>
+            </header>
+            <div class="video-editor-body">
+                <section class="video-editor-preview-area">
+                    <div class="video-editor-stage">
+                        <video id="videoEditorPreview" controls playsinline preload="metadata"></video>
+                    </div>
+                    <div id="videoEditorTimeline" class="video-editor-timeline" role="slider"
+                        aria-label="선택한 영상 재생 구간" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" tabindex="0">
+                        <div class="video-editor-timeline-labels">
+                            <span>전체 영상</span>
+                            <strong>선택 구간</strong>
+                        </div>
+                        <div class="video-editor-timeline-track">
+                            <span id="videoEditorTimelineSelection" class="video-editor-timeline-selection"></span>
+                            <span id="videoEditorTimelinePlayhead" class="video-editor-timeline-playhead"></span>
+                        </div>
+                    </div>
+                    <div class="video-editor-selection-summary">
+                        <strong id="videoEditorSelectionText">00:00.00 — 00:00.00</strong>
+                        <span id="videoEditorDurationText">선택 길이 0.00초</span>
+                    </div>
+                    <div id="videoEditorProgress" class="video-editor-progress" hidden>
+                        <div class="video-editor-progress-message">요청하신 영상으로 편집하는 중입니다.</div>
+                        <div class="video-editor-progress-track"><span id="videoEditorProgressBar"></span></div>
+                        <strong id="videoEditorProgressPercent">0%</strong>
+                    </div>
+                </section>
+                <aside class="video-editor-controls">
+                    <section class="video-control-section">
+                        <div class="video-control-heading"><strong>길이 편집</strong><button id="btnVideoTrimReset" type="button">되돌리기</button></div>
+                        <label>시작 <output id="videoTrimStartValue">0.00초</output>
+                            <input id="videoTrimStart" type="range" min="0" max="1" step="0.05" value="0">
+                        </label>
+                        <label>끝 <output id="videoTrimEndValue">0.00초</output>
+                            <input id="videoTrimEnd" type="range" min="0" max="1" step="0.05" value="1">
+                        </label>
+                        <button id="btnPreviewVideoSelection" class="video-preview-selection" type="button">▶ 선택 구간 재생</button>
+                    </section>
+                    <section class="video-control-section">
+                        <div class="video-control-heading"><strong>톤 프리셋</strong><button id="btnVideoToneReset" type="button">초기화</button></div>
+                        <div class="video-tone-presets">
+                            <button type="button" data-video-preset="original" class="active">Original</button>
+                            <button type="button" data-video-preset="warm">Warm Glow</button>
+                            <button type="button" data-video-preset="moody">Moody</button>
+                            <button type="button" data-video-preset="pastel">Pastel</button>
+                            <button type="button" data-video-preset="bw">B&amp;W</button>
+                        </div>
+                    </section>
+                    <section class="video-control-section video-filter-controls">
+                        <label>밝기 <output data-video-output="brightness">100</output>
+                            <input id="videoFilterBrightness" data-video-filter="brightness" type="range" min="50" max="150" value="100">
+                        </label>
+                        <label>대비 <output data-video-output="contrast">100</output>
+                            <input id="videoFilterContrast" data-video-filter="contrast" type="range" min="50" max="150" value="100">
+                        </label>
+                        <label>채도 <output data-video-output="saturation">100</output>
+                            <input id="videoFilterSaturation" data-video-filter="saturation" type="range" min="0" max="180" value="100">
+                        </label>
+                        <label>색조 <output data-video-output="hue">0°</output>
+                            <input id="videoFilterHue" data-video-filter="hue" type="range" min="-180" max="180" value="0">
+                        </label>
+                        <label>세피아 <output data-video-output="sepia">0</output>
+                            <input id="videoFilterSepia" data-video-filter="sepia" type="range" min="0" max="100" value="0">
+                        </label>
+                    </section>
+                </aside>
+            </div>
+            <footer class="video-editor-footer">
+                <span>편집 결과는 호환 가능한 WebM 영상으로 생성됩니다.</span>
+                <div>
+                    <button id="btnVideoEditorCancel" type="button">취소</button>
+                    <button id="btnStopVideoRender" class="video-render-stop" type="button" hidden>■ 정지</button>
+                    <button id="btnRenderVideoEdit" class="video-render-run" type="button">편집 영상 만들기</button>
+                </div>
+            </footer>
+            <div id="videoEditorSaveChoice" class="video-editor-save-choice" hidden>
+                <div class="video-save-card">
+                    <span class="video-save-icon">✂</span>
+                    <h3>편집 영상을 어떻게 저장할까요?</h3>
+                    <p>원본을 대체하거나 편집 결과를 새 영상으로 갤러리에 추가할 수 있습니다.</p>
+                    <video id="videoEditorResultPreview" controls playsinline></video>
+                    <div>
+                        <button id="btnVideoChoiceBack" type="button">되돌리기</button>
+                        <button id="btnVideoReplace" class="video-choice-replace" type="button">원본 대체</button>
+                        <button id="btnVideoNew" class="video-choice-new" type="button">새 영상 만들기</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- First-use Gmail and privacy consent gate -->
+    <div id="firstUseModal" class="first-use-modal" role="dialog" aria-modal="true"
+        aria-labelledby="firstUseTitle" aria-describedby="firstUseDescription" style="display:none;">
+        <div class="first-use-dialog">
+            <header class="first-use-header">
+                <span class="first-use-mark" aria-hidden="true">FMA</span>
+                <div>
+                    <h2 id="firstUseTitle">FMA Viewer 첫 사용자 확인</h2>
+                    <p id="firstUseDescription">개인정보 처리방침을 확인하고 Gmail 주소를 입력해야 앱을 시작할 수 있습니다.</p>
+                </div>
+            </header>
+            <div class="first-use-body">
+                <div class="first-use-notice">
+                    <strong>수집·전달되는 정보</strong>
+                    <ul>
+                        <li>입력한 Gmail 주소</li>
+                        <li>첫 사용 일자와 시각(시·분·초)</li>
+                        <li>FMAViewer 최초 사용자라는 이용 정보</li>
+                    </ul>
+                    <p>비밀번호, Gmail 인증 토큰, 이미지 또는 영상은 이 최초 사용자 알림에 포함되지 않습니다.</p>
+                </div>
+                <details class="first-use-policy" open>
+                    <summary>개인정보 처리방침 주요 내용</summary>
+                    <div>
+                        <p>위 정보는 최초 사용자 확인, 운영 공지 및 문의 대응 목적으로 처리됩니다.</p>
+                        <p>동의 기록은 현재 브라우저에 보관됩니다. 자동 전송이 완료되면 입력 정보와 최초 사용 시각이
+                            <strong>shoutjoy1@yonsei.ac.kr</strong>로 전달됩니다.</p>
+                        <p>자동 메일 전달에는 FormSubmit 중계 서비스가 사용되며, 전송된 양식 데이터는 해당 서비스의
+                            개인정보 처리 기준이 함께 적용됩니다.</p>
+                        <p>AI 기능을 직접 실행하는 경우 선택한 이미지와 프롬프트가 Google Gemini API로 전송될 수 있습니다.
+                            로컬 편집 기능은 가능한 범위에서 브라우저 안에서 처리됩니다.</p>
+                        <p>동의 철회 및 삭제 요청은 개발자 이메일로 접수할 수 있습니다.</p>
+                        <a href="PRIVACY_POLICY.md" target="_blank" rel="noopener noreferrer">개인정보 처리방침 전문 보기 ↗</a>
+                    </div>
+                </details>
+                <label class="first-use-email-label" for="firstUseGmail">
+                    <span>사용자 Gmail</span>
+                    <input id="firstUseGmail" type="email" inputmode="email" autocomplete="email"
+                        placeholder="example@gmail.com" spellcheck="false">
+                    <small>Google 계정 비밀번호는 입력하지 마세요.</small>
+                </label>
+                <label class="first-use-consent-check">
+                    <input id="firstUsePrivacyConsent" type="checkbox">
+                    <span>개인정보 처리방침을 읽었으며 Gmail 주소와 최초 사용 시각을 개발자에게 보내는 것에 동의합니다.</span>
+                </label>
+                <p id="firstUseError" class="first-use-error" role="alert" hidden></p>
+            </div>
+            <footer class="first-use-footer">
+                <p>버튼을 누르면 최초 사용자 정보가 자동으로 전송됩니다. 성공한 경우에만 앱이 열립니다.</p>
+                <button id="btnFirstUseContinue" type="button">자동 알림 보내고 FMA Viewer 시작</button>
+            </footer>
+        </div>
+    </div>
+
     <!-- Loading Overlay -->
     <div id="dbHistoryModal" class="db-history-internal-modal" role="dialog" aria-modal="true"
         aria-labelledby="dbHistoryModalTitle" style="display:none;">
@@ -1684,22 +1921,36 @@
         </div>
     </div>
 
+    <!-- Non-blocking gallery import status -->
+    <div id="backgroundImportProgress" class="background-import-progress" hidden role="status"
+        aria-live="polite" aria-atomic="true">
+        <div class="background-import-progress__row">
+            <span id="backgroundImportTitle">갤러리에 추가하는 중…</span>
+            <strong id="backgroundImportPercent">0%</strong>
+        </div>
+        <div class="background-import-progress__track" aria-hidden="true">
+            <div id="backgroundImportBar" class="background-import-progress__bar"></div>
+        </div>
+    </div>
+
     <!-- Project Scripts (Modularized) -->
-    <script src="js/globals.js?v=20260731-66"></script>
-    <script src="js/database.js?v=20260731-50"></script>
-    <script src="js/gallery.js?v=20260731-45"></script>
-    <script src="js/imageMetadata.js?v=20260731-45"></script>
-    <script src="js/preview.js?v=20260731-51"></script>
-    <script src="js/crop.js?v=20260731-44"></script>
-    <script src="js/imageUpscale.js?v=20260731-42"></script>
-    <script src="js/aiJena.js?v=20260731-62"></script>
-    <script src="js/imageEditor.js?v=20260731-51"></script>
+    <script src="js/globals.js?v=20260801-5"></script>
+    <script src="js/database.js?v=20260731-51"></script>
+    <script src="js/gallery.js?v=20260801-1"></script>
+    <script src="js/imageMetadata.js?v=20260801-1"></script>
+    <script src="js/preview.js?v=20260801-3"></script>
+    <script src="js/videoEditor.js?v=20260801-1"></script>
+    <script src="js/crop.js?v=20260801-46"></script>
+    <script src="js/imageUpscale.js?v=20260801-2"></script>
+    <script src="js/aiJena.js?v=20260801-3"></script>
+    <script src="js/imageEditor.js?v=20260801-58"></script>
     <script src="js/backgroundMaskEditor.js?v=20260731-44"></script>
-    <script src="js/backgroundRemove.js?v=20260731-53"></script>
-    <script src="js/fileHandlers.js?v=20260731-46"></script>
-    <script src="js/externalApps.js?v=20260731-49"></script>
-    <script src="js/interaction.js?v=20260731-48"></script>
-    <script src="js/app.js?v=20260731-51"></script>
+    <script src="js/backgroundRemove.js?v=20260801-4"></script>
+    <script src="js/fileHandlers.js?v=20260731-47"></script>
+    <script src="js/externalApps.js?v=20260801-8"></script>
+    <script src="js/interaction.js?v=20260801-1"></script>
+    <script src="js/firstRunConsent.js?v=20260801-2"></script>
+    <script src="js/app.js?v=20260731-53"></script>
 </body>
 
 </html>
