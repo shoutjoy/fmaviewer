@@ -146,6 +146,9 @@
             } catch (_) {
                 throw new Error("서버가 올바른 JSON을 반환하지 않았습니다.");
             }
+            if (String(payload?.service || "") !== "FMA Viewer verified email registration") {
+                throw new Error("현재 배포 URL은 이메일 인증 기능이 없는 이전 GAS 버전입니다. 새 Code.gs로 재배포하세요.");
+            }
             if (!response.ok || payload?.success !== true || String(payload?.status || "").toUpperCase() !== "OK") {
                 throw new Error(payload?.message || `GAS HTTP ${response.status}`);
             }
