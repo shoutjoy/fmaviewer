@@ -202,7 +202,8 @@ function setupEventListeners() {
     dom.btnResetZoom.onclick = resetZoom;
     const setPreviewMenuCollapsed = collapsed => {
         dom.previewMeta.classList.toggle("menu-collapsed", collapsed);
-        dom.btnTogglePreviewMenu.innerText = collapsed ? "⌄" : "⌃";
+        dom.btnTogglePreviewMenu.classList.toggle("is-collapsed", collapsed);
+        dom.btnTogglePreviewMenu.innerText = "Menu";
         dom.btnTogglePreviewMenu.title = collapsed ? "이미지 작업 메뉴 펼치기" : "이미지 작업 메뉴 접기";
         dom.btnTogglePreviewMenu.setAttribute("aria-label", dom.btnTogglePreviewMenu.title);
         dom.btnTogglePreviewMenu.setAttribute("aria-expanded", String(!collapsed));

@@ -7,7 +7,7 @@
     <title>FMA Viewer Ultra</title>
 
     <!-- Project Styles -->
-    <link rel="stylesheet" href="css/styles.css?v=20260801-23">
+    <link rel="stylesheet" href="css/styles.css?v=20260801-25">
 
     <!-- JSZip CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -107,9 +107,6 @@
 
         <span id="imageCount" hidden aria-hidden="true">Images: 0</span>
         <div class="actions preview-global-actions header-view-actions" aria-label="이미지 보기 도구">
-            <button id="btnTogglePreviewMenu" class="view-icon-button view-collapse" type="button"
-                title="이미지 작업 메뉴 접기" aria-label="이미지 작업 메뉴 접기"
-                aria-expanded="true">⌃</button>
             <button id="btnFullscreen" class="view-icon-button view-fullscreen" type="button"
                 title="전체화면" aria-label="전체화면">⛶</button>
             <button id="btnCenterPreview" class="view-icon-button view-center" type="button"
@@ -203,6 +200,9 @@
         <!-- Preview Panel -->
         <div class="right">
             <div class="previewWrap">
+                <button id="btnTogglePreviewMenu" class="preview-menu-floating" type="button"
+                    title="이미지 작업 메뉴 접기" aria-label="이미지 작업 메뉴 접기"
+                    aria-expanded="true">Menu</button>
                 <div class="placeholder" id="placeholder">이미지를 클릭하면 오른쪽에서 크게 표시됩니다</div>
                 <div class="previewMeta" id="previewMeta">
                     <div id="metaDynamicArea"><!-- Dynamic image action buttons --></div>
@@ -1748,7 +1748,7 @@
             <div class="video-editor-body">
                 <section class="video-editor-preview-area">
                     <div class="video-editor-stage">
-                        <video id="videoEditorPreview" controls playsinline preload="metadata"></video>
+                        <video id="videoEditorPreview" controls playsinline preload="auto"></video>
                     </div>
                     <div id="videoEditorTimeline" class="video-editor-timeline" role="slider"
                         aria-label="선택한 영상 재생 구간" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" tabindex="0">
@@ -1851,7 +1851,7 @@
                     <strong>수집·전달되는 정보</strong>
                     <ul>
                         <li>입력한 Gmail 주소</li>
-                        <li>첫 사용 일자와 시각(시·분·초)</li>
+                        <li>첫 사용 일자와 시각(시·분)</li>
                         <li>FMAViewer 최초 사용자라는 이용 정보</li>
                     </ul>
                     <p>비밀번호, Gmail 인증 토큰, 이미지 또는 영상은 이 최초 사용자 알림에 포함되지 않습니다.</p>
@@ -1867,7 +1867,7 @@
                         <p>AI 기능을 직접 실행하는 경우 선택한 이미지와 프롬프트가 Google Gemini API로 전송될 수 있습니다.
                             로컬 편집 기능은 가능한 범위에서 브라우저 안에서 처리됩니다.</p>
                         <p>동의 철회 및 삭제 요청은 개발자 이메일로 접수할 수 있습니다.</p>
-                        <a href="PRIVACY_POLICY.md" target="_blank" rel="noopener noreferrer">개인정보 처리방침 전문 보기 ↗</a>
+                        <a href="privacy_policy.html" target="_blank" rel="noopener noreferrer">개인정보 처리방침 전문 보기 ↗</a>
                     </div>
                 </details>
                 <label class="first-use-email-label" for="firstUseGmail">
@@ -1876,6 +1876,10 @@
                         placeholder="example@gmail.com" spellcheck="false">
                     <small>Google 계정 비밀번호는 입력하지 마세요.</small>
                 </label>
+                <div class="first-use-mail-preview">
+                    <strong>전송될 메일 내용</strong>
+                    <output id="firstUseMailPreview" aria-live="polite"></output>
+                </div>
                 <label class="first-use-consent-check">
                     <input id="firstUsePrivacyConsent" type="checkbox">
                     <span>개인정보 처리방침을 읽었으며 Gmail 주소와 최초 사용 시각을 개발자에게 보내는 것에 동의합니다.</span>
@@ -1939,18 +1943,18 @@
     <script src="js/gallery.js?v=20260801-1"></script>
     <script src="js/imageMetadata.js?v=20260801-1"></script>
     <script src="js/preview.js?v=20260801-3"></script>
-    <script src="js/videoEditor.js?v=20260801-1"></script>
+    <script src="js/videoEditor.js?v=20260801-2"></script>
     <script src="js/crop.js?v=20260801-46"></script>
     <script src="js/imageUpscale.js?v=20260801-2"></script>
     <script src="js/aiJena.js?v=20260801-3"></script>
-    <script src="js/imageEditor.js?v=20260801-58"></script>
+    <script src="js/imageEditor.js?v=20260801-59"></script>
     <script src="js/backgroundMaskEditor.js?v=20260731-44"></script>
     <script src="js/backgroundRemove.js?v=20260801-4"></script>
     <script src="js/fileHandlers.js?v=20260731-47"></script>
     <script src="js/externalApps.js?v=20260801-8"></script>
     <script src="js/interaction.js?v=20260801-1"></script>
-    <script src="js/firstRunConsent.js?v=20260801-2"></script>
-    <script src="js/app.js?v=20260731-53"></script>
+    <script src="js/firstRunConsent.js?v=20260801-3"></script>
+    <script src="js/app.js?v=20260801-1"></script>
 </body>
 
 </html>

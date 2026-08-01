@@ -10,7 +10,8 @@ var videoEditorState = {
     resultCommitted: false,
     rendering: false,
     renderToken: 0,
-    rangeSeeking: false
+    rangeSeeking: false,
+    renderCancel: null
 };
 
 var videoEditorPresets = {
@@ -37,6 +38,7 @@ function getVideoEditorElements() {
         progress: document.getElementById("videoEditorProgress"),
         progressBar: document.getElementById("videoEditorProgressBar"),
         progressPercent: document.getElementById("videoEditorProgressPercent"),
+        previewSelection: document.getElementById("btnPreviewVideoSelection"),
         run: document.getElementById("btnRenderVideoEdit"),
         stop: document.getElementById("btnStopVideoRender"),
         saveChoice: document.getElementById("videoEditorSaveChoice"),
@@ -161,9 +163,11 @@ async function openVideoEditor(index) {
     videoEditorState.resultCommitted = false;
     el.modal.style.display = "flex";
     el.saveChoice.hidden = true;
-    el.preview.src = item.src;
     el.preview.style.filter = "none";
-    el.preview.load();
+    el.preview.preload = "auto";
+    el.preview.muted = false;
+    el.run.disabled = true;
+    if (el.previewSelection) el.previewSelection.disabled = true;
     el.preview.onloadedmetadata = () => {
         const duration = Number(el.preview.duration);
         if (!Number.isFinite(duration) || duration <= 0) {
@@ -177,6 +181,22 @@ async function openVideoEditor(index) {
         applyVideoTonePreset("original");
         updateVideoTimeline();
     };
+    const enablePlaybackActions = () => {
+        if (!videoEditorState.duration || el.preview.readyState < 2) return;
+        el.run.disabled = false;
+        if (el.previewSelection) el.previewSelection.disabled = false;
+    };
+    el.preview.onloadeddata = enablePlaybackActions;
+    el.preview.oncanplay = enablePlaybackActions;
+    el.preview.onerror = () => {
+        el.run.disabled = true;
+        if (el.previewSelection) el.previewSelection.disabled = true;
+        const reason = el.preview.error?.message || "지원하지 않거나 손상된 영상입니다.";
+        console.error("Video editor source load failed:", el.preview.error);
+        alert("동영상을 재생할 수 없습니다: " + reason);
+    };
+    el.preview.src = item.src;
+    el.preview.load();
 }
 
 function closeVideoEditor(force) {
@@ -185,10 +205,24 @@ function closeVideoEditor(force) {
         return;
     }
     const el = getVideoEditorElements();
+    if (typeof videoEditorState.renderCancel === "function") {
+        videoEditorState.renderCancel();
+        videoEditorState.renderCancel = null;
+    }
     if (el.preview) {
         el.preview.pause();
+        el.preview.muted = false;
+        el.preview.onloadedmetadata = null;
+        el.preview.onloadeddata = null;
+        el.preview.oncanplay = null;
+        el.preview.onerror = null;
         el.preview.removeAttribute("src");
         el.preview.load();
+    }
+    if (el.resultPreview) {
+        el.resultPreview.pause();
+        el.resultPreview.removeAttribute("src");
+        el.resultPreview.load();
     }
     if (videoEditorState.resultUrl && !videoEditorState.resultCommitted) {
         URL.revokeObjectURL(videoEditorState.resultUrl);
@@ -216,6 +250,9 @@ function stopVideoEditorRender() {
     if (!videoEditorState.rendering) return;
     videoEditorState.renderToken += 1;
     videoEditorState.rendering = false;
+    const cancelRender = videoEditorState.renderCancel;
+    videoEditorState.renderCancel = null;
+    if (typeof cancelRender === "function") cancelRender();
     const el = getVideoEditorElements();
     el.preview.pause();
     el.run.disabled = false;
@@ -233,19 +270,95 @@ function getSupportedVideoRecorderMimeType() {
     return candidates.find(type => window.MediaRecorder?.isTypeSupported(type)) || "";
 }
 
-function waitForVideoSeek(video, time) {
+function waitForVideoReady(video, timeout = 12000) {
     return new Promise((resolve, reject) => {
-        if (video.readyState >= 2 && Math.abs(video.currentTime - time) < 0.02) {
+        if (video.readyState >= 2) {
             resolve();
             return;
         }
-        const timer = setTimeout(() => reject(new Error("선택한 시작 위치로 이동하지 못했습니다.")), 8000);
-        video.addEventListener("seeked", () => {
+        let settled = false;
+        const cleanup = () => {
             clearTimeout(timer);
+            video.removeEventListener("loadeddata", handleReady);
+            video.removeEventListener("canplay", handleReady);
+            video.removeEventListener("error", handleError);
+        };
+        const handleReady = () => {
+            if (settled || video.readyState < 2) return;
+            settled = true;
+            cleanup();
             resolve();
-        }, { once: true });
-        video.currentTime = time;
+        };
+        const handleError = () => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            reject(new Error(video.error?.message || "영상 데이터를 불러오지 못했습니다."));
+        };
+        const timer = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            reject(new Error("영상 재생 데이터를 준비하지 못했습니다."));
+        }, timeout);
+        video.addEventListener("loadeddata", handleReady);
+        video.addEventListener("canplay", handleReady);
+        video.addEventListener("error", handleError);
+        video.preload = "auto";
+        if (video.networkState === 0) video.load();
     });
+}
+
+async function waitForVideoSeek(video, time) {
+    await waitForVideoReady(video);
+    const duration = Number.isFinite(video.duration) ? video.duration : videoEditorState.duration;
+    const target = Math.max(0, Math.min(duration || 0, Number(time) || 0));
+    if (Math.abs(video.currentTime - target) < 0.03 && video.readyState >= 2) return;
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        const cleanup = () => {
+            clearTimeout(timer);
+            video.removeEventListener("seeked", handleSeeked);
+            video.removeEventListener("error", handleError);
+        };
+        const handleSeeked = () => {
+            if (settled) return;
+            if (Math.abs(video.currentTime - target) > 0.08) {
+                settled = true;
+                cleanup();
+                reject(new Error("선택한 재생 위치로 정확히 이동하지 못했습니다."));
+                return;
+            }
+            settled = true;
+            cleanup();
+            resolve();
+        };
+        const handleError = () => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            reject(new Error(video.error?.message || "영상 위치 이동 중 오류가 발생했습니다."));
+        };
+        const timer = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            reject(new Error("선택한 시작 위치로 이동하지 못했습니다."));
+        }, 12000);
+        video.addEventListener("seeked", handleSeeked);
+        video.addEventListener("error", handleError);
+        video.currentTime = target;
+    });
+}
+
+function playVideoWithTimeout(video, timeout = 12000) {
+    const playPromise = video.play();
+    return Promise.race([
+        Promise.resolve(playPromise),
+        new Promise((_, reject) => setTimeout(() => {
+            reject(new Error("영상 재생이 시작되지 않았습니다."));
+        }, timeout))
+    ]);
 }
 
 async function renderVideoEdit() {
@@ -271,20 +384,36 @@ async function renderVideoEdit() {
     const token = ++videoEditorState.renderToken;
     el.run.disabled = true;
     el.stop.hidden = false;
-    setVideoRenderProgress(0, "요청하신 영상으로 편집하는 중입니다.");
+    setVideoRenderProgress(1, "영상 데이터를 준비하는 중입니다.");
+
+    let recorder = null;
+    let outputStream = null;
+    let sourceCapture = null;
+    const originalMuted = video.muted;
 
     try {
+        video.preload = "auto";
+        video.muted = true;
+        await waitForVideoReady(video);
         await waitForVideoSeek(video, start);
+        setVideoRenderProgress(3, "편집할 구간을 준비했습니다.");
         const canvas = document.createElement("canvas");
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
+        if (!canvas.width || !canvas.height) throw new Error("영상 화면 크기를 읽지 못했습니다.");
         const context = canvas.getContext("2d", { alpha: false });
-        const outputStream = canvas.captureStream(30);
-        const sourceCapture = typeof video.captureStream === "function" ? video.captureStream() :
-            (typeof video.mozCaptureStream === "function" ? video.mozCaptureStream() : null);
+        if (!context) throw new Error("영상 편집 화면을 만들지 못했습니다.");
+        outputStream = canvas.captureStream(30);
+        try {
+            sourceCapture = typeof video.captureStream === "function" ? video.captureStream() :
+                (typeof video.mozCaptureStream === "function" ? video.mozCaptureStream() : null);
+        } catch (error) {
+            console.warn("Source audio capture is unavailable; rendering without audio.", error);
+            sourceCapture = null;
+        }
         sourceCapture?.getAudioTracks().forEach(track => outputStream.addTrack(track));
         const mimeType = getSupportedVideoRecorderMimeType();
-        const recorder = new MediaRecorder(outputStream, mimeType ? { mimeType, videoBitsPerSecond: 8_000_000 } : undefined);
+        recorder = new MediaRecorder(outputStream, mimeType ? { mimeType, videoBitsPerSecond: 8_000_000 } : undefined);
         const chunks = [];
         recorder.ondataavailable = event => { if (event.data?.size) chunks.push(event.data); };
         const stopped = new Promise((resolve, reject) => {
@@ -292,28 +421,53 @@ async function renderVideoEdit() {
             recorder.onerror = event => reject(event.error || new Error("영상 인코딩에 실패했습니다."));
         });
         recorder.start(250);
-        video.muted = true;
-        await video.play();
+        await playVideoWithTimeout(video);
 
-        await new Promise(resolve => {
+        await new Promise((resolve, reject) => {
+            let settled = false;
+            let frameRequest = 0;
+            let lastMediaTime = video.currentTime;
+            let lastAdvanceAt = performance.now();
+            const finish = error => {
+                if (settled) return;
+                settled = true;
+                if (frameRequest) cancelAnimationFrame(frameRequest);
+                video.pause();
+                if (recorder?.state !== "inactive") recorder.stop();
+                videoEditorState.renderCancel = null;
+                if (error) reject(error);
+                else resolve();
+            };
+            videoEditorState.renderCancel = () => finish();
             const drawFrame = () => {
                 if (token !== videoEditorState.renderToken || !videoEditorState.rendering || video.currentTime >= end || video.ended) {
-                    video.pause();
-                    if (recorder.state !== "inactive") recorder.stop();
-                    resolve();
+                    finish();
                     return;
                 }
-                context.save();
-                context.filter = getVideoFilterCss();
-                context.drawImage(video, 0, 0, canvas.width, canvas.height);
-                context.restore();
-                setVideoRenderProgress(((video.currentTime - start) / (end - start)) * 96);
-                requestAnimationFrame(drawFrame);
+                try {
+                    context.save();
+                    context.filter = getVideoFilterCss();
+                    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    context.restore();
+                } catch (error) {
+                    finish(new Error("영상 프레임을 처리하지 못했습니다: " + error.message));
+                    return;
+                }
+                const mediaTime = video.currentTime;
+                if (mediaTime > lastMediaTime + 0.001) {
+                    lastMediaTime = mediaTime;
+                    lastAdvanceAt = performance.now();
+                } else if (!video.seeking && performance.now() - lastAdvanceAt > 12000) {
+                    finish(new Error("영상 재생이 멈춰 편집을 계속할 수 없습니다."));
+                    return;
+                }
+                const ratio = Math.max(0, Math.min(1, (mediaTime - start) / (end - start)));
+                setVideoRenderProgress(4 + ratio * 92);
+                frameRequest = requestAnimationFrame(drawFrame);
             };
             drawFrame();
         });
         await stopped;
-        video.muted = false;
         if (token !== videoEditorState.renderToken || !videoEditorState.rendering) return;
         if (!chunks.length) throw new Error("편집된 영상 데이터가 생성되지 않았습니다.");
         const blob = new Blob(chunks, { type: mimeType || "video/webm" });
@@ -325,9 +479,17 @@ async function renderVideoEdit() {
         setVideoRenderProgress(100, "편집 영상을 만들었습니다. 저장 방법을 선택해 주세요.");
     } catch (error) {
         console.error("Video edit failed:", error);
+        video.pause();
         alert("동영상 편집 중 오류가 발생했습니다: " + error.message);
         setVideoRenderProgress(0, "영상 편집에 실패했습니다.");
     } finally {
+        videoEditorState.renderCancel = null;
+        if (recorder?.state && recorder.state !== "inactive") {
+            try { recorder.stop(); } catch (_) {}
+        }
+        outputStream?.getTracks().forEach(track => track.stop());
+        sourceCapture?.getTracks().forEach(track => track.stop());
+        video.muted = originalMuted;
         if (token === videoEditorState.renderToken) {
             videoEditorState.rendering = false;
             el.run.disabled = false;
@@ -393,8 +555,19 @@ async function saveVideoEditorResult(mode) {
     document.getElementById("btnVideoTrimReset").onclick = resetVideoTrim;
     document.getElementById("btnVideoToneReset").onclick = () => applyVideoTonePreset("original");
     document.getElementById("btnPreviewVideoSelection").onclick = async () => {
-        await waitForVideoSeek(el.preview, Number(el.start.value));
-        await el.preview.play();
+        if (videoEditorState.rendering) return;
+        const start = Number(el.start.value) || 0;
+        el.preview.pause();
+        el.preview.preload = "auto";
+        try {
+            if (Number.isFinite(el.preview.duration)) el.preview.currentTime = start;
+            const playPromise = playVideoWithTimeout(el.preview);
+            await Promise.all([waitForVideoSeek(el.preview, start), playPromise]);
+        } catch (error) {
+            el.preview.pause();
+            console.error("Video selection preview failed:", error);
+            alert("선택 구간을 재생하지 못했습니다: " + error.message);
+        }
     };
     el.preview.addEventListener("play", () => {
         if (videoEditorState.rendering) return;

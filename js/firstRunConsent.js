@@ -19,28 +19,22 @@ function isValidGmailAddress(value) {
 }
 
 function formatFirstUseTimestamp(date) {
-    return new Intl.DateTimeFormat("ko-KR", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: false,
-        timeZoneName: "short"
-    }).format(date);
+    const pad = value => String(value).padStart(2, "0");
+    return `${date.getFullYear()}년 ${pad(date.getMonth() + 1)}월 ${pad(date.getDate())}일 ${pad(date.getHours())}시 ${pad(date.getMinutes())}분`;
+}
+
+function createFirstUseMessage(email, firstUsedAt) {
+    const address = String(email || "입력된 메일").trim();
+    return `${address}이 FMA Viewer를 ${formatFirstUseTimestamp(new Date(firstUsedAt))}에 사용합니다.`;
+}
+
+function updateFirstUseMailPreview(email, firstUsedAt = new Date().toISOString()) {
+    const preview = document.getElementById("firstUseMailPreview");
+    if (preview) preview.textContent = createFirstUseMessage(email, firstUsedAt);
 }
 
 async function sendFirstUseNotification(email, firstUsedAt) {
-    const message = [
-        "FMAViewer 사용자로서 앱을 처음 사용했습니다.",
-        "",
-        `입력한 Gmail: ${email}`,
-        `최초 사용 일시: ${formatFirstUseTimestamp(new Date(firstUsedAt))}`,
-        `ISO 시각: ${firstUsedAt}`,
-        "",
-        "이 메일에는 비밀번호나 이미지 데이터가 포함되지 않습니다."
-    ].join("\n");
+    const message = createFirstUseMessage(email, firstUsedAt);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000);
@@ -52,14 +46,11 @@ async function sendFirstUseNotification(email, firstUsedAt) {
                 "Accept": "application/json"
             },
             body: JSON.stringify({
-                name: "FMAViewer 최초 사용자",
+                name: "FMA Viewer 사용자",
                 email,
-                application: "FMAViewer",
-                first_used_at: firstUsedAt,
-                first_used_at_local: formatFirstUseTimestamp(new Date(firstUsedAt)),
                 message,
-                _subject: "FMAViewer 최초 사용자 알림",
-                _template: "table",
+                _subject: "FMA Viewer 사용 알림",
+                _template: "basic",
                 _captcha: "false"
             }),
             signal: controller.signal
@@ -89,6 +80,9 @@ function setFirstUseSending(sending) {
 function describeSendError(error) {
     if (error?.name === "AbortError") {
         return "자동 전송 시간이 초과되었습니다. 인터넷 연결을 확인하고 다시 시도해 주세요.";
+    }
+    if (/activate form/i.test(String(error?.message || ""))) {
+        return "FormSubmit 최초 연결 승인이 필요합니다. shoutjoy1@yonsei.ac.kr 받은편지함에서 'Activate Form' 메일을 승인한 뒤 다시 시도해 주세요.";
     }
     if (location.protocol === "file:") {
         return "자동 전송에 실패했습니다. 브라우저의 로컬 파일 제한일 수 있습니다. README의 로컬 HTTP 서버 방식으로 앱을 실행한 뒤 다시 시도해 주세요.";
@@ -135,6 +129,7 @@ async function completeFirstUseConsent() {
     }
 
     const firstUsedAt = new Date().toISOString();
+    updateFirstUseMailPreview(email, firstUsedAt);
     setFirstUseSending(true);
     try {
         await sendFirstUseNotification(email, firstUsedAt);
@@ -180,7 +175,10 @@ function initFirstUseConsent() {
     setFirstUsePageLocked(true);
     modal.style.display = "flex";
     button.addEventListener("click", completeFirstUseConsent);
-    document.getElementById("firstUseGmail")?.addEventListener("keydown", event => {
+    const emailInput = document.getElementById("firstUseGmail");
+    updateFirstUseMailPreview(emailInput?.value);
+    emailInput?.addEventListener("input", event => updateFirstUseMailPreview(event.currentTarget.value));
+    emailInput?.addEventListener("keydown", event => {
         if (event.key === "Enter") {
             event.preventDefault();
             completeFirstUseConsent();

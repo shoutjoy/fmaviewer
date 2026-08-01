@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark light">
+    <title>FMA Viewer 개인정보 처리방침</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            --background: #081019;
+            --panel: #111d2a;
+            --border: rgba(122, 226, 248, .2);
+            --text: #eaf1fa;
+            --muted: #aebaca;
+            --accent: #7ce9fb;
+            --code: #202e3d;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            color: var(--text);
+            background:
+                radial-gradient(circle at 15% 0%, rgba(47, 170, 201, .14), transparent 34rem),
+                var(--background);
+            font-family: Inter, Pretendard, "Noto Sans KR", system-ui, sans-serif;
+            line-height: 1.75;
+        }
+
+        .page {
+            width: min(880px, calc(100% - 28px));
+            margin: 36px auto;
+        }
+
+        .page-header,
+        .policy-document {
+            border: 1px solid var(--border);
+            background: rgba(17, 29, 42, .94);
+            box-shadow: 0 24px 70px rgba(0, 0, 0, .26);
+        }
+
+        .page-header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 18px 22px;
+            border-radius: 18px 18px 0 0;
+        }
+
+        .mark {
+            display: grid;
+            width: 52px;
+            height: 52px;
+            flex: 0 0 auto;
+            place-items: center;
+            border-radius: 15px;
+            color: #071218;
+            background: linear-gradient(135deg, #72e4f5, #9cff83);
+            font-weight: 900;
+        }
+
+        .page-header h1 { margin: 0; font-size: clamp(19px, 4vw, 25px); }
+        .page-header p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+
+        .policy-document {
+            min-height: 360px;
+            padding: clamp(24px, 5vw, 48px);
+            border-top: 0;
+            border-radius: 0 0 18px 18px;
+        }
+
+        .policy-document h1 { margin: 0 0 8px; font-size: clamp(25px, 5vw, 36px); }
+        .policy-document h2 { margin: 34px 0 10px; color: var(--accent); font-size: 20px; }
+        .policy-document p { margin: 10px 0; }
+        .policy-document ul { margin: 10px 0 18px; padding-left: 23px; }
+        .policy-document li { margin: 5px 0; }
+        .policy-document a { color: var(--accent); text-underline-offset: 3px; }
+        .policy-document code {
+            padding: 2px 6px;
+            border-radius: 6px;
+            background: var(--code);
+            font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+        }
+
+        .loading, .error { color: var(--muted); }
+        .error { padding: 16px; border: 1px solid #81384a; border-radius: 10px; color: #ffc0ca; background: #351722; }
+
+        @media (prefers-color-scheme: light) {
+            :root {
+                color-scheme: light;
+                --background: #eef4f8;
+                --panel: #ffffff;
+                --border: rgba(31, 133, 159, .2);
+                --text: #172333;
+                --muted: #5a6879;
+                --accent: #087d99;
+                --code: #e9f1f5;
+            }
+        }
+
+        @media (max-width: 560px) {
+            .page { width: min(100% - 16px, 880px); margin: 8px auto; }
+            .page-header { padding: 14px; border-radius: 14px 14px 0 0; }
+            .mark { width: 44px; height: 44px; border-radius: 12px; }
+            .policy-document { border-radius: 0 0 14px 14px; }
+        }
+    </style>
+</head>
+
+<body>
+    <main class="page">
+        <header class="page-header">
+            <span class="mark" aria-hidden="true">FMA</span>
+            <div>
+                <h1>개인정보 처리방침</h1>
+                <p><code>PRIVACY_POLICY.md</code>의 최신 내용을 표시합니다.</p>
+            </div>
+        </header>
+        <article id="privacyPolicy" class="policy-document" aria-live="polite">
+            <p class="loading">개인정보 처리방침을 불러오는 중입니다…</p>
+        </article>
+    </main>
+    <script id="privacyPolicyFallback" type="text/markdown">
+# FMA Viewer 개인정보 처리방침
+
+시행일: 2026년 8월 1일
+
+FMA Viewer(이하 “앱”)는 브라우저에서 이미지와 영상을 관리·편집하는 도구입니다. 개발자 박중희는 앱의 최초 사용자 확인과 문의 대응을 위해 아래와 같이 최소한의 개인정보를 처리합니다.
+
+## 1. 처리하는 개인정보
+
+앱을 처음 사용할 때 다음 정보를 입력하거나 생성합니다.
+
+- 사용자가 입력한 Gmail 주소
+- 최초 사용 일자와 시각(시·분)
+- FMA Viewer 사용 알림이라는 이용 정보
+
+앱은 비밀번호, Gmail 인증 토큰 또는 Google 계정 비밀번호를 요구하거나 저장하지 않습니다.
+
+## 2. 처리 목적
+
+- FMA Viewer 최초 사용자 확인
+- 사용 현황 확인과 운영상 공지
+- 문의, 오류 신고 및 지원 대응
+
+입력한 Gmail 주소가 앱 사용을 별도로 승인하거나 사용자의 신원을 보증하는 것은 아닙니다.
+
+## 3. 저장 및 전달 방식
+
+- 동의 여부, 입력한 Gmail 주소와 최초 사용 시각은 현재 브라우저의 로컬 저장소에 보관됩니다.
+- 최초 사용자 알림은 FormSubmit AJAX 메일 중계 서비스를 통해 개발자 이메일 `shoutjoy1@yonsei.ac.kr`로 자동 전달됩니다.
+- 전송 과정에는 FormSubmit의 개인정보 처리방침과 보유 정책이 함께 적용됩니다. FormSubmit은 공식 문서에서 제출 기록을 30일간 보관한다고 안내합니다.
+- 브라우저 데이터 또는 사이트 데이터를 삭제하면 앱에 저장된 최초 사용자 기록도 삭제될 수 있습니다.
+
+앱은 사용자의 Gmail 계정으로 로그인하거나 사용자 계정에서 메일을 발송하지 않습니다. 입력한 주소와 최초 사용 정보가 외부 메일 중계 서비스를 통해 개발자에게 전달됩니다.
+
+## 4. 이미지·영상 및 AI 기능
+
+- 일반 보기, Crop, Canvas 편집, 로컬 배경 제거 등은 가능한 범위에서 현재 브라우저 안에서 처리됩니다.
+- 사용자가 Google AI Studio 기반 AI 기능을 실행하면 선택한 이미지, 참고 이미지, 프롬프트 등이 Google Gemini API로 전송될 수 있습니다.
+- 외부 내장 앱이나 링크를 열면 해당 서비스의 개인정보 처리방침과 이용약관이 적용됩니다.
+- FMA 프로젝트, SaveDB 및 편집 결과는 사용자가 직접 저장하거나 삭제할 수 있습니다.
+
+## 5. 보유 기간과 삭제
+
+- 브라우저 로컬 기록: 사용자가 브라우저 사이트 데이터 또는 로컬 저장소를 삭제할 때까지
+- 개발자에게 발송된 최초 사용자 알림: 사용자 확인 및 지원 목적이 끝날 때까지 또는 삭제 요청 처리 시까지
+
+사용자는 개발자에게 이메일로 본인의 최초 사용자 알림 삭제를 요청할 수 있습니다.
+
+## 6. 이용자의 권리
+
+사용자는 개인정보의 열람, 정정, 삭제 및 처리 중지를 요청할 수 있습니다. 요청 시 본인 확인에 필요한 최소 정보가 요구될 수 있습니다.
+
+## 7. 문의처
+
+- 개발자: 박중희 (연세대학교 인지공학박사, 심리학과 겸임교수)
+- 이메일: [shoutjoy1@yonsei.ac.kr](mailto:shoutjoy1@yonsei.ac.kr)
+
+개인정보 처리방침이 변경되는 경우 README 또는 앱의 첫 실행 안내를 통해 알립니다.
+    </script>
+    <script src="js/privacyPolicy.js?v=20260801-1"></script>
+</body>
+
+</html>
