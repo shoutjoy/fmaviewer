@@ -1,3 +1,6 @@
 # Browser-side AI model binaries are downloaded/generated locally.
 /image_model/
 
+# Private Google Apps Script server source and deployment notes.
+# This folder is a local deployment copy and must not be published to GitHub.
+/gas/

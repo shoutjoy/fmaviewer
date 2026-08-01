@@ -3703,6 +3703,46 @@ html.first-use-locked body {
     accent-color: #6feadf;
 }
 
+.first-use-status {
+    margin: 12px 0 0;
+    padding: 11px 13px;
+    border: 1px solid rgba(114, 234, 255, .28);
+    border-radius: 10px;
+    color: #bcefff;
+    background: rgba(27, 108, 128, .18);
+    font-weight: 750;
+    line-height: 1.55;
+}
+
+.first-use-status[data-tone="pending"]::before {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-right: 8px;
+    border-radius: 50%;
+    background: #72e4f5;
+    box-shadow: 0 0 0 0 rgba(114, 228, 245, .45);
+    animation: first-use-pulse 1.5s infinite;
+    content: "";
+}
+
+.first-use-status[data-tone="success"] {
+    border-color: rgba(133, 241, 131, .35);
+    color: #c8ffc1;
+    background: rgba(49, 132, 54, .18);
+}
+
+.first-use-status[data-tone="error"] {
+    border-color: rgba(255, 95, 116, .38);
+    color: #ffb2be;
+    background: rgba(147, 28, 48, .18);
+}
+
+@keyframes first-use-pulse {
+    70% { box-shadow: 0 0 0 8px rgba(114, 228, 245, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(114, 228, 245, 0); }
+}
+
 .first-use-error {
     margin: 12px 0 0;
     padding: 10px 12px;
@@ -3739,6 +3779,26 @@ html.first-use-locked body {
 .first-use-footer button:hover {
     filter: brightness(1.06);
     transform: translateY(-1px);
+}
+
+.first-use-footer-actions {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 8px;
+}
+
+.first-use-footer .first-use-reset {
+    border-color: rgba(255, 255, 255, .17);
+    color: rgba(235, 244, 255, .78);
+    background: rgba(255, 255, 255, .06);
+    box-shadow: none;
+}
+
+.first-use-footer button:disabled {
+    cursor: wait;
+    filter: grayscale(.25);
+    opacity: .68;
+    transform: none;
 }
 
 html[data-theme="light"] .first-use-modal {
@@ -3792,6 +3852,18 @@ html[data-theme="light"] .first-use-mail-preview output {
     color: #314057;
 }
 
+html[data-theme="light"] .first-use-status {
+    color: #17647a;
+    border-color: rgba(31, 133, 159, .22);
+    background: rgba(48, 171, 201, .08);
+}
+
+html[data-theme="light"] .first-use-footer .first-use-reset {
+    border-color: rgba(48, 67, 91, .2);
+    color: #405169;
+    background: rgba(48, 67, 91, .06);
+}
+
 @media (max-width: 680px) {
     .first-use-modal {
         padding: 8px;
@@ -3816,6 +3888,11 @@ html[data-theme="light"] .first-use-mail-preview output {
 
     .first-use-footer button {
         width: 100%;
+    }
+
+    .first-use-footer-actions {
+        width: 100%;
+        flex-direction: column-reverse;
     }
 }
 
@@ -3861,6 +3938,12 @@ html[data-theme="light"] .first-use-mail-preview output {
     color: #061118 !important;
     border-color: #7fddff !important;
     background: linear-gradient(135deg, #7fddff, #a5ff8a) !important;
+}
+
+.bg-refine-action {
+    color: #d9f8ff !important;
+    border-color: rgba(127, 221, 255, .52) !important;
+    background: rgba(35, 126, 158, .2) !important;
 }
 
 .danger-subtle {
@@ -4527,6 +4610,18 @@ html[data-theme="light"] .first-use-mail-preview output {
     backdrop-filter: blur(12px);
 }
 
+.mask-editor-modal.story-external-child {
+    z-index: 10130;
+}
+
+.mask-editor-modal.editor-child-workspace {
+    z-index: 10180;
+}
+
+.mask-editor-modal.ai-jena-child-workspace {
+    z-index: 10250;
+}
+
 .mask-editor-modal.editor-child-workspace .mask-editor-dialog {
     border-color: rgba(113, 247, 208, .48);
     box-shadow: 0 30px 90px rgba(0, 0, 0, .72), 0 0 0 2px rgba(113, 247, 208, .08);
@@ -4627,13 +4722,15 @@ html[data-theme="light"] .first-use-mail-preview output {
     opacity: .38;
 }
 
-#btnMaskUndo:not(:disabled) {
+#btnMaskUndo:not(:disabled),
+#btnMaskRedo:not(:disabled) {
     color: #9eeaff;
     border-color: rgba(127, 221, 255, .42);
     background: rgba(45, 119, 150, .16);
 }
 
-#btnMaskUndo kbd {
+#btnMaskUndo kbd,
+#btnMaskRedo kbd {
     margin-left: 4px;
     padding: 2px 5px;
     border: 1px solid rgba(255, 255, 255, .18);
@@ -4643,7 +4740,8 @@ html[data-theme="light"] .first-use-mail-preview output {
     font: 700 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
-#btnMaskUndo > span {
+#btnMaskUndo > span,
+#btnMaskRedo > span {
     min-width: 15px;
     display: inline-grid;
     place-items: center;
@@ -7104,4 +7202,110 @@ html[data-theme="light"] .background-import-progress {
     background: rgba(249, 252, 255, .96);
     color: #172334;
     box-shadow: 0 14px 38px rgba(38, 52, 76, .18);
+}
+
+/* Leave-page guard. Browser close/reload uses the native beforeunload dialog. */
+.fma-exit-guard {
+    position: fixed;
+    inset: 0;
+    z-index: 40000;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    box-sizing: border-box;
+    background: rgba(3, 6, 11, .78);
+    backdrop-filter: blur(12px);
+}
+
+.fma-exit-guard[hidden] {
+    display: none;
+}
+
+.fma-exit-guard__dialog {
+    width: min(440px, calc(100vw - 36px));
+    padding: 28px;
+    box-sizing: border-box;
+    border: 1px solid rgba(255, 183, 92, .42);
+    border-radius: 20px;
+    color: #f4f8ff;
+    background: linear-gradient(150deg, #1d2430, #0c1119);
+    box-shadow: 0 30px 100px rgba(0, 0, 0, .7);
+    text-align: center;
+}
+
+.fma-exit-guard__icon {
+    width: 54px;
+    height: 54px;
+    margin: 0 auto 16px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(255, 183, 92, .48);
+    border-radius: 50%;
+    color: #ffd08c;
+    background: rgba(255, 183, 92, .1);
+    font-size: 28px;
+    font-weight: 900;
+}
+
+.fma-exit-guard__dialog h2 {
+    margin: 0 0 10px;
+    font-size: 23px;
+}
+
+.fma-exit-guard__dialog p {
+    margin: 0;
+    color: rgba(235, 243, 255, .68);
+    font-size: 13px;
+    line-height: 1.65;
+}
+
+.fma-exit-guard__actions {
+    margin-top: 24px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.fma-exit-guard__actions button {
+    min-height: 43px;
+    border: 1px solid rgba(255, 255, 255, .16);
+    border-radius: 11px;
+    color: #eef6ff;
+    background: #252d3a;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.fma-exit-guard__actions button:hover,
+.fma-exit-guard__actions button:focus-visible {
+    border-color: rgba(119, 245, 209, .65);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(119, 245, 209, .12);
+}
+
+.fma-exit-guard__actions .fma-exit-guard__leave {
+    border-color: rgba(255, 112, 130, .48);
+    color: #fff4f5;
+    background: linear-gradient(135deg, #b83d50, #df5d6e);
+}
+
+html[data-theme="light"] .fma-exit-guard {
+    background: rgba(225, 232, 241, .78);
+}
+
+html[data-theme="light"] .fma-exit-guard__dialog {
+    border-color: rgba(170, 91, 18, .3);
+    color: #172334;
+    background: #fbfdff;
+    box-shadow: 0 28px 80px rgba(38, 52, 76, .25);
+}
+
+html[data-theme="light"] .fma-exit-guard__dialog p {
+    color: rgba(23, 35, 52, .68);
+}
+
+html[data-theme="light"] .fma-exit-guard__actions button:not(.fma-exit-guard__leave) {
+    border-color: rgba(23, 35, 52, .18);
+    color: #172334;
+    background: #edf2f7;
 }

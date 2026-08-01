@@ -7,7 +7,7 @@
     <title>FMA Viewer Ultra</title>
 
     <!-- Project Styles -->
-    <link rel="stylesheet" href="css/styles.css?v=20260801-25">
+    <link rel="stylesheet" href="css/styles.css?v=20260801-29">
 
     <!-- JSZip CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -722,6 +722,8 @@
                 <div>
                     <button id="btnBgRemoveCancel" type="button">취소</button>
                     <button id="btnBgRemoveAddGallery" class="primary-action" type="button" disabled>갤러리에 추가</button>
+                    <button id="btnBgRemoveRefine" class="bg-refine-action" type="button"
+                        title="자동 배경 제거 없이 원본으로 정밀 편집을 시작합니다">정밀 편집</button>
                     <button id="btnRunBgRemove" class="primary-action" type="button">배경 제거 실행</button>
                 </div>
             </div>
@@ -931,12 +933,13 @@
             <div class="mask-editor-footer">
                 <div>
                     <button id="btnMaskUndo" type="button" disabled>↶ Undo <kbd>Ctrl+Z</kbd></button>
+                    <button id="btnMaskRedo" type="button" disabled>↷ Redo <kbd>Ctrl+Shift+Z</kbd></button>
                     <button id="btnMaskReset" class="danger-subtle" type="button">자동 결과로 초기화</button>
                     <span id="maskEditorStatus">직접 붓 · 지우기</span>
                 </div>
                 <div>
                     <button id="btnMaskSkip" type="button">보정 없이 사용</button>
-                        <button id="btnMaskApply" class="primary-action" type="button">갤러리에 추가</button>
+                    <button id="btnMaskApply" class="primary-action" type="button">갤러리에 추가</button>
                 </div>
             </div>
         </div>
@@ -1835,7 +1838,7 @@
         </div>
     </div>
 
-    <!-- First-use Gmail and privacy consent gate -->
+    <!-- First-use Gmail registration and privacy consent -->
     <div id="firstUseModal" class="first-use-modal" role="dialog" aria-modal="true"
         aria-labelledby="firstUseTitle" aria-describedby="firstUseDescription" style="display:none;">
         <div class="first-use-dialog">
@@ -1843,16 +1846,16 @@
                 <span class="first-use-mark" aria-hidden="true">FMA</span>
                 <div>
                     <h2 id="firstUseTitle">FMA Viewer 첫 사용자 확인</h2>
-                    <p id="firstUseDescription">개인정보 처리방침을 확인하고 Gmail 주소를 입력하면 메일 작성 화면이 열립니다.</p>
+                    <p id="firstUseDescription">Gmail을 등록하면 바로 시작하며, 관리자 설정 주기에 따라 Google Sheet 등록 상태를 확인합니다.</p>
                 </div>
             </header>
             <div class="first-use-body">
                 <div class="first-use-notice">
-                    <strong>Gmail 메일에 입력되는 정보</strong>
+                    <strong>사용 신청에 포함되는 정보</strong>
                     <ul>
                         <li>입력한 Gmail 주소</li>
                         <li>첫 사용 일자와 시각(시·분)</li>
-                        <li>FMA Viewer 사용 알림이라는 이용 정보</li>
+                        <li>마지막 등록 확인 시각과 사용 상태</li>
                     </ul>
                     <p>비밀번호, Gmail 인증 토큰, 이미지 또는 영상은 이 최초 사용자 알림에 포함되지 않습니다.</p>
                 </div>
@@ -1860,10 +1863,9 @@
                     <summary>개인정보 처리방침 주요 내용</summary>
                     <div>
                         <p>위 정보는 최초 사용자 확인, 운영 공지 및 문의 대응 목적으로 처리됩니다.</p>
-                        <p>동의 기록은 현재 브라우저에 보관됩니다. 버튼을 누르면 받는 사람이
-                            <strong>shoutjoy1@yonsei.ac.kr</strong>로 지정된 Gmail 작성 화면이 열립니다.</p>
-                        <p>앱은 메일을 자동 전송하지 않으며 전송 여부를 확인할 수도 없습니다. 내용을 확인한 뒤 Gmail에서
-                            사용자가 직접 보내야 합니다.</p>
+                        <p>Gmail과 마지막 확인 시각은 현재 브라우저에 보관됩니다. 신청 정보는 Google Apps Script로 전달되어
+                            Google Sheet의 Users 탭에 이메일당 한 행으로 저장되고 <strong>shoutjoy1@yonsei.ac.kr</strong>로 최초 신청 알림 메일이 발송됩니다.</p>
+                        <p>앱은 관리자가 설정한 횟수만큼 Sheet의 이메일을 확인합니다(기본 하루 1회). 이메일이 없으면 다시 신청해야 하며, 서버 연결이 일시적으로 실패하면 기존 등록 사용자는 계속 사용할 수 있습니다.</p>
                         <p>AI 기능을 직접 실행하는 경우 선택한 이미지와 프롬프트가 Google Gemini API로 전송될 수 있습니다.
                             로컬 편집 기능은 가능한 범위에서 브라우저 안에서 처리됩니다.</p>
                         <p>동의 철회 및 삭제 요청은 개발자 이메일로 접수할 수 있습니다.</p>
@@ -1877,18 +1879,21 @@
                     <small>Google 계정 비밀번호는 입력하지 마세요.</small>
                 </label>
                 <div class="first-use-mail-preview">
-                    <strong>Gmail에 입력될 메일 내용</strong>
+                    <strong>신청 알림 문구</strong>
                     <output id="firstUseMailPreview" aria-live="polite"></output>
                 </div>
                 <label class="first-use-consent-check">
                     <input id="firstUsePrivacyConsent" type="checkbox">
-                    <span>개인정보 처리방침을 읽었으며 Gmail 주소와 최초 사용 시각이 입력된 메일 작성 화면을 여는 것에 동의합니다.</span>
+                    <span>개인정보 처리방침을 읽었으며 Gmail 주소, 신청 시각, 마지막 확인 시각 및 사용 상태를 등록 시스템에서 처리하는 것에 동의합니다.</span>
                 </label>
+                <p id="firstUseStatus" class="first-use-status" role="status" aria-live="polite" hidden></p>
                 <p id="firstUseError" class="first-use-error" role="alert" hidden></p>
             </div>
             <footer class="first-use-footer">
-                <p>버튼을 누르면 Gmail 작성 화면이 열립니다. 내용을 확인하고 Gmail에서 직접 보내 주세요.</p>
-                <button id="btnFirstUseContinue" type="button">Gmail 열고 FMA Viewer 시작</button>
+                <p>Sheet 등록을 정기 동기화하며, Blocked 변경은 실행 중에도 빠르게 확인해 앱을 중지합니다.</p>
+                <div class="first-use-footer-actions">
+                    <button id="btnFirstUseContinue" type="button">사용 신청하고 시작</button>
+                </div>
             </footer>
         </div>
     </div>
@@ -1937,8 +1942,22 @@
         </div>
     </div>
 
+    <!-- Navigation exit confirmation -->
+    <div id="fmaExitGuardModal" class="fma-exit-guard" role="alertdialog" aria-modal="true"
+        aria-labelledby="fmaExitGuardTitle" aria-describedby="fmaExitGuardDescription" hidden>
+        <div class="fma-exit-guard__dialog">
+            <div class="fma-exit-guard__icon" aria-hidden="true">↩</div>
+            <h2 id="fmaExitGuardTitle">정말 나가시겠습니까?</h2>
+            <p id="fmaExitGuardDescription">현재 앱을 벗어나면 저장하지 않은 작업이 사라질 수 있습니다.</p>
+            <div class="fma-exit-guard__actions">
+                <button id="btnFmaExitStay" type="button">돌아오기</button>
+                <button id="btnFmaExitLeave" class="fma-exit-guard__leave" type="button">나가기</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Project Scripts (Modularized) -->
-    <script src="js/globals.js?v=20260801-5"></script>
+    <script src="js/globals.js?v=20260801-6"></script>
     <script src="js/database.js?v=20260731-51"></script>
     <script src="js/gallery.js?v=20260801-1"></script>
     <script src="js/imageMetadata.js?v=20260801-1"></script>
@@ -1948,12 +1967,14 @@
     <script src="js/imageUpscale.js?v=20260801-2"></script>
     <script src="js/aiJena.js?v=20260801-3"></script>
     <script src="js/imageEditor.js?v=20260801-59"></script>
-    <script src="js/backgroundMaskEditor.js?v=20260731-44"></script>
-    <script src="js/backgroundRemove.js?v=20260801-4"></script>
-    <script src="js/fileHandlers.js?v=20260731-47"></script>
+    <script src="js/backgroundMaskEditor.js?v=20260801-47"></script>
+    <script src="js/backgroundRemove.js?v=20260801-8"></script>
+    <script src="js/fileHandlers.js?v=20260801-48"></script>
     <script src="js/externalApps.js?v=20260801-8"></script>
     <script src="js/interaction.js?v=20260801-1"></script>
-    <script src="js/firstRunConsent.js?v=20260801-4"></script>
+    <script src="js/adminConfig.js?v=20260801-3"></script>
+    <script src="js/firstRunConsent.js?v=20260802-1"></script>
+    <script src="js/navigationGuard.js?v=20260801-1"></script>
     <script src="js/app.js?v=20260801-1"></script>
 </body>
 

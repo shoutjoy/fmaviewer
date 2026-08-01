@@ -29,16 +29,25 @@ var maskEditorState = {
     hasSelection: false,
     originalCanvas: null,
     initialCanvas: null,
+    initialResultLabel: "자동 결과",
     undoHistory: [],
+    redoHistory: [],
     undoLimit: 8,
     textLayers: [],
     selectedTextLayerId: null,
     textBounds: new Map(),
     textInteraction: "",
     textTransformStart: null,
+    workspaceClass: "",
     onApply: null,
     onCancel: null
 };
+
+const MASK_EDITOR_WORKSPACE_CLASSES = [
+    "story-external-child",
+    "editor-child-workspace",
+    "ai-jena-child-workspace"
+];
 
 function initBackgroundMaskEditor() {
     if (!dom.bgMaskEditorModal) return;
@@ -74,6 +83,7 @@ function initBackgroundMaskEditor() {
     dom.btnLoadMaskPolygon.onclick = loadSelectedMaskPolygonPreset;
     dom.btnDeleteMaskPolygon.onclick = deleteSelectedMaskPolygonPreset;
     dom.btnMaskUndo.onclick = undoMaskEditor;
+    dom.btnMaskRedo.onclick = redoMaskEditor;
     dom.btnMaskReset.onclick = resetMaskEditorResult;
     dom.btnMaskEditorFit.onclick = fitMaskEditorView;
     dom.btnMaskEditorFullscreen.onclick = toggleMaskEditorFullscreen;
@@ -120,7 +130,8 @@ function initBackgroundMaskEditor() {
         const target = event.target;
         if (target?.matches?.("input, textarea, select") || target?.isContentEditable) return;
         event.preventDefault();
-        undoMaskEditor();
+        if (event.shiftKey) redoMaskEditor();
+        else undoMaskEditor();
     });
     refreshMaskPolygonPresetSelect();
 }
@@ -136,14 +147,18 @@ async function openBackgroundMaskEditor(options) {
     maskEditorState.height = height;
     maskEditorState.onApply = options.onApply || null;
     maskEditorState.onCancel = options.onCancel || null;
+    setMaskEditorWorkspaceClass(options.workspaceClass);
     dom.btnMaskApply.innerText = options.applyLabel || "갤러리에 추가";
     dom.btnMaskSkip.innerText = options.skipLabel || "보정 없이 사용";
+    maskEditorState.initialResultLabel = options.initialResultLabel || "자동 결과";
+    dom.btnMaskReset.innerText = `${maskEditorState.initialResultLabel}로 초기화`;
     maskEditorState.polygonPoints = [];
     maskEditorState.polygonHoverPoint = null;
     maskEditorState.polygonNearStart = false;
     maskEditorState.lastPolygonPoints = [];
     maskEditorState.hasSelection = false;
     maskEditorState.undoHistory = [];
+    maskEditorState.redoHistory = [];
     maskEditorState.textLayers = [];
     maskEditorState.selectedTextLayerId = null;
     maskEditorState.textBounds.clear();
@@ -192,14 +207,27 @@ function hideBackgroundMaskEditor() {
     maskEditorState.drawing = false;
     maskEditorState.panning = false;
     maskEditorState.undoHistory = [];
+    maskEditorState.redoHistory = [];
     updateMaskUndoButton();
     dom.bgMaskEditorModal.style.display = "none";
     dom.btnMaskApply.innerText = "갤러리에 추가";
     dom.btnMaskSkip.innerText = "보정 없이 사용";
+    dom.btnMaskReset.innerText = "자동 결과로 초기화";
     dom.maskEditorCursor.style.display = "none";
+    setMaskEditorWorkspaceClass("");
     if (document.fullscreenElement === dom.bgMaskEditorDialog) {
         document.exitFullscreen().catch(() => {});
     }
+}
+
+function setMaskEditorWorkspaceClass(workspaceClass) {
+    const nextClass = MASK_EDITOR_WORKSPACE_CLASSES.includes(workspaceClass)
+        ? workspaceClass
+        : "";
+    MASK_EDITOR_WORKSPACE_CLASSES.forEach(className => {
+        dom.bgMaskEditorModal.classList.toggle(className, className === nextClass);
+    });
+    maskEditorState.workspaceClass = nextClass;
 }
 
 function cancelBackgroundMaskEditor() {
@@ -260,7 +288,9 @@ function setMaskEditorAction(action, preserveSelection) {
     }
 
     document.querySelectorAll(".mask-action").forEach(button => {
-        button.classList.toggle("active", button.dataset.maskAction === maskEditorState.action);
+        const active = button.dataset.maskAction === maskEditorState.action;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", String(active));
     });
     dom.maskActionHelp.innerText = maskEditorState.action === "erase"
         ? "남아 있는 배경을 투명하게 지웁니다."
@@ -533,13 +563,7 @@ function applyDirectMaskBrush(centerX, centerY) {
                 current.data[index + 3] =
                     Math.round(current.data[index + 3] * (1 - factor));
             } else {
-                current.data[index] = blendMaskValue(current.data[index], original.data[index], factor);
-                current.data[index + 1] =
-                    blendMaskValue(current.data[index + 1], original.data[index + 1], factor);
-                current.data[index + 2] =
-                    blendMaskValue(current.data[index + 2], original.data[index + 2], factor);
-                current.data[index + 3] =
-                    blendMaskValue(current.data[index + 3], original.data[index + 3], factor);
+                restoreMaskPixel(current.data, original.data, index, factor);
             }
         }
     }
@@ -895,13 +919,7 @@ function applyMaskSelection() {
             current.data[index + 3] =
                 Math.round(current.data[index + 3] * (1 - factor));
         } else {
-            current.data[index] = blendMaskValue(current.data[index], original.data[index], factor);
-            current.data[index + 1] =
-                blendMaskValue(current.data[index + 1], original.data[index + 1], factor);
-            current.data[index + 2] =
-                blendMaskValue(current.data[index + 2], original.data[index + 2], factor);
-            current.data[index + 3] =
-                blendMaskValue(current.data[index + 3], original.data[index + 3], factor);
+            restoreMaskPixel(current.data, original.data, index, factor);
         }
     }
 
@@ -922,25 +940,17 @@ function resetMaskEditorResult() {
     syncMaskTextInspector();
     renderMaskTextCanvas();
     clearMaskSelection();
-    updateMaskEditorStatus("자동 배경 제거 결과로 초기화했습니다.");
+    updateMaskEditorStatus(`${maskEditorState.initialResultLabel}로 초기화했습니다.`);
 }
 
 function pushMaskUndoSnapshot(label) {
     if (!maskEditorState.open || !maskEditorState.width || !maskEditorState.height) return;
     try {
-        const context =
-            dom.maskEditorCanvas.getContext("2d", { willReadFrequently: true });
-        const snapshot =
-            context.getImageData(0, 0, maskEditorState.width, maskEditorState.height);
-        maskEditorState.undoHistory.push({
-            imageData: snapshot,
-            textLayers: cloneMaskTextLayers(),
-            selectedTextLayerId: maskEditorState.selectedTextLayerId,
-            label: label || "편집"
-        });
-        while (maskEditorState.undoHistory.length > maskEditorState.undoLimit) {
-            maskEditorState.undoHistory.shift();
-        }
+        pushMaskHistoryEntry(
+            maskEditorState.undoHistory,
+            captureMaskEditorSnapshot(label)
+        );
+        maskEditorState.redoHistory = [];
         updateMaskUndoButton();
     } catch (error) {
         console.warn("Undo snapshot unavailable:", error);
@@ -974,20 +984,63 @@ function undoMaskEditor() {
         return;
     }
 
-    if (snapshot.imageData) {
-        const context = dom.maskEditorCanvas.getContext("2d");
-        context.putImageData(snapshot.imageData, 0, 0);
-    }
-    if (snapshot.textLayers) {
-        maskEditorState.textLayers = snapshot.textLayers.map(normalizeTextLayer);
-        maskEditorState.selectedTextLayerId = snapshot.selectedTextLayerId || null;
-        renderMaskTextLayerList();
-        syncMaskTextInspector();
-        renderMaskTextCanvas();
-    }
-    clearMaskSelection();
+    pushMaskHistoryEntry(
+        maskEditorState.redoHistory,
+        captureMaskEditorSnapshot(snapshot.label)
+    );
+    restoreMaskEditorSnapshot(snapshot);
     updateMaskUndoButton();
     updateMaskEditorStatus(`${snapshot.label} 작업을 되돌렸습니다.`);
+}
+
+function redoMaskEditor() {
+    if (!maskEditorState.open) return;
+    maskEditorState.drawing = false;
+    maskEditorState.lastPoint = null;
+
+    const snapshot = maskEditorState.redoHistory.pop();
+    if (!snapshot) {
+        updateMaskEditorStatus("다시 실행할 편집 기록이 없습니다.");
+        updateMaskUndoButton();
+        return;
+    }
+
+    pushMaskHistoryEntry(
+        maskEditorState.undoHistory,
+        captureMaskEditorSnapshot(snapshot.label)
+    );
+    restoreMaskEditorSnapshot(snapshot);
+    updateMaskUndoButton();
+    updateMaskEditorStatus(`${snapshot.label} 작업을 다시 실행했습니다.`);
+}
+
+function captureMaskEditorSnapshot(label) {
+    const context = dom.maskEditorCanvas.getContext("2d", { willReadFrequently: true });
+    return {
+        imageData: context.getImageData(
+            0, 0, maskEditorState.width, maskEditorState.height
+        ),
+        textLayers: cloneMaskTextLayers(),
+        selectedTextLayerId: maskEditorState.selectedTextLayerId,
+        label: label || "편집"
+    };
+}
+
+function restoreMaskEditorSnapshot(snapshot) {
+    if (snapshot.imageData) {
+        dom.maskEditorCanvas.getContext("2d").putImageData(snapshot.imageData, 0, 0);
+    }
+    maskEditorState.textLayers = (snapshot.textLayers || []).map(normalizeTextLayer);
+    maskEditorState.selectedTextLayerId = snapshot.selectedTextLayerId || null;
+    renderMaskTextLayerList();
+    syncMaskTextInspector();
+    renderMaskTextCanvas();
+    clearMaskSelection();
+}
+
+function pushMaskHistoryEntry(history, snapshot) {
+    history.push(snapshot);
+    while (history.length > maskEditorState.undoLimit) history.shift();
 }
 
 function updateMaskUndoButton() {
@@ -998,6 +1051,10 @@ function updateMaskUndoButton() {
     dom.btnMaskUndo.disabled = !maskEditorState.open || (!pendingSelection && count === 0);
     dom.btnMaskUndo.innerHTML =
         `↶ Undo <kbd>Ctrl+Z</kbd>${count > 0 ? ` <span>${count}</span>` : ""}`;
+    const redoCount = maskEditorState.redoHistory.length;
+    dom.btnMaskRedo.disabled = !maskEditorState.open || redoCount === 0;
+    dom.btnMaskRedo.innerHTML =
+        `↷ Redo <kbd>Ctrl+Shift+Z</kbd>${redoCount > 0 ? ` <span>${redoCount}</span>` : ""}`;
 }
 
 function updateMaskEditorCursor(event) {
@@ -1032,15 +1089,7 @@ function cloneMaskTextLayers() {
 }
 
 function pushMaskTextUndoSnapshot(label) {
-    maskEditorState.undoHistory.push({
-        textLayers: cloneMaskTextLayers(),
-        selectedTextLayerId: maskEditorState.selectedTextLayerId,
-        label: label || "텍스트 편집"
-    });
-    while (maskEditorState.undoHistory.length > maskEditorState.undoLimit) {
-        maskEditorState.undoHistory.shift();
-    }
-    updateMaskUndoButton();
+    pushMaskUndoSnapshot(label || "텍스트 편집");
 }
 
 function addMaskTextLayer() {
@@ -1493,6 +1542,16 @@ async function toggleMaskEditorFullscreen() {
 
 function blendMaskValue(currentValue, originalValue, factor) {
     return Math.round(currentValue + (originalValue - currentValue) * factor);
+}
+
+function restoreMaskPixel(current, original, index, factor) {
+    const currentAlpha = current[index + 3];
+    const originalAlpha = original[index + 3];
+    if (originalAlpha < currentAlpha) return;
+    current[index] = blendMaskValue(current[index], original[index], factor);
+    current[index + 1] = blendMaskValue(current[index + 1], original[index + 1], factor);
+    current[index + 2] = blendMaskValue(current[index + 2], original[index + 2], factor);
+    current[index + 3] = blendMaskValue(currentAlpha, originalAlpha, factor);
 }
 
 function maskClamp(value, minimum, maximum) {

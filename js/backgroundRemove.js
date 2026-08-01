@@ -48,6 +48,8 @@ var bgRemoveState = {
     boundaryStrength: 50,
     customBackgroundEnabled: false,
     customBackgroundColor: "#3197a3",
+    directRefinement: false,
+    restoreSourceSrc: null,
     externalReturn: null
 };
 
@@ -57,6 +59,7 @@ function initBackgroundRemoveFeature() {
     dom.btnBgRemoveClose.onclick = closeBackgroundRemoveEditor;
     dom.btnBgRemoveCancel.onclick = closeBackgroundRemoveEditor;
     dom.btnBgRemoveAddGallery.onclick = addBackgroundRemoveResultToGallery;
+    dom.btnBgRemoveRefine.onclick = openDirectBackgroundMaskEditor;
     dom.btnRunBgRemove.onclick = runBackgroundRemoval;
     dom.btnBgEngineWebgl.onclick = () => setBackgroundRemoveLocalEngine("webgl");
     dom.btnBgEngineOnnx.onclick = () => setBackgroundRemoveLocalEngine("onnx");
@@ -113,6 +116,8 @@ function openBackgroundRemoveEditor(index, mode) {
     bgRemoveState.localEngine = readBackgroundRemoveLocalEngine();
     bgRemoveState.resultSrc = null;
     bgRemoveState.transparentResultSrc = null;
+    bgRemoveState.directRefinement = false;
+    bgRemoveState.restoreSourceSrc = resolveBackgroundRestoreSourceSrc(item);
     bgRemoveState.processing = false;
     readBackgroundBoundarySetting();
     readCustomBackgroundSettings();
@@ -144,6 +149,72 @@ function openBackgroundRemoveEditor(index, mode) {
     setBgRemoveProgress(0, "실행 준비");
     dom.bgRemoveModal.style.display = "flex";
     dom.btnRunBgRemove.focus();
+}
+
+async function openDirectBackgroundMaskEditor() {
+    if (bgRemoveState.processing) return;
+    const item = images[bgRemoveState.imageIndex];
+    if (!item?.src) return;
+
+    bgRemoveState.directRefinement = true;
+    closeBgRemoveSaveChoice();
+    dom.btnBgRemoveRefine.disabled = true;
+    setBgRemoveProgress(0, "정밀 편집기 여는 중");
+    try {
+        await openBackgroundMaskEditor({
+            originalSrc: bgRemoveState.restoreSourceSrc || item.src,
+            resultSrc: item.src,
+            workspaceClass: getBackgroundMaskEditorWorkspaceClass(),
+            applyLabel: "정밀 편집 결과 사용",
+            skipLabel: "원본 그대로 사용",
+            initialResultLabel: "원본",
+            onApply: resultSrc => acceptBackgroundMaskResult(resultSrc),
+            onCancel: () => {
+                bgRemoveState.directRefinement = false;
+                setBgRemoveProgress(0, "실행 준비");
+                dom.btnBgRemoveRefine.focus();
+            }
+        });
+        updateMaskEditorStatus("원본에서 정밀 편집을 시작했습니다 · 지우기 또는 복구를 선택하세요.");
+    } catch (error) {
+        bgRemoveState.directRefinement = false;
+        setBgRemoveProgress(0, "실행 준비");
+        console.error("Direct background refinement error:", error);
+        alert("정밀 편집기를 열지 못했습니다: " + getBackgroundRemoveErrorMessage(error));
+    } finally {
+        if (!bgRemoveState.processing) dom.btnBgRemoveRefine.disabled = false;
+    }
+}
+
+function resolveBackgroundRestoreSourceSrc(item) {
+    if (!item?.src) return "";
+    if (item.backgroundRemoveSourceSrc) return item.backgroundRemoveSourceSrc;
+
+    const visitedPaths = new Set();
+    let candidate = item;
+    while (candidate?.backgroundRemoveSourcePath &&
+        !visitedPaths.has(candidate.backgroundRemoveSourcePath)) {
+        const sourcePath = candidate.backgroundRemoveSourcePath;
+        visitedPaths.add(sourcePath);
+        const parent = images.find(entry => entry !== candidate && entry.path === sourcePath);
+        if (!parent) break;
+        if (parent.backgroundRemoveSourceSrc) return parent.backgroundRemoveSourceSrc;
+        candidate = parent;
+    }
+
+    if (candidate !== item && candidate?.src) return candidate.src;
+    return item.imageEditSourceSrc || item.src;
+}
+
+function getBackgroundMaskEditorWorkspaceClass() {
+    const workspaceClasses = [
+        "ai-jena-child-workspace",
+        "editor-child-workspace",
+        "story-external-child"
+    ];
+    return workspaceClasses.find(className =>
+        dom.bgRemoveModal.classList.contains(className)
+    ) || "";
 }
 
 function openBackgroundRemoveEditorForExternal(src, onApply, options = {}) {
@@ -260,6 +331,8 @@ function closeBackgroundRemoveEditor() {
     bgRemoveState.imageIndex = -1;
     bgRemoveState.resultSrc = null;
     bgRemoveState.transparentResultSrc = null;
+    bgRemoveState.directRefinement = false;
+    bgRemoveState.restoreSourceSrc = null;
 }
 
 function readBackgroundRemoveLocalEngine() {
@@ -923,6 +996,7 @@ async function prepareBackgroundRemoveModel() {
     bgRemoveState.processing = true;
     dom.btnPrepareBgModel.disabled = true;
     dom.btnRunBgRemove.disabled = true;
+    dom.btnBgRemoveRefine.disabled = true;
     dom.btnPrepareBgModel.innerText = "모델 준비 중...";
 
     try {
@@ -956,6 +1030,7 @@ async function prepareBackgroundRemoveModel() {
     } finally {
         bgRemoveState.processing = false;
         dom.btnRunBgRemove.disabled = false;
+        dom.btnBgRemoveRefine.disabled = false;
     }
 }
 
@@ -973,8 +1048,10 @@ async function runBackgroundRemoval() {
     bgRemoveState.transparentResultSrc = null;
     setBackgroundRemoveGalleryButtonVisible(false);
     bgRemoveState.processing = true;
+    bgRemoveState.directRefinement = false;
     bgRemoveState.abortController = new AbortController();
     dom.btnRunBgRemove.disabled = false;
+    dom.btnBgRemoveRefine.disabled = true;
     const originalButtonText = dom.btnRunBgRemove.innerText;
     dom.btnRunBgRemove.innerText = bgRemoveState.mode === "ai"
         ? "■ AI 처리 정지"
@@ -1071,8 +1148,9 @@ async function runBackgroundRemoval() {
         setBgRemoveProgress(100, "배경 제거 완료");
         const automaticResult = bgRemoveState.resultSrc;
         await openBackgroundMaskEditor({
-            originalSrc: item.src,
+            originalSrc: bgRemoveState.restoreSourceSrc || item.src,
             resultSrc: automaticResult,
+            workspaceClass: getBackgroundMaskEditorWorkspaceClass(),
             onApply: resultSrc => acceptBackgroundMaskResult(resultSrc),
             onCancel: () => acceptBackgroundMaskResult(automaticResult)
         });
@@ -1088,6 +1166,7 @@ async function runBackgroundRemoval() {
         bgRemoveState.processing = false;
         bgRemoveState.abortController = null;
         dom.btnRunBgRemove.disabled = false;
+        dom.btnBgRemoveRefine.disabled = false;
         dom.btnRunBgRemove.innerText = originalButtonText;
     }
 }
@@ -1218,7 +1297,9 @@ function saveBackgroundRemoveResult(saveMode) {
         return;
     }
 
-    const method = bgRemoveState.mode === "ai"
+    const method = bgRemoveState.directRefinement
+        ? "manual-mask"
+        : bgRemoveState.mode === "ai"
         ? "ai"
         : bgRemoveState.localEngine === "onnx"
             ? "rembg-web"
@@ -1228,6 +1309,8 @@ function saveBackgroundRemoveResult(saveMode) {
     if (saveMode === "replace") {
         const editTime = Date.now();
         sourceItem.createdAt = sourceItem.createdAt || sourceItem.date || editTime;
+        sourceItem.backgroundRemoveSourceSrc =
+            sourceItem.backgroundRemoveSourceSrc || bgRemoveState.restoreSourceSrc || sourceItem.src;
         sourceItem.src = bgRemoveState.resultSrc;
         sourceItem.size = estimateDataUrlBytes(bgRemoveState.resultSrc);
         sourceItem.modifiedAt = editTime;
@@ -1251,11 +1334,14 @@ function saveBackgroundRemoveResult(saveMode) {
             sourceItem,
             bgRemoveState.resultWidth,
             bgRemoveState.resultHeight,
-            method === "ai" ? "AI BG Remove" : "BG Remove"
+            method === "manual-mask" ? "Manual BG Edit"
+                : method === "ai" ? "AI BG Remove" : "BG Remove"
         );
     } else {
         const sourcePath = sourceItem.path;
-        const suffix = method === "ai"
+        const suffix = method === "manual-mask"
+            ? "manual_bg_edit"
+            : method === "ai"
             ? "ai_bg_remove"
             : method === "mediapipe-webgl"
                 ? "webgl_bg_remove"
@@ -1267,13 +1353,15 @@ function saveBackgroundRemoveResult(saveMode) {
         const backgroundRemovedItem = {
             src: bgRemoveState.resultSrc,
             path: `${sourcePath}.${suffix}_${count}`,
-            group: method === "ai" ? "ai-bg-removed" : "background-removed",
+            group: method === "manual-mask" ? "manual-bg-edited"
+                : method === "ai" ? "ai-bg-removed" : "background-removed",
             date: Date.now(),
             createdAt: Date.now(),
             size: estimateDataUrlBytes(bgRemoveState.resultSrc),
             mimeType: "image/png",
             isFav: false,
             backgroundRemoveSourcePath: sourcePath,
+            backgroundRemoveSourceSrc: bgRemoveState.restoreSourceSrc || sourceItem.src,
             backgroundRemoveMethod: method,
             backgroundRemoveInfo: {
                 method: method,
@@ -1292,7 +1380,8 @@ function saveBackgroundRemoveResult(saveMode) {
             sourceItem,
             bgRemoveState.resultWidth,
             bgRemoveState.resultHeight,
-            method === "ai" ? "AI BG Remove" : "BG Remove"
+            method === "manual-mask" ? "Manual BG Edit"
+                : method === "ai" ? "AI BG Remove" : "BG Remove"
         );
         images.splice(sourceIndex + 1, 0, backgroundRemovedItem);
         resultIndex = sourceIndex + 1;
