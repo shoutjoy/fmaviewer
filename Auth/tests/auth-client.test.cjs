@@ -16,6 +16,7 @@ const registrationIds = [
   'btnFirstUseContinue'
 ];
 const elements = new Map(registrationIds.map((id) => [id, { id, disabled: false, textContent: '' }]));
+elements.set('authLoginEmail', { id: 'authLoginEmail', disabled: false, textContent: '', value: '' });
 const noOp = () => {};
 let confirmMessage = '';
 const documentMock = {
@@ -75,6 +76,19 @@ assert.deepEqual(
   { x: 8, y: 550 },
   '플로팅 로그아웃 버튼은 화면 밖으로 이동하면 안 됩니다.'
 );
+
+assert.deepEqual(
+  { ...context.getDefaultLogoutButtonPosition(42, 42, 613, 654) },
+  { x: 563, y: 68 },
+  '로그아웃 버튼의 초기 위치는 우측 상단이어야 합니다.'
+);
+
+assert.equal(context.normalizeGmailAddress(' ShoutJoy97 '), 'shoutjoy97@gmail.com');
+assert.equal(context.normalizeGmailAddress('User.Name@gmail.com'), 'user.name@gmail.com');
+assert.equal(context.normalizeGmailAddress('user@example.com'), 'user@example.com');
+elements.get('authLoginEmail').value = 'shoutjoy97';
+assert.equal(context.completeGmailInput(elements.get('authLoginEmail')), 'shoutjoy97@gmail.com');
+assert.equal(elements.get('authLoginEmail').value, 'shoutjoy97@gmail.com');
 
 context.handleLogoutButtonClick({ preventDefault: noOp, stopPropagation: noOp });
 assert.equal(confirmMessage, '로그아웃하시겠습니까?');

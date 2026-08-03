@@ -23,6 +23,8 @@ const FMA_PASSWORD_ITERATIONS = Number(FMA_AUTH_SETTINGS.passwordIterations) || 
 const FMA_PASSWORD_LIMITS = Object.freeze({ min: 10, max: 128 });
 const FMA_APPLICATION_LIMITS = Object.freeze({ name: 80, organization: 120, purpose: 500 });
 const FMA_LOGOUT_BUTTON_MARGIN = 8;
+const FMA_LOGOUT_BUTTON_DEFAULT_TOP = 68;
+const FMA_LOGOUT_BUTTON_DEFAULT_RIGHT = 8;
 const FMA_LOGOUT_DRAG_THRESHOLD = 5;
 
 let fmaPendingMemoryRecord = null;
@@ -69,6 +71,18 @@ function getBlockedWatchMs() {
 
 function isValidGmailAddress(value) {
     return /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@gmail\.com$/i.test(String(value || "").trim());
+}
+
+function normalizeGmailAddress(value) {
+    const email = String(value || "").trim().toLowerCase();
+    if (email && !email.includes("@")) return `${email}@gmail.com`;
+    return email;
+}
+
+function completeGmailInput(input) {
+    const email = normalizeGmailAddress(input?.value);
+    if (input && input.value !== email) input.value = email;
+    return email;
 }
 
 function normalizeApplicationLine(value) {
@@ -200,9 +214,32 @@ function positionLogoutButton(x, y, persist = false) {
     return position;
 }
 
+function getDefaultLogoutButtonPosition(
+    width = 42,
+    height = 42,
+    viewportWidth = window.innerWidth,
+    viewportHeight = window.innerHeight
+) {
+    return clampLogoutButtonCoordinates(
+        Number(viewportWidth) - Number(width) - FMA_LOGOUT_BUTTON_DEFAULT_RIGHT,
+        FMA_LOGOUT_BUTTON_DEFAULT_TOP,
+        width,
+        height,
+        viewportWidth,
+        viewportHeight
+    );
+}
+
 function restoreLogoutButtonPosition() {
     const position = readLogoutButtonPosition();
-    if (position) positionLogoutButton(position.x, position.y);
+    if (position) {
+        positionLogoutButton(position.x, position.y);
+        return;
+    }
+    const button = document.getElementById("authLogoutButton");
+    if (!button) return;
+    const initial = getDefaultLogoutButtonPosition(button.offsetWidth || 42, button.offsetHeight || 42);
+    positionLogoutButton(initial.x, initial.y);
 }
 
 function keepLogoutButtonInViewport() {
@@ -361,9 +398,12 @@ function showLoginView(options = {}) {
     focusTarget?.focus();
 }
 
-function readApplicationForm() {
+function readApplicationForm(completeEmail = false) {
+    const emailInput = document.getElementById("firstUseGmail");
     return {
-        email: String(document.getElementById("firstUseGmail")?.value || "").trim().toLowerCase(),
+        email: completeEmail
+            ? completeGmailInput(emailInput)
+            : String(emailInput?.value || "").trim().toLowerCase(),
         name: normalizeApplicationLine(document.getElementById("firstUseName")?.value),
         organization: normalizeApplicationLine(document.getElementById("firstUseOrganization")?.value),
         purpose: normalizeApplicationPurpose(document.getElementById("firstUsePurpose")?.value)
@@ -566,7 +606,7 @@ async function performLogin() {
     const emailInput = document.getElementById("authLoginEmail");
     const passwordInput = document.getElementById("authLoginPassword");
     const rememberInput = document.getElementById("authRememberEmail");
-    const email = String(emailInput?.value || "").trim().toLowerCase();
+    const email = completeGmailInput(emailInput);
     const password = String(passwordInput?.value || "");
 
     showLoginError("");
@@ -622,7 +662,7 @@ async function performLogin() {
 }
 
 function validateRegistrationForm() {
-    const application = readApplicationForm();
+    const application = readApplicationForm(true);
     const passwordInput = document.getElementById("firstUsePassword");
     const passwordConfirmInput = document.getElementById("firstUsePasswordConfirm");
     const password = String(passwordInput?.value || "");
@@ -906,7 +946,7 @@ async function logoutAuthenticatedUser() {
 }
 
 function openRegistrationFromLogin() {
-    const loginEmail = String(document.getElementById("authLoginEmail")?.value || "").trim().toLowerCase();
+    const loginEmail = completeGmailInput(document.getElementById("authLoginEmail"));
     const pending = readPendingRegistration();
     showRegistrationView({
         application: pending || { email: loginEmail },
@@ -919,7 +959,7 @@ function openRegistrationFromLogin() {
 }
 
 function returnToLogin() {
-    const registrationEmail = String(document.getElementById("firstUseGmail")?.value || "").trim().toLowerCase();
+    const registrationEmail = completeGmailInput(document.getElementById("firstUseGmail"));
     const passwordInput = document.getElementById("firstUsePassword");
     const passwordConfirmInput = document.getElementById("firstUsePasswordConfirm");
     if (passwordInput) passwordInput.value = "";
@@ -968,6 +1008,12 @@ function initFMAAuthentication() {
     });
     ["firstUseGmail", "firstUseName", "firstUseOrganization", "firstUsePurpose"].forEach(id => {
         document.getElementById(id)?.addEventListener("input", () => updateApplicationPreview());
+    });
+    ["authLoginEmail", "firstUseGmail"].forEach(id => {
+        document.getElementById(id)?.addEventListener("blur", event => {
+            completeGmailInput(event.currentTarget);
+            if (id === "firstUseGmail") updateApplicationPreview();
+        });
     });
 
     removeLegacyAuthRecords();

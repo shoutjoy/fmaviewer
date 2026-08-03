@@ -138,7 +138,7 @@ function restoreExternalAppDockPosition() {
         const width = dom.externalAppButtons.offsetWidth || 54;
         const height = dom.externalAppButtons.offsetHeight || 300;
         dom.externalAppButtons.style.left = `${Math.max(8, Math.min(window.innerWidth - width - 12, saved.left))}px`;
-        dom.externalAppButtons.style.top = `${Math.max(58, Math.min(window.innerHeight - height - 96, saved.top))}px`;
+        dom.externalAppButtons.style.top = `${Math.max(58, Math.min(window.innerHeight - height - 8, saved.top))}px`;
         dom.externalAppButtons.style.right = "auto";
         dom.externalAppButtons.style.bottom = "auto";
     } catch (_) {}
@@ -148,8 +148,8 @@ function resetExternalAppDockPosition() {
     if (!dom.externalAppButtons) return;
     dom.externalAppButtons.style.left = "auto";
     dom.externalAppButtons.style.top = "auto";
-    dom.externalAppButtons.style.right = window.innerWidth <= 900 ? "6px" : "12px";
-    dom.externalAppButtons.style.bottom = window.innerWidth <= 900 ? "72px" : "96px";
+    dom.externalAppButtons.style.right = "8px";
+    dom.externalAppButtons.style.bottom = "8px";
 }
 
 function keepExternalAppDockInViewport() {

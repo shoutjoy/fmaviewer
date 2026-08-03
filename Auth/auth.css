@@ -425,8 +425,9 @@ html.first-use-locked body {
 .auth-logout-button {
     position: fixed;
     z-index: 29000;
-    right: 14px;
-    bottom: 72px;
+    top: 68px;
+    right: 8px;
+    bottom: auto;
     width: 42px;
     height: 42px;
     padding: 0;
@@ -600,6 +601,7 @@ html[data-theme="light"] .auth-logout-button {
 
     .auth-logout-button {
         right: 8px;
-        bottom: 64px;
+        top: 68px;
+        bottom: auto;
     }
 }

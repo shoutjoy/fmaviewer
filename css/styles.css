@@ -156,8 +156,8 @@ header button.active {
     position: fixed;
     z-index: 120;
     top: auto;
-    right: 12px;
-    bottom: 96px;
+    right: 8px;
+    bottom: 8px;
     width: 132px;
     max-height: calc(100vh - 96px);
     flex-direction: column;
@@ -315,7 +315,7 @@ html[data-theme="light"] .external-app-buttons {
 
 @media (max-width: 900px) {
     .external-app-buttons {
-        right: 6px;
+        right: 8px;
         width: 104px;
     }
 

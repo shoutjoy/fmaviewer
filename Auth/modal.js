@@ -40,7 +40,8 @@
                             <label class="first-use-field" for="authLoginEmail">
                                 <span>사용자 Gmail</span>
                                 <input id="authLoginEmail" type="email" inputmode="email" autocomplete="username"
-                                    placeholder="example@gmail.com" spellcheck="false" required>
+                                    placeholder="Gmail 아이디 또는 example@gmail.com" spellcheck="false" required>
+                                <small><strong>@gmail.com</strong>은 생략해도 자동으로 입력됩니다.</small>
                             </label>
                             <label class="first-use-field" for="authLoginPassword">
                                 <span>비밀번호</span>
@@ -91,7 +92,8 @@
                             <label class="first-use-field first-use-field-wide" for="firstUseGmail">
                                 <span>사용자 Gmail</span>
                                 <input id="firstUseGmail" type="email" inputmode="email" autocomplete="username"
-                                    placeholder="example@gmail.com" spellcheck="false" required>
+                                    placeholder="Gmail 아이디 또는 example@gmail.com" spellcheck="false" required>
+                                <small><strong>@gmail.com</strong>은 생략해도 자동으로 입력됩니다.</small>
                             </label>
                             <label class="first-use-field" for="firstUsePassword">
                                 <span>비밀번호</span>
