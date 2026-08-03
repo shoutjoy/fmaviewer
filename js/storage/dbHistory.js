@@ -23,6 +23,7 @@ const historyDom = {
 };
 
 let activeRestoreId = "";
+let historyPreviewUrls = new Set();
 
 function openHistoryDatabase() {
     return new Promise((resolve, reject) => {
@@ -115,19 +116,31 @@ function readLegacySnapshotKeys(db) {
     });
 }
 
-async function loadSnapshotPreview(record) {
-    if (!record.previewImageId) return "";
+async function loadSnapshotPreviews(records) {
+    historyPreviewUrls.forEach(url => URL.revokeObjectURL(url));
+    historyPreviewUrls.clear();
+    const requested = records.filter(record => record.previewImageId);
+    if (!requested.length) return new Map();
     const db = await openHistoryDatabase();
     try {
         return await new Promise((resolve, reject) => {
             const tx = db.transaction(METADATA_STORE, "readonly");
-            const request = tx.objectStore(METADATA_STORE).get(record.previewImageId);
-            request.onsuccess = () => resolve(
-                request.result?.thumbnailBlob
-                    ? URL.createObjectURL(request.result.thumbnailBlob)
-                    : ""
-            );
-            request.onerror = () => reject(request.error);
+            const store = tx.objectStore(METADATA_STORE);
+            const previews = new Map();
+            let pending = requested.length;
+            requested.forEach(record => {
+                const request = store.get(record.previewImageId);
+                request.onsuccess = () => {
+                    const blob = request.result?.thumbnailBlob;
+                    if (blob) {
+                        const url = URL.createObjectURL(blob);
+                        historyPreviewUrls.add(url);
+                        previews.set(record.id, url);
+                    }
+                    if (--pending === 0) resolve(previews);
+                };
+                request.onerror = () => reject(request.error);
+            });
         });
     } finally {
         db.close();
@@ -151,9 +164,10 @@ async function renderHistorySnapshots() {
         }
         historyDom.status.style.display = "none";
         records.forEach(record => historyDom.list.appendChild(createHistoryItem(record)));
+        const previews = await loadSnapshotPreviews(records.filter(item => !item.legacy));
         for (const record of records.filter(item => !item.legacy)) {
             const article = historyDom.list.querySelector(`[data-history-id="${CSS.escape(record.id)}"]`);
-            const preview = await loadSnapshotPreview(record);
+            const preview = previews.get(record.id);
             if (article && preview) {
                 const image = document.createElement("img");
                 image.src = preview;
@@ -207,7 +221,7 @@ async function restoreHistorySnapshot(record) {
         snapshotId: record.id,
         legacy: record.legacy === true
     }, getHistoryMessageOrigin());
-    setHistoryRestoreProgress(18, "FMA Viewer가 메타정보와 썸네일을 읽고 있습니다.");
+    setHistoryRestoreProgress(8, "FMA Viewer가 저장본을 열 준비를 하고 있습니다.");
 }
 
 function getHistoryHostWindow() {
@@ -316,4 +330,7 @@ function formatHistoryBytes(bytes) {
 historyDom.refresh.onclick = renderHistorySnapshots;
 historyDom.deleteAll.onclick = deleteAllHistorySnapshots;
 window.addEventListener("message", handleHistoryRestoreMessage);
+window.addEventListener("beforeunload", () => {
+    historyPreviewUrls.forEach(url => URL.revokeObjectURL(url));
+});
 window.addEventListener("DOMContentLoaded", renderHistorySnapshots);

@@ -143,6 +143,7 @@ function releaseFmaArchiveObjectUrls() {
 window.addEventListener("beforeunload", releaseFmaArchiveObjectUrls);
 
 async function processFMAData(data, options = {}) {
+    if (typeof releaseDbRestoreSession === "function") releaseDbRestoreSession();
     if (!options.keepArchiveUrls) releaseFmaArchiveObjectUrls();
     images = [];
     showLoading("Extracting Data...");
@@ -897,6 +898,7 @@ function resetProject() {
     if (!confirm("모든 데이터를 지우고 초기화할까요? 이 작업은 되돌릴 수 없습니다.")) return;
 
     releaseFmaArchiveObjectUrls();
+    if (typeof releaseDbRestoreSession === "function") releaseDbRestoreSession();
     images = [];
     currentIndex = 0;
     deletedImages = [];

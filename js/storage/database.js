@@ -10,6 +10,12 @@ const IMAGE_BLOB_STORE = "image_blobs";
 const IMAGE_METADATA_STORE = "image_metadata";
 const SNAPSHOT_STORE = "snapshots";
 const KEY_NAME = "last_fma";
+const DB_RESTORE_FOREGROUND_COUNT = 12;
+
+let dbRestoreGeneration = 0;
+let dbRestoreHydrationTimer = 0;
+let dbRestoreObjectUrls = new Set();
+let dbRestoreItemsById = new Map();
 
 function initDB() {
     openFmaDatabase().then(db => {
@@ -119,6 +125,7 @@ async function persistViewerSnapshot(snapshotBase) {
         ...snapshotBase,
         schemaVersion: 4,
         imageIds: prepared.imageIds,
+        imageSummaries: prepared.metadata.map(createDbImageSummary),
         imageCount: prepared.imageIds.length,
         approximateBytes: images.reduce((total, item) => total + (Number(item.size) || 0), 0),
         previewImageId: prepared.imageIds[0] || ""
@@ -156,7 +163,7 @@ async function prepareImageEntities(sourceImages) {
     const blobs = new Map();
     const metadata = [];
     for (let index = 0; index < sourceImages.length; index++) {
-        const item = sourceImages[index];
+        const item = await ensureDbImageMetadataLoaded(sourceImages[index]);
         const original = await resolveImageOriginalForSave(item);
         const blobId = original.imageId;
         const recordId = item.dbRecordId || createDbImageRecordId();
@@ -195,6 +202,30 @@ async function prepareImageEntities(sourceImages) {
     return { imageIds, blobs: [...blobs.values()], metadata };
 }
 
+function createDbImageSummary(entry) {
+    const payload = entry?.payload || {};
+    const summary = {};
+    Object.entries(payload).forEach(([key, value]) => {
+        if (value == null || ["string", "number", "boolean"].includes(typeof value)) {
+            summary[key] = value;
+        }
+    });
+    if (payload.metadata && typeof payload.metadata === "object") {
+        const metadata = {};
+        Object.entries(payload.metadata).forEach(([key, value]) => {
+            if (value == null || ["string", "number", "boolean"].includes(typeof value)) {
+                metadata[key] = value;
+            }
+        });
+        summary.metadata = metadata;
+    }
+    return {
+        recordId: entry?.imageId || "",
+        blobId: entry?.blobId || "",
+        payload: summary
+    };
+}
+
 function createDbImageRecordId() {
     if (globalThis.crypto?.randomUUID) return `image-${globalThis.crypto.randomUUID()}`;
     return `image-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 11)}`;
@@ -222,7 +253,8 @@ async function externalizeMetadataImagePayloads(item, blobMap) {
         : JSON.parse(JSON.stringify(item));
     [
         "src", "thumbnailSrc", "dbThumbnailBlob", "dbOriginalObjectUrl",
-        "_dbSavedSrc", "_dbLoadPromise", "_dbPayloadRefs"
+        "_dbSavedSrc", "_dbLoadPromise", "_dbPayloadRefs",
+        "_dbMetadataLoaded", "_dbMetadataPromise"
     ].forEach(key => delete payload[key]);
     const references = Array.isArray(item._dbPayloadRefs)
         ? structuredClone(item._dbPayloadRefs)
@@ -373,8 +405,100 @@ function setDbRecordPath(target, path, value) {
     current[path[path.length - 1]] = value;
 }
 
-async function ensureImageOriginalLoaded(imageOrIndex) {
+function createDbObjectUrl(blob) {
+    const url = URL.createObjectURL(blob);
+    dbRestoreObjectUrls.add(url);
+    return url;
+}
+
+function releaseDbRestoreObjectUrls() {
+    dbRestoreObjectUrls.forEach(url => URL.revokeObjectURL(url));
+    dbRestoreObjectUrls.clear();
+}
+
+function cancelDbMetadataHydration() {
+    if (dbRestoreHydrationTimer) window.clearTimeout(dbRestoreHydrationTimer);
+    dbRestoreHydrationTimer = 0;
+}
+
+function releaseDbRestoreSession() {
+    dbRestoreGeneration++;
+    cancelDbMetadataHydration();
+    releaseDbRestoreObjectUrls();
+    dbRestoreItemsById.clear();
+}
+
+function createDbImageFromSummary(summary, recordId, index, savedAt) {
+    const payload = summary?.payload && typeof summary.payload === "object"
+        ? summary.payload : {};
+    const thumbnailSrc = createDbPlaceholderThumbnail(index + 1);
+    return {
+        ...payload,
+        src: thumbnailSrc,
+        thumbnailSrc,
+        dbRecordId: summary?.recordId || recordId,
+        dbImageId: summary?.blobId || "",
+        dbOriginalLoaded: false,
+        _dbMetadataLoaded: false,
+        _dbPayloadRefs: [],
+        date: payload.date || savedAt || Date.now()
+    };
+}
+
+function applyDbMetadataEntry(recordId, entry) {
+    if (!entry) return null;
+    const item = dbRestoreItemsById.get(recordId) ||
+        images.find(candidate => candidate?.dbRecordId === recordId);
+    if (!item || item._dbMetadataLoaded === true) return item || null;
+    const payload = entry.payload || {};
+    const thumbnailSrc = entry.thumbnailBlob
+        ? createDbObjectUrl(entry.thumbnailBlob)
+        : item.thumbnailSrc || createDbPlaceholderThumbnail(images.indexOf(item) + 1);
+    Object.assign(item, payload, {
+        src: item.dbOriginalLoaded === true ? item.src : thumbnailSrc,
+        thumbnailSrc,
+        dbThumbnailBlob: entry.thumbnailBlob || null,
+        dbThumbnailImageId: entry.blobId || entry.imageId || recordId,
+        dbRecordId: entry.imageId || recordId,
+        dbImageId: entry.blobId || entry.imageId || recordId,
+        dbMetaToken: entry.metaToken || "",
+        dbOriginalLoaded: item.dbOriginalLoaded === true,
+        _dbMetadataLoaded: true,
+        _dbPayloadRefs: entry.payloadRefs || []
+    });
+    updateDbThumbnailElements(item.dbRecordId, thumbnailSrc);
+    return item;
+}
+
+function updateDbThumbnailElements(recordId, thumbnailSrc) {
+    if (!recordId || !thumbnailSrc) return;
+    const escaped = globalThis.CSS?.escape ? CSS.escape(recordId) : recordId.replace(/["\\]/g, "\\$&");
+    document.querySelectorAll(`[data-image-record-id="${escaped}"] img`).forEach(image => {
+        image.src = thumbnailSrc;
+    });
+}
+
+async function ensureDbImageMetadataLoaded(imageOrIndex) {
     const item = typeof imageOrIndex === "number" ? images[imageOrIndex] : imageOrIndex;
+    if (!item || item._dbMetadataLoaded !== false || !item.dbRecordId) return item;
+    if (item._dbMetadataPromise) return item._dbMetadataPromise;
+    item._dbMetadataPromise = (async () => {
+        const db = await openFmaDatabase();
+        try {
+            const entry = await readStoreValue(db, IMAGE_METADATA_STORE, item.dbRecordId);
+            if (!entry) throw new Error(`이미지 메타정보를 찾을 수 없습니다: ${item.dbRecordId}`);
+            return applyDbMetadataEntry(item.dbRecordId, entry) || item;
+        } finally {
+            db.close();
+            item._dbMetadataPromise = null;
+        }
+    })();
+    return item._dbMetadataPromise;
+}
+
+async function ensureImageOriginalLoaded(imageOrIndex) {
+    let item = typeof imageOrIndex === "number" ? images[imageOrIndex] : imageOrIndex;
+    if (item?._dbMetadataLoaded === false) item = await ensureDbImageMetadataLoaded(item);
     if (!item || item.dbOriginalLoaded !== false || !item.dbImageId) return item;
     if (item._dbLoadPromise) return item._dbLoadPromise;
     item._dbLoadPromise = (async () => {
@@ -384,13 +508,13 @@ async function ensureImageOriginalLoaded(imageOrIndex) {
             const entries = await readBlobEntries(db, ids);
             const original = entries.get(item.dbImageId);
             if (!original?.blob) throw new Error("선택한 이미지의 원본 Blob을 찾지 못했습니다.");
-            const originalUrl = URL.createObjectURL(original.blob);
+            const originalUrl = createDbObjectUrl(original.blob);
             item.src = originalUrl;
             item.dbOriginalObjectUrl = originalUrl;
             for (const reference of item._dbPayloadRefs || []) {
                 const entry = entries.get(reference.imageId);
                 if (!entry?.blob) continue;
-                setDbRecordPath(item, reference.path, URL.createObjectURL(entry.blob));
+                setDbRecordPath(item, reference.path, createDbObjectUrl(entry.blob));
             }
             item.dbOriginalLoaded = true;
             return item;
@@ -435,6 +559,7 @@ async function restoreLastSession() {
         const legacy = await readStoreValue(db, STORE_NAME, KEY_NAME);
         if (!legacy) return;
         if (legacy._isMerged) {
+            releaseDbRestoreSession();
             if (typeof releaseFmaArchiveObjectUrls === "function") releaseFmaArchiveObjectUrls();
             images = legacy._data || [];
             normalizeRestoredImages(images);
@@ -449,7 +574,10 @@ async function restoreLastSession() {
 }
 
 async function applyDbSnapshot(snapshot, progressTarget) {
-    const total = snapshot.imageIds?.length || 0;
+    const imageIds = Array.isArray(snapshot.imageIds) ? snapshot.imageIds : [];
+    const total = imageIds.length;
+    const restoreGeneration = ++dbRestoreGeneration;
+    cancelDbMetadataHydration();
     const report = async (percent, message, detail = "") => {
         if (dom.loadingOverlay.style.display === "none") showLoading(message);
         else dom.loadingTitle.innerText = message;
@@ -464,47 +592,114 @@ async function applyDbSnapshot(snapshot, progressTarget) {
         await waitForDbRestorePaint();
     };
     await report(12, "저장본 설정을 읽는 중입니다.", `${total}개 이미지`);
-    const db = await openFmaDatabase();
-    try {
-        const metadataEntries = await readMetadataEntries(db, snapshot.imageIds || []);
-        await report(32, "썸네일과 메타정보를 먼저 구성하는 중입니다.");
-        if (typeof releaseFmaArchiveObjectUrls === "function") releaseFmaArchiveObjectUrls();
-        images = metadataEntries.map((entry, index) => {
-            const payload = entry?.payload || {};
-            const thumbnailSrc = entry?.thumbnailBlob
-                ? URL.createObjectURL(entry.thumbnailBlob)
-                : createDbPlaceholderThumbnail(index + 1);
-            return {
-                ...payload,
-                src: thumbnailSrc,
-                thumbnailSrc,
-                dbThumbnailBlob: entry?.thumbnailBlob || null,
-                dbThumbnailImageId: entry?.blobId || entry?.imageId || snapshot.imageIds[index],
-                dbRecordId: entry?.imageId || snapshot.imageIds[index],
-                dbImageId: entry?.blobId || entry?.imageId || snapshot.imageIds[index],
-                dbMetaToken: entry?.metaToken || "",
-                dbOriginalLoaded: false,
-                _dbPayloadRefs: entry?.payloadRefs || []
-            };
-        });
-    } finally {
-        db.close();
-    }
+    if (typeof releaseFmaArchiveObjectUrls === "function") releaseFmaArchiveObjectUrls();
+    releaseDbRestoreObjectUrls();
+    const summaryById = new Map(
+        (Array.isArray(snapshot.imageSummaries) ? snapshot.imageSummaries : [])
+            .filter(summary => summary?.recordId)
+            .map(summary => [summary.recordId, summary])
+    );
+    images = imageIds.map((recordId, index) => createDbImageFromSummary(
+        summaryById.get(recordId), recordId, index, snapshot.savedAt
+    ));
+    dbRestoreItemsById = new Map(images.map(item => [item.dbRecordId, item]));
     normalizeRestoredImages(images);
-    await report(58, "갤러리 썸네일을 표시하는 중입니다.", "원본 이미지는 선택할 때 불러옵니다.");
+    await report(30, "저장본 목록을 바로 표시하는 중입니다.", "원본과 나머지 썸네일은 지연 로딩합니다.");
     restoreViewerState(snapshot.state || {});
     renderGallery();
     renderFavorites();
     dom.imageCount.innerText = "Images: " + images.length;
-    await report(78, "현재 선택 이미지만 원본 Blob을 불러오는 중입니다.");
-    const latestIndex = typeof getLatestVisibleMediaIndex === "function"
+    const latestIndex = summaryById.size > 0 && typeof getLatestVisibleMediaIndex === "function"
         ? getLatestVisibleMediaIndex() : currentIndex;
+    const foregroundRecords = collectDbForegroundRecords(latestIndex);
+    await report(48, "먼저 보이는 썸네일만 불러오는 중입니다.",
+        `${Math.min(foregroundRecords.length, total)}개 우선 복원`);
+    if (foregroundRecords.length) {
+        const db = await openFmaDatabase();
+        try {
+            const entries = await readMetadataEntries(
+                db, foregroundRecords.map(record => record.recordId)
+            );
+            foregroundRecords.forEach((record, index) => {
+                applyDbMetadataEntry(record.recordId, entries[index]);
+            });
+        } finally {
+            db.close();
+        }
+        renderGallery();
+        renderFavorites();
+    }
+    await report(76, "현재 선택 이미지만 원본 Blob을 불러오는 중입니다.");
     if (latestIndex >= 0) {
         currentIndex = latestIndex;
         await showImage(currentIndex);
     }
-    await report(100, "SaveDB 저장본을 모두 불러왔습니다.", `${total}개 이미지 · 지연 로딩 사용`);
-    window.setTimeout(hideLoading, 450);
+    await report(100, "SaveDB 저장본을 빠르게 열었습니다.",
+        `${total}개 이미지 · 나머지 썸네일은 백그라운드 복원`);
+    window.setTimeout(hideLoading, 120);
+    scheduleDbMetadataHydration(imageIds, restoreGeneration);
+}
+
+function collectDbForegroundRecords(selectedIndex) {
+    const indices = [selectedIndex, ...sortedImageOrder, ...images.map((_, index) => index)];
+    const seen = new Set();
+    const records = [];
+    for (const index of indices) {
+        const item = images[index];
+        if (!item?.dbRecordId || seen.has(item.dbRecordId)) continue;
+        seen.add(item.dbRecordId);
+        records.push({ index, recordId: item.dbRecordId });
+        if (records.length >= DB_RESTORE_FOREGROUND_COUNT) break;
+    }
+    return records;
+}
+
+function scheduleDbMetadataHydration(imageIds, restoreGeneration) {
+    const pendingIds = imageIds.filter(recordId => {
+        const item = dbRestoreItemsById.get(recordId);
+        return item && item._dbMetadataLoaded === false;
+    });
+    if (!pendingIds.length) return;
+    dbRestoreHydrationTimer = window.setTimeout(() => {
+        dbRestoreHydrationTimer = 0;
+        void hydrateDbMetadataInBackground(pendingIds, restoreGeneration);
+    }, 0);
+}
+
+async function hydrateDbMetadataInBackground(recordIds, restoreGeneration) {
+    const db = await openFmaDatabase();
+    try {
+        for (let offset = 0; offset < recordIds.length; offset += 24) {
+            if (restoreGeneration !== dbRestoreGeneration) return;
+            const batchIds = recordIds.slice(offset, offset + 24).filter(recordId => {
+                const item = dbRestoreItemsById.get(recordId);
+                return item && item._dbMetadataLoaded === false;
+            });
+            if (!batchIds.length) continue;
+            const entries = await readMetadataEntries(db, batchIds);
+            if (restoreGeneration !== dbRestoreGeneration) return;
+            batchIds.forEach((recordId, index) => applyDbMetadataEntry(recordId, entries[index]));
+            await waitForDbRestoreIdle();
+        }
+    } catch (error) {
+        console.warn("SaveDB background metadata hydration failed:", error);
+    } finally {
+        db.close();
+    }
+    if (restoreGeneration === dbRestoreGeneration) {
+        renderGallery();
+        renderFavorites();
+    }
+}
+
+function waitForDbRestoreIdle() {
+    return new Promise(resolve => {
+        if (typeof window.requestIdleCallback === "function") {
+            window.requestIdleCallback(() => resolve(), { timeout: 120 });
+        } else {
+            window.setTimeout(resolve, 0);
+        }
+    });
 }
 
 function readMetadataEntries(db, imageIds) {
@@ -602,7 +797,7 @@ async function saveCurrentStateToDbHistory() {
         dom.btnSaveDbMenu.innerText = "SaveDB ✓ ▾";
         window.setTimeout(() => dom.btnSaveDbMenu.innerText = "SaveDB ▾", 1800);
         if (dom.dbHistoryModal?.style.display === "flex") {
-            dom.dbHistoryFrame.src = `db_history.html?v=20260731-6&t=${Date.now()}`;
+            dom.dbHistoryFrame.src = `db_history.html?v=20260804-1&t=${Date.now()}`;
         }
     } catch (error) {
         console.error("SaveDB failed:", error);
@@ -616,7 +811,7 @@ async function saveCurrentStateToDbHistory() {
 
 function openDbHistoryWindow() {
     if (!dom.dbHistoryModal || !dom.dbHistoryFrame) return;
-    dom.dbHistoryFrame.src = `db_history.html?v=20260731-6`;
+    dom.dbHistoryFrame.src = `db_history.html?v=20260804-1`;
     dom.dbHistoryModal.style.display = "flex";
     document.body.classList.add("db-history-open");
     dom.btnCloseDbHistoryModal.onclick = closeDbHistoryWindow;
@@ -677,6 +872,8 @@ async function readLegacyDbHistorySnapshotById(snapshotId) {
 }
 
 async function applyLegacyDbSnapshot(snapshot, progressTarget) {
+    dbRestoreGeneration++;
+    cancelDbMetadataHydration();
     postDbHistoryRestoreProgress(progressTarget, {
         snapshotId: snapshot.id,
         percent: 15,
@@ -690,6 +887,8 @@ async function applyLegacyDbSnapshot(snapshot, progressTarget) {
         throw new Error("이전 저장본에서 이미지 목록을 찾지 못했습니다.");
     }
     if (typeof releaseFmaArchiveObjectUrls === "function") releaseFmaArchiveObjectUrls();
+    releaseDbRestoreObjectUrls();
+    dbRestoreItemsById.clear();
     images = restored;
     normalizeRestoredImages(images);
     restoreViewerState(snapshot.state || {});

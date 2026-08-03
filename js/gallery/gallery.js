@@ -4,17 +4,18 @@
 
 function renderGallery() {
     const fragment = document.createDocumentFragment();
+    const imageIndex = new Map(images.map((item, index) => [item, index]));
     let sortedImages = images.filter(item => {
         if (mediaFilter === "video") return isVideoMedia(item);
         if (mediaFilter === "image") return !isVideoMedia(item);
         return true;
     });
     if (sortMode === 'latest') sortedImages.sort((a, b) =>
-        getMediaCreatedTimestamp(b) - getMediaCreatedTimestamp(a) || images.indexOf(b) - images.indexOf(a));
+        getMediaCreatedTimestamp(b) - getMediaCreatedTimestamp(a) || imageIndex.get(b) - imageIndex.get(a));
     else if (sortMode === 'modified') sortedImages.sort((a, b) =>
-        getMediaModifiedTimestamp(b) - getMediaModifiedTimestamp(a) || images.indexOf(b) - images.indexOf(a));
+        getMediaModifiedTimestamp(b) - getMediaModifiedTimestamp(a) || imageIndex.get(b) - imageIndex.get(a));
     else if (sortMode === 'oldest') sortedImages.sort((a, b) =>
-        getMediaCreatedTimestamp(a) - getMediaCreatedTimestamp(b) || images.indexOf(a) - images.indexOf(b));
+        getMediaCreatedTimestamp(a) - getMediaCreatedTimestamp(b) || imageIndex.get(a) - imageIndex.get(b));
     else if (sortMode === 'size') sortedImages.sort((a, b) => (b.size || 0) - (a.size || 0));
     else if (sortMode === 'type') {
         sortedImages.sort((a, b) => {
@@ -32,7 +33,7 @@ function renderGallery() {
                 ? getImageTypeLabel(img)
                 : mediaName;
         if (!groups[groupName]) groups[groupName] = [];
-        groups[groupName].push({ ...img, realIndex: images.indexOf(img) });
+        groups[groupName].push({ ...img, realIndex: imageIndex.get(img) });
     });
 
     const sortedKeys = Object.keys(groups).sort((a, b) => {
@@ -65,6 +66,7 @@ function renderGallery() {
         groups[g].forEach(img => {
             const div = document.createElement("div");
             div.className = "thumb" + (img.isFav ? " is-fav" : "");
+            div.dataset.imageRecordId = img.dbRecordId || "";
             const media = createGalleryMediaElement(img);
             div.appendChild(media);
             const badge = document.createElement("span");
@@ -127,10 +129,11 @@ function getActiveImageOrder() {
     const expected = images.map((item, index) => ({ item, index }))
         .filter(({ item }) => mediaFilter === "all" || (mediaFilter === "video") === isVideoMedia(item))
         .map(({ index }) => index);
+    const expectedSet = new Set(expected);
     const isValid = sortedImageOrder.length === expected.length &&
         sortedImageOrder.every(index => Number.isInteger(index) && index >= 0 && index < images.length) &&
         new Set(sortedImageOrder).size === expected.length &&
-        sortedImageOrder.every(index => expected.includes(index));
+        sortedImageOrder.every(index => expectedSet.has(index));
     return isValid ? sortedImageOrder : expected;
 }
 
@@ -208,13 +211,15 @@ function toggleFav(i) {
 
 function renderFavorites() {
     const fragment = document.createDocumentFragment();
+    const imageIndex = new Map(images.map((item, index) => [item, index]));
     const favs = images.filter(img => img.isFav && (
         mediaFilter === "all" || (mediaFilter === "video") === isVideoMedia(img)
     ));
     favs.forEach(img => {
-        const realIdx = images.indexOf(img);
+        const realIdx = imageIndex.get(img);
         const div = document.createElement("div");
         div.className = "thumb is-fav";
+        div.dataset.imageRecordId = img.dbRecordId || "";
         div.appendChild(createGalleryMediaElement(img));
         const overlay = document.createElement("div");
         overlay.className = "thumb-overlay";
