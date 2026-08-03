@@ -404,23 +404,51 @@ html.first-use-locked body {
 .auth-logout-button {
     position: fixed;
     z-index: 29000;
-    top: 14px;
-    right: 16px;
-    min-height: 36px;
-    padding: 0 13px;
+    right: 14px;
+    bottom: 72px;
+    width: 42px;
+    height: 42px;
+    padding: 0;
     border: 1px solid rgba(112, 226, 255, .3);
-    border-radius: 10px;
+    border-radius: 9px;
     color: #d9f8ff;
     background: rgba(9, 24, 36, .82);
     box-shadow: 0 8px 26px rgba(0, 0, 0, .28);
     backdrop-filter: blur(10px);
-    font-weight: 800;
-    cursor: pointer;
+    display: grid;
+    place-items: center;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .auth-logout-button:hover {
     border-color: rgba(112, 226, 255, .62);
     background: rgba(18, 50, 67, .92);
+    transform: translateY(-1px);
+}
+
+.auth-logout-button:active,
+.auth-logout-button.is-dragging {
+    cursor: grabbing;
+    transform: none;
+}
+
+.auth-logout-button.is-dragging {
+    border-color: rgba(112, 226, 255, .82);
+    box-shadow: 0 12px 34px rgba(0, 0, 0, .4), 0 0 0 3px rgba(112, 226, 255, .12);
+}
+
+.auth-logout-button svg {
+    width: 19px;
+    height: 19px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    pointer-events: none;
 }
 
 html[data-theme="light"] .first-use-modal {
@@ -561,7 +589,7 @@ html[data-theme="light"] .auth-logout-button {
     }
 
     .auth-logout-button {
-        top: 8px;
         right: 8px;
+        bottom: 64px;
     }
 }

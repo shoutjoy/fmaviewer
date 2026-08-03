@@ -8,6 +8,7 @@ const FMA_AUTH_APP_NAME = String(FMA_AUTH_SETTINGS.appName || "FMA Viewer");
 const FMA_AUTH_PENDING_STORAGE = `${FMA_AUTH_STORAGE_PREFIX}_registration_pending_v5`;
 const FMA_AUTH_REMEMBER_EMAIL_STORAGE = `${FMA_AUTH_STORAGE_PREFIX}_remembered_email_v1`;
 const FMA_AUTH_SESSION_STORAGE = `${FMA_AUTH_STORAGE_PREFIX}_session_v1`;
+const FMA_LOGOUT_POSITION_STORAGE = `${FMA_AUTH_STORAGE_PREFIX}_logout_position_v1`;
 const FMA_AUTH_LEGACY_STORAGES = [
     `${FMA_AUTH_STORAGE_PREFIX}_registration_v4`,
     `${FMA_AUTH_STORAGE_PREFIX}_registration_v3`,
@@ -21,6 +22,8 @@ const FMA_VERIFICATION_RETRY_MS = Number(FMA_AUTH_SETTINGS.verificationRetryMs) 
 const FMA_PASSWORD_ITERATIONS = Number(FMA_AUTH_SETTINGS.passwordIterations) || 600000;
 const FMA_PASSWORD_LIMITS = Object.freeze({ min: 10, max: 128 });
 const FMA_APPLICATION_LIMITS = Object.freeze({ name: 80, organization: 120, purpose: 500 });
+const FMA_LOGOUT_BUTTON_MARGIN = 8;
+const FMA_LOGOUT_DRAG_THRESHOLD = 5;
 
 let fmaPendingMemoryRecord = null;
 let fmaVerificationPollTimer = null;
@@ -28,6 +31,8 @@ let fmaSessionSyncTimer = null;
 let fmaBlockedWatchTimer = null;
 let fmaBlockedWatchInFlight = false;
 let fmaLastBlockedWatchAt = 0;
+let fmaLogoutDragState = null;
+let fmaLogoutClickSuppressed = false;
 
 function getRuntimeAdminConfig() {
     try {
@@ -152,6 +157,116 @@ function removeAuthSession() {
     } catch (_) {}
 }
 
+function clampLogoutButtonCoordinates(
+    x,
+    y,
+    width = 42,
+    height = 42,
+    viewportWidth = window.innerWidth,
+    viewportHeight = window.innerHeight
+) {
+    const margin = FMA_LOGOUT_BUTTON_MARGIN;
+    const maxX = Math.max(margin, Number(viewportWidth) - Number(width) - margin);
+    const maxY = Math.max(margin, Number(viewportHeight) - Number(height) - margin);
+    return {
+        x: Math.min(Math.max(Number(x) || margin, margin), maxX),
+        y: Math.min(Math.max(Number(y) || margin, margin), maxY)
+    };
+}
+
+function readLogoutButtonPosition() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(FMA_LOGOUT_POSITION_STORAGE) || "null");
+        if (Number.isFinite(saved?.x) && Number.isFinite(saved?.y)) return saved;
+    } catch (_) {}
+    return null;
+}
+
+function positionLogoutButton(x, y, persist = false) {
+    const button = document.getElementById("authLogoutButton");
+    if (!button) return null;
+    const width = button.offsetWidth || 42;
+    const height = button.offsetHeight || 42;
+    const position = clampLogoutButtonCoordinates(x, y, width, height);
+    button.style.left = `${position.x}px`;
+    button.style.top = `${position.y}px`;
+    button.style.right = "auto";
+    button.style.bottom = "auto";
+    if (persist) {
+        try {
+            localStorage.setItem(FMA_LOGOUT_POSITION_STORAGE, JSON.stringify(position));
+        } catch (_) {}
+    }
+    return position;
+}
+
+function restoreLogoutButtonPosition() {
+    const position = readLogoutButtonPosition();
+    if (position) positionLogoutButton(position.x, position.y);
+}
+
+function keepLogoutButtonInViewport() {
+    const button = document.getElementById("authLogoutButton");
+    if (!button || button.hidden) return;
+    const rect = button.getBoundingClientRect();
+    positionLogoutButton(rect.left, rect.top);
+}
+
+function beginLogoutButtonDrag(event) {
+    if (event.button !== undefined && event.button !== 0) return;
+    const button = event.currentTarget;
+    const rect = button.getBoundingClientRect();
+    fmaLogoutDragState = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        originX: rect.left,
+        originY: rect.top,
+        moved: false
+    };
+    fmaLogoutClickSuppressed = false;
+    button.setPointerCapture?.(event.pointerId);
+    button.classList.add("is-dragging");
+}
+
+function moveLogoutButton(event) {
+    const state = fmaLogoutDragState;
+    if (!state || event.pointerId !== state.pointerId) return;
+    const deltaX = event.clientX - state.startX;
+    const deltaY = event.clientY - state.startY;
+    if (!state.moved && Math.hypot(deltaX, deltaY) < FMA_LOGOUT_DRAG_THRESHOLD) return;
+    state.moved = true;
+    event.preventDefault();
+    positionLogoutButton(state.originX + deltaX, state.originY + deltaY);
+}
+
+function finishLogoutButtonDrag(event) {
+    const state = fmaLogoutDragState;
+    if (!state || event.pointerId !== state.pointerId) return;
+    const button = event.currentTarget;
+    button.classList.remove("is-dragging");
+    if (button.hasPointerCapture?.(state.pointerId)) button.releasePointerCapture(state.pointerId);
+    fmaLogoutDragState = null;
+    if (!state.moved) return;
+
+    const rect = button.getBoundingClientRect();
+    positionLogoutButton(rect.left, rect.top, true);
+    fmaLogoutClickSuppressed = true;
+    window.setTimeout(() => {
+        fmaLogoutClickSuppressed = false;
+    }, 0);
+}
+
+function handleLogoutButtonClick(event) {
+    if (fmaLogoutClickSuppressed) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+    }
+    if (!window.confirm("로그아웃하시겠습니까?")) return;
+    void logoutAuthenticatedUser();
+}
+
 function setAuthPageLocked(locked) {
     const modal = document.getElementById("firstUseModal");
     document.documentElement.classList.toggle("first-use-locked", locked);
@@ -199,7 +314,11 @@ function unlockAuthenticatedApp(email) {
     setAuthPageLocked(false);
     if (logoutButton) {
         logoutButton.hidden = false;
-        logoutButton.title = `${email} 로그아웃`;
+        logoutButton.title = "로그아웃 · 드래그하여 이동";
+        logoutButton.setAttribute("aria-label", `${email} 계정 로그아웃`);
+        const restorePosition = () => restoreLogoutButtonPosition();
+        if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(restorePosition);
+        else window.setTimeout(restorePosition, 0);
     }
 }
 
@@ -830,7 +949,12 @@ function initFMAAuthentication() {
     document.getElementById("btnShowRegistration")?.addEventListener("click", openRegistrationFromLogin);
     document.getElementById("btnBackToLogin")?.addEventListener("click", returnToLogin);
     document.getElementById("btnFirstUseContinue")?.addEventListener("click", requestRegistration);
-    document.getElementById("authLogoutButton")?.addEventListener("click", logoutAuthenticatedUser);
+    const logoutButton = document.getElementById("authLogoutButton");
+    logoutButton?.addEventListener("pointerdown", beginLogoutButtonDrag);
+    logoutButton?.addEventListener("pointermove", moveLogoutButton);
+    logoutButton?.addEventListener("pointerup", finishLogoutButtonDrag);
+    logoutButton?.addEventListener("pointercancel", finishLogoutButtonDrag);
+    logoutButton?.addEventListener("click", handleLogoutButtonClick);
 
     ["authLoginEmail", "authLoginPassword"].forEach(id => {
         document.getElementById(id)?.addEventListener("keydown", event => {
@@ -870,6 +994,7 @@ window.addEventListener("beforeunload", () => {
 });
 window.addEventListener("fma-admin-config-changed", rescheduleAfterAdminConfigChange);
 window.addEventListener("online", checkSessionAfterReturn);
+window.addEventListener("resize", keepLogoutButtonInViewport);
 document.addEventListener("visibilitychange", checkSessionAfterReturn);
 window.addEventListener("storage", event => {
     if (event.key === window.FMAAdminConfig?.STORAGE_KEY) rescheduleAfterAdminConfigChange();

@@ -61,7 +61,7 @@
                                 <strong>아직 이메일 인증을 받지 않았나요?</strong>
                                 <p>처음 사용하는 경우 또는 기존 계정에 비밀번호가 없는 경우 이메일 인증으로 비밀번호를 설정할 수 있습니다.</p>
                             </div>
-                            <button id="btnShowRegistration" class="auth-link-button" type="button">이메일 인증하기</button>
+                            <button id="btnAuthLogin" class="auth-link-button" type="button">로그인</button>
                         </div>
                     </section>
 
@@ -133,7 +133,7 @@
                 <footer class="first-use-footer">
                     <p id="authFooterNote">로그인 전에는 앱이 잠겨 있습니다.</p>
                     <div class="first-use-footer-actions" data-auth-actions="login">
-                        <button id="btnAuthLogin" type="button">로그인</button>
+                        <button id="btnShowRegistration" type="button">이메일 인증하기</button>
                     </div>
                     <div class="first-use-footer-actions" data-auth-actions="registration" hidden>
                         <button id="btnBackToLogin" class="first-use-reset" type="button">로그인으로 돌아가기</button>
@@ -142,7 +142,14 @@
                 </footer>
             </div>
         </div>
-        <button id="authLogoutButton" class="auth-logout-button" type="button" hidden>로그아웃</button>`;
+        <button id="authLogoutButton" class="auth-logout-button" type="button"
+            aria-label="로그아웃" title="로그아웃 · 드래그하여 이동" hidden>
+            <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <path d="m16 17 5-5-5-5"></path>
+                <path d="M21 12H9"></path>
+            </svg>
+        </button>`;
 
     document.documentElement.classList.add("first-use-locked");
     while (container.firstElementChild) document.body.appendChild(container.firstElementChild);

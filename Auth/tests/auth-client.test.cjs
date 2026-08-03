@@ -17,6 +17,7 @@ const registrationIds = [
 ];
 const elements = new Map(registrationIds.map((id) => [id, { id, disabled: false, textContent: '' }]));
 const noOp = () => {};
+let confirmMessage = '';
 const documentMock = {
   getElementById: (id) => elements.get(id) || null,
   querySelectorAll: () => [],
@@ -26,7 +27,11 @@ const documentMock = {
 const windowMock = {
   FMAAuthSettings: {},
   addEventListener: noOp,
-  crypto: crypto.webcrypto
+  crypto: crypto.webcrypto,
+  confirm: (message) => {
+    confirmMessage = message;
+    return false;
+  }
 };
 
 const context = vm.createContext({
@@ -65,4 +70,13 @@ for (const id of registrationIds) {
   assert.equal(elements.get(id).disabled, false, `${id}는 발송 처리 후 다시 활성화되어야 합니다.`);
 }
 
-console.log('auth-client.test.cjs: 인증 대기 중 입력 수정 검증 통과');
+assert.deepEqual(
+  { ...context.clampLogoutButtonCoordinates(-50, 900, 42, 42, 800, 600) },
+  { x: 8, y: 550 },
+  '플로팅 로그아웃 버튼은 화면 밖으로 이동하면 안 됩니다.'
+);
+
+context.handleLogoutButtonClick({ preventDefault: noOp, stopPropagation: noOp });
+assert.equal(confirmMessage, '로그아웃하시겠습니까?');
+
+console.log('auth-client.test.cjs: 인증 입력 및 플로팅 로그아웃 검증 통과');
