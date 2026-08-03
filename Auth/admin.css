@@ -184,6 +184,20 @@ footer p {
     gap: 9px;
 }
 
+.resource-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+}
+
+.field em {
+    margin-left: 6px;
+    color: var(--muted);
+    font-size: 11px;
+    font-style: normal;
+    font-weight: 650;
+}
+
 .field > span,
 .interval-card > span {
     font-weight: 750;
@@ -209,6 +223,59 @@ input:focus {
 .interval-card small {
     color: var(--muted);
     line-height: 1.5;
+}
+
+.field small code {
+    color: var(--cyan);
+}
+
+.resource-action-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 14px;
+}
+
+.resource-action-row + .field {
+    margin-top: 22px;
+}
+
+.button-link {
+    display: inline-flex;
+    min-height: 41px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 15px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #172a3c;
+    color: var(--text);
+    text-decoration: none;
+    font-weight: 750;
+}
+
+.button-link:hover {
+    border-color: var(--cyan);
+    color: var(--cyan);
+}
+
+.button-link[aria-disabled="true"],
+.app-link[aria-disabled="true"] {
+    pointer-events: none;
+    opacity: .48;
+}
+
+.resource-id {
+    margin-left: auto;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.resource-id strong {
+    margin-left: 5px;
+    color: var(--cyan);
+    overflow-wrap: anywhere;
 }
 
 .frequency-grid {
@@ -436,6 +503,12 @@ td:last-child {
     overflow-wrap: anywhere;
 }
 
+td:nth-last-child(2) {
+    min-width: 280px;
+    color: #b7ccdc;
+    overflow-wrap: anywhere;
+}
+
 .empty-history {
     margin: 22px 0 2px;
     color: var(--muted);
@@ -465,7 +538,8 @@ footer {
     }
 
     .origin-card,
-    .frequency-grid {
+    .frequency-grid,
+    .resource-grid {
         grid-template-columns: 1fr;
     }
 
@@ -482,6 +556,15 @@ footer {
         width: 100%;
         justify-content: center;
         text-align: center;
+    }
+
+    .resource-action-row > * {
+        width: 100%;
+    }
+
+    .resource-id {
+        margin-left: 0;
+        padding: 4px 2px;
     }
 
     .text-link {

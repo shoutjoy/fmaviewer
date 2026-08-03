@@ -291,11 +291,14 @@ function setAuthView(view) {
     if (view === "registration") {
         if (title) title.textContent = `${FMA_AUTH_APP_NAME} 이메일 인증`;
         if (description) description.textContent = "Gmail 인증을 완료하면 입력한 전용 비밀번호로 로그인할 수 있습니다.";
-        if (footerNote) footerNote.textContent = "인증 대기 중에도 입력 내용을 수정해 새 인증 메일을 보낼 수 있습니다.";
+        if (footerNote) {
+            footerNote.textContent = "인증 대기 중에도 입력 내용을 수정해 새 인증 메일을 보낼 수 있습니다.";
+            footerNote.hidden = false;
+        }
     } else {
         if (title) title.textContent = `${FMA_AUTH_APP_NAME} 로그인`;
         if (description) description.textContent = `이메일과 ${FMA_AUTH_APP_NAME} 전용 비밀번호로 로그인해 주세요.`;
-        if (footerNote) footerNote.textContent = "로그인 전에는 앱이 잠겨 있습니다.";
+        if (footerNote) footerNote.hidden = true;
     }
 }
 

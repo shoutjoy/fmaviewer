@@ -8,6 +8,8 @@
     const HISTORY_KEY = `${storagePrefix}_admin_config_history_v1`;
     const DEFAULT_CONFIG = Object.freeze({
         gasWebAppUrl: String(authSettings.gasWebAppUrl || ""),
+        spreadsheetUrl: String(authSettings.spreadsheetUrl || ""),
+        appsScriptProjectUrl: String(authSettings.appsScriptProjectUrl || ""),
         checksPerDay: 1,
         blockedCheckMinutes: 5,
         updatedAt: ""
@@ -24,6 +26,59 @@
             throw new Error("GAS 웹 앱의 /exec 주소를 정확히 입력해 주세요.");
         }
         return url;
+    }
+
+    function normalizeSpreadsheetUrl(value) {
+        let url;
+        try {
+            url = new URL(String(value || "").trim());
+        } catch (_) {
+            throw new Error("Google Sheet 주소를 정확히 입력해 주세요.");
+        }
+        const match = url.pathname.match(/^\/spreadsheets(?:\/u\/\d+)?\/d\/([A-Za-z0-9_-]+)/i);
+        if (url.protocol !== "https:" || url.hostname !== "docs.google.com" || !match) {
+            throw new Error("https://docs.google.com/spreadsheets/d/... 형식의 Google Sheet 주소가 필요합니다.");
+        }
+        return url.toString();
+    }
+
+    function getSpreadsheetId(value) {
+        const url = new URL(normalizeSpreadsheetUrl(value));
+        const match = url.pathname.match(/^\/spreadsheets(?:\/u\/\d+)?\/d\/([A-Za-z0-9_-]+)/i);
+        return match ? match[1] : "";
+    }
+
+    function applySpreadsheetIdToGasCode(source, spreadsheetUrl) {
+        const spreadsheetId = getSpreadsheetId(spreadsheetUrl);
+        const code = String(source || "");
+        const spreadsheetIdDeclaration = /const\s+SPREADSHEET_ID\s*=\s*(['"])[^'"]*\1\s*;/;
+        if (!spreadsheetIdDeclaration.test(code)) {
+            throw new Error("Code.gs에서 SPREADSHEET_ID 설정을 찾지 못했습니다.");
+        }
+        return code.replace(spreadsheetIdDeclaration, `const SPREADSHEET_ID = '${spreadsheetId}';`);
+    }
+
+    function normalizeAppsScriptProjectUrl(value) {
+        const text = String(value || "").trim();
+        if (!text) return "";
+        let url;
+        try {
+            url = new URL(text);
+        } catch (_) {
+            throw new Error("Apps Script 편집기 주소를 정확히 입력해 주세요.");
+        }
+        const projectPath = /^\/(?:u\/\d+\/)?home\/projects\/[A-Za-z0-9_-]+\/edit\/?$/i;
+        const legacyPath = /^\/d\/[A-Za-z0-9_-]+\/edit\/?$/i;
+        if (
+            url.protocol !== "https:" ||
+            url.hostname !== "script.google.com" ||
+            (!projectPath.test(url.pathname) && !legacyPath.test(url.pathname))
+        ) {
+            throw new Error("script.google.com의 Apps Script 프로젝트 편집기 주소가 필요합니다.");
+        }
+        url.search = "";
+        url.hash = "";
+        return url.toString();
     }
 
     function normalizeChecksPerDay(value) {
@@ -44,8 +99,13 @@
 
     function normalizeConfig(value) {
         const candidate = value && typeof value === "object" ? value : {};
+        const hasAppsScriptProjectUrl = Object.prototype.hasOwnProperty.call(candidate, "appsScriptProjectUrl");
         return {
             gasWebAppUrl: normalizeGasWebAppUrl(candidate.gasWebAppUrl || DEFAULT_CONFIG.gasWebAppUrl),
+            spreadsheetUrl: normalizeSpreadsheetUrl(candidate.spreadsheetUrl || DEFAULT_CONFIG.spreadsheetUrl),
+            appsScriptProjectUrl: normalizeAppsScriptProjectUrl(
+                hasAppsScriptProjectUrl ? candidate.appsScriptProjectUrl : DEFAULT_CONFIG.appsScriptProjectUrl
+            ),
             checksPerDay: normalizeChecksPerDay(candidate.checksPerDay || DEFAULT_CONFIG.checksPerDay),
             blockedCheckMinutes: normalizeBlockedCheckMinutes(
                 candidate.blockedCheckMinutes || DEFAULT_CONFIG.blockedCheckMinutes
@@ -141,6 +201,8 @@
             const current = load();
             const imported = save({
                 gasWebAppUrl: params.get("fmaGasUrl") || current.gasWebAppUrl,
+                spreadsheetUrl: current.spreadsheetUrl,
+                appsScriptProjectUrl: current.appsScriptProjectUrl,
                 checksPerDay: params.get("fmaChecks") || current.checksPerDay,
                 blockedCheckMinutes: params.get("fmaBlockMinutes") || current.blockedCheckMinutes
             }, { recordHistory: false });
@@ -168,6 +230,10 @@
         readHistory,
         clearHistory,
         normalizeGasWebAppUrl,
+        normalizeSpreadsheetUrl,
+        getSpreadsheetId,
+        applySpreadsheetIdToGasCode,
+        normalizeAppsScriptProjectUrl,
         normalizeChecksPerDay,
         normalizeBlockedCheckMinutes,
         getSyncIntervalMs,

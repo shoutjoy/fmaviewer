@@ -7,7 +7,7 @@
 
     document.title = `${appName} 관리자 설정`;
     const description = document.getElementById("adminDescription");
-    if (description) description.content = `${appName} GAS 배포 URL과 등록·차단 점검 주기를 설정합니다.`;
+    if (description) description.content = `${appName} Google Sheet, Apps Script, GAS 배포 URL과 점검 주기를 설정합니다.`;
     const eyebrow = document.getElementById("adminAppEyebrow");
     if (eyebrow) eyebrow.textContent = appName.toUpperCase();
     const appNameText = document.getElementById("adminAppName");
@@ -15,6 +15,8 @@
 
     const form = document.getElementById("adminSettingsForm");
     const urlInput = document.getElementById("gasWebAppUrl");
+    const spreadsheetInput = document.getElementById("spreadsheetUrl");
+    const appsScriptProjectInput = document.getElementById("appsScriptProjectUrl");
     const checksInput = document.getElementById("checksPerDay");
     const blockedCheckInput = document.getElementById("blockedCheckMinutes");
     const intervalText = document.getElementById("syncIntervalText");
@@ -27,15 +29,22 @@
     const testButton = document.getElementById("testConnectionButton");
     const applyDeploymentToAppButton = document.getElementById("applyDeploymentToAppButton");
     const openAppLink = document.getElementById("openAppLink");
+    const openSpreadsheetHeaderLink = document.getElementById("openSpreadsheetHeaderLink");
+    const openAppsScriptHeaderLink = document.getElementById("openAppsScriptHeaderLink");
+    const openSpreadsheetButton = document.getElementById("openSpreadsheetButton");
+    const openAppsScriptButton = document.getElementById("openAppsScriptButton");
+    const spreadsheetIdValue = document.getElementById("spreadsheetIdValue");
     const expectedServerVersion = String(window.FMAAuthSettings?.serverVersion || "2026-08-04-password-login-1");
     const gasCodePreview = document.getElementById("gasCodePreview");
     const gasCodeStatus = document.getElementById("gasCodeStatus");
     const gasCodeVersionBadge = document.getElementById("gasCodeVersionBadge");
     const gasCodeSourceLabel = document.getElementById("gasCodeSourceLabel");
     const copyGasCodeButton = document.getElementById("copyGasCodeButton");
+    const copyAndOpenAppsScriptButton = document.getElementById("copyAndOpenAppsScriptButton");
     const reloadGasCodeButton = document.getElementById("reloadGasCodeButton");
     const gasCodeFileInput = document.getElementById("gasCodeFileInput");
     const openGasCodeLink = document.getElementById("openGasCodeLink");
+    let gasCodeTemplateSource = "";
     openAppLink.textContent = `${appName}에 현재 설정 적용`;
 
     function formatDateTime(value) {
@@ -91,15 +100,84 @@
         return normalized + "\n";
     }
 
+    function setResourceLink(link, url) {
+        if (url) {
+            link.href = url;
+            link.removeAttribute("aria-disabled");
+            link.removeAttribute("tabindex");
+            return;
+        }
+        link.removeAttribute("href");
+        link.setAttribute("aria-disabled", "true");
+        link.setAttribute("tabindex", "-1");
+    }
+
+    function updateResourceLinks(config) {
+        const spreadsheetUrl = configApi.normalizeSpreadsheetUrl(config.spreadsheetUrl);
+        const appsScriptUrl = configApi.normalizeAppsScriptProjectUrl(config.appsScriptProjectUrl);
+        setResourceLink(openSpreadsheetHeaderLink, spreadsheetUrl);
+        setResourceLink(openSpreadsheetButton, spreadsheetUrl);
+        setResourceLink(openAppsScriptHeaderLink, appsScriptUrl);
+        setResourceLink(openAppsScriptButton, appsScriptUrl);
+        spreadsheetIdValue.textContent = configApi.getSpreadsheetId(spreadsheetUrl);
+    }
+
+    function updateSpreadsheetPreview() {
+        try {
+            const spreadsheetUrl = configApi.normalizeSpreadsheetUrl(spreadsheetInput.value);
+            setResourceLink(openSpreadsheetHeaderLink, spreadsheetUrl);
+            setResourceLink(openSpreadsheetButton, spreadsheetUrl);
+            spreadsheetIdValue.textContent = configApi.getSpreadsheetId(spreadsheetUrl);
+        } catch (_) {
+            setResourceLink(openSpreadsheetHeaderLink, "");
+            setResourceLink(openSpreadsheetButton, "");
+        }
+        refreshConfiguredGasCode();
+    }
+
+    function updateAppsScriptPreview() {
+        try {
+            const projectUrl = configApi.normalizeAppsScriptProjectUrl(appsScriptProjectInput.value);
+            setResourceLink(openAppsScriptHeaderLink, projectUrl);
+            setResourceLink(openAppsScriptButton, projectUrl);
+        } catch (_) {
+            setResourceLink(openAppsScriptHeaderLink, "");
+            setResourceLink(openAppsScriptButton, "");
+        }
+    }
+
+    function refreshConfiguredGasCode() {
+        if (!gasCodeTemplateSource) return false;
+        try {
+            gasCodePreview.value = configApi.applySpreadsheetIdToGasCode(
+                gasCodeTemplateSource,
+                spreadsheetInput.value
+            );
+            spreadsheetIdValue.textContent = configApi.getSpreadsheetId(spreadsheetInput.value);
+            copyGasCodeButton.disabled = false;
+            copyAndOpenAppsScriptButton.disabled = false;
+            return true;
+        } catch (error) {
+            gasCodePreview.value = gasCodeTemplateSource;
+            copyGasCodeButton.disabled = true;
+            copyAndOpenAppsScriptButton.disabled = true;
+            spreadsheetIdValue.textContent = "유효한 Google Sheet 주소가 필요합니다.";
+            setGasCodeStatus(String(error?.message || error), "error");
+            return false;
+        }
+    }
+
     function applyGasCodeSource(source, sourceLabel) {
         const normalized = normalizeGasCodeSource(source);
         const sourceVersion = readGasCodeVersion(normalized);
-        gasCodePreview.value = normalized;
+        gasCodeTemplateSource = normalized;
+        const configured = refreshConfiguredGasCode();
         gasCodeSourceLabel.textContent = sourceLabel;
         gasCodeVersionBadge.textContent = sourceVersion
             ? `Code.gs · ${sourceVersion}`
             : "Code.gs · 버전 확인 불가";
-        copyGasCodeButton.disabled = false;
+
+        if (!configured) return;
 
         if (!sourceVersion) {
             setGasCodeStatus("코드를 불러왔지만 SERVER_VERSION을 확인하지 못했습니다.", "error");
@@ -110,7 +188,11 @@
             );
         } else {
             const lineCount = normalized.split("\n").length - 1;
-            setGasCodeStatus(`최신 Code.gs ${lineCount.toLocaleString("ko-KR")}줄을 불러왔습니다. 전체 복사할 수 있습니다.`, "success");
+            const spreadsheetId = configApi.getSpreadsheetId(spreadsheetInput.value);
+            setGasCodeStatus(
+                `최신 Code.gs ${lineCount.toLocaleString("ko-KR")}줄을 불러왔습니다. 저장된 Sheet ID(${spreadsheetId})가 복사본에 자동 반영됩니다.`,
+                "success"
+            );
         }
     }
 
@@ -130,8 +212,10 @@
             applyGasCodeSource(await response.text(), sourceUrl.href);
         } catch (error) {
             if (!gasCodePreview.value || /불러오는 중/.test(gasCodePreview.value)) {
+                gasCodeTemplateSource = "";
                 gasCodePreview.value = "";
                 copyGasCodeButton.disabled = true;
+                copyAndOpenAppsScriptButton.disabled = true;
             }
             const localHint = location.protocol === "file:"
                 ? " 브라우저의 로컬 파일 보안 제한일 수 있으므로 ‘로컬 Code.gs 선택’을 이용해 주세요."
@@ -153,11 +237,11 @@
         if (!copied) throw new Error("브라우저가 복사 명령을 허용하지 않았습니다.");
     }
 
-    async function copyGasCode() {
+    async function copyGasCode(successMessage = "Code.gs 전체를 클립보드에 복사했습니다. Apps Script 편집기에 붙여넣으세요.") {
         const source = String(gasCodePreview.value || "");
         if (!source) {
             setGasCodeStatus("먼저 Code.gs를 불러와 주세요.", "error");
-            return;
+            return false;
         }
 
         copyGasCodeButton.disabled = true;
@@ -168,22 +252,58 @@
             } else {
                 copyGasCodeFallback();
             }
-            setGasCodeStatus("Code.gs 전체를 클립보드에 복사했습니다. Apps Script 편집기에 붙여넣으세요.", "success");
+            setGasCodeStatus(successMessage, "success");
             copyGasCodeButton.textContent = "복사 완료 ✓";
             setTimeout(() => {
                 copyGasCodeButton.textContent = "Code.gs 전체 복사";
             }, 1800);
+            return true;
         } catch (error) {
             setGasCodeStatus(`자동 복사에 실패했습니다. 코드 상자를 클릭해 Ctrl+A, Ctrl+C로 복사해 주세요. (${error?.message || error})`, "error");
             copyGasCodeButton.textContent = "Code.gs 전체 복사";
+            return false;
         } finally {
             copyGasCodeButton.disabled = false;
+        }
+    }
+
+    async function copyGasCodeAndOpenAppsScript() {
+        const originalLabel = copyAndOpenAppsScriptButton.textContent;
+        try {
+            const saved = saveFormConfig();
+            if (!refreshConfiguredGasCode()) return;
+
+            const opensProjectDirectly = Boolean(saved.appsScriptProjectUrl);
+            const targetUrl = saved.appsScriptProjectUrl || saved.spreadsheetUrl;
+            copyAndOpenAppsScriptButton.disabled = true;
+            copyAndOpenAppsScriptButton.textContent = "복사하고 여는 중...";
+            window.open(targetUrl, "_blank", "noopener,noreferrer");
+
+            const message = opensProjectDirectly
+                ? "Sheet ID를 반영한 Code.gs를 복사하고 저장된 Apps Script 편집기를 열었습니다. 기존 코드를 교체해 주세요."
+                : "Sheet ID를 반영한 Code.gs를 복사하고 Google Sheet를 열었습니다. 상단의 확장 프로그램 → Apps Script를 선택하세요.";
+            const copied = await copyGasCode(message);
+            if (copied) copyAndOpenAppsScriptButton.textContent = "복사 및 열기 완료 ✓";
+        } catch (error) {
+            setGasCodeStatus(String(error?.message || error), "error");
+        } finally {
+            setTimeout(() => {
+                copyAndOpenAppsScriptButton.textContent = originalLabel;
+                try {
+                    configApi.getSpreadsheetId(spreadsheetInput.value);
+                    copyAndOpenAppsScriptButton.disabled = !gasCodeTemplateSource;
+                } catch (_) {
+                    copyAndOpenAppsScriptButton.disabled = true;
+                }
+            }, 1800);
         }
     }
 
     function readFormConfig() {
         return {
             gasWebAppUrl: configApi.normalizeGasWebAppUrl(urlInput.value),
+            spreadsheetUrl: configApi.normalizeSpreadsheetUrl(spreadsheetInput.value),
+            appsScriptProjectUrl: configApi.normalizeAppsScriptProjectUrl(appsScriptProjectInput.value),
             checksPerDay: configApi.normalizeChecksPerDay(checksInput.value),
             blockedCheckMinutes: configApi.normalizeBlockedCheckMinutes(blockedCheckInput.value)
         };
@@ -229,7 +349,7 @@
         try {
             const saved = saveFormConfig();
             const appUrl = createAppUrl(saved);
-            setStatus(`새 GAS 배포 URL을 저장했습니다. ${appName}에 전달하여 최신화합니다…`, "success");
+            setStatus(`Google Sheet와 GAS 설정을 저장했습니다. ${appName}에 배포 설정을 전달합니다…`, "success");
             window.location.assign(appUrl.href);
         } catch (error) {
             setStatus(String(error?.message || error), "error");
@@ -238,6 +358,8 @@
 
     function renderConfig(config = configApi.load()) {
         urlInput.value = config.gasWebAppUrl;
+        spreadsheetInput.value = config.spreadsheetUrl;
+        appsScriptProjectInput.value = config.appsScriptProjectUrl;
         checksInput.value = String(config.checksPerDay);
         blockedCheckInput.value = String(config.blockedCheckMinutes);
         savedAtBadge.textContent = config.updatedAt
@@ -245,6 +367,8 @@
             : "기본값 사용 중";
         renderInterval();
         updateAppLink(config);
+        updateResourceLinks(config);
+        refreshConfiguredGasCode();
     }
 
     function renderHistory() {
@@ -257,14 +381,17 @@
             const savedAtCell = document.createElement("td");
             const checksCell = document.createElement("td");
             const blockedCheckCell = document.createElement("td");
+            const spreadsheetCell = document.createElement("td");
             const urlCell = document.createElement("td");
 
             savedAtCell.textContent = formatDateTime(entry.updatedAt);
             checksCell.textContent = `${entry.checksPerDay}회 (${formatInterval(entry.checksPerDay)})`;
             blockedCheckCell.textContent = `${entry.blockedCheckMinutes || configApi.DEFAULT_CONFIG.blockedCheckMinutes}분`;
+            spreadsheetCell.textContent = entry.spreadsheetUrl || configApi.DEFAULT_CONFIG.spreadsheetUrl;
+            spreadsheetCell.title = spreadsheetCell.textContent;
             urlCell.textContent = entry.gasWebAppUrl;
             urlCell.title = entry.gasWebAppUrl;
-            row.append(savedAtCell, checksCell, blockedCheckCell, urlCell);
+            row.append(savedAtCell, checksCell, blockedCheckCell, spreadsheetCell, urlCell);
             historyRows.append(row);
         });
     }
@@ -339,7 +466,7 @@
         event.preventDefault();
         try {
             saveFormConfig();
-            setStatus(`설정을 저장했습니다. 실행 중인 앱에 확실히 전달하려면 ‘배포 URL로 앱 최신화’를 눌러 주세요.`, "success");
+            setStatus(`Google Sheet, Apps Script와 배포 설정을 저장했습니다.`, "success");
         } catch (error) {
             setStatus(String(error?.message || error), "error");
         }
@@ -347,6 +474,8 @@
 
     checksInput.addEventListener("input", renderInterval);
     blockedCheckInput.addEventListener("input", renderInterval);
+    spreadsheetInput.addEventListener("input", updateSpreadsheetPreview);
+    appsScriptProjectInput.addEventListener("input", updateAppsScriptPreview);
     urlInput.addEventListener("input", () => {
         try {
             updateAppLink(readFormConfig());
@@ -364,7 +493,8 @@
     });
     testButton.addEventListener("click", testConnection);
     applyDeploymentToAppButton.addEventListener("click", applyDeploymentToApp);
-    copyGasCodeButton.addEventListener("click", copyGasCode);
+    copyGasCodeButton.addEventListener("click", () => void copyGasCode());
+    copyAndOpenAppsScriptButton.addEventListener("click", copyGasCodeAndOpenAppsScript);
     reloadGasCodeButton.addEventListener("click", loadGasCode);
     gasCodeFileInput.addEventListener("change", async event => {
         const file = event.currentTarget.files?.[0];
@@ -379,7 +509,7 @@
     });
 
     document.getElementById("resetSettingsButton").addEventListener("click", () => {
-        if (!confirm("배포 URL과 점검 주기를 기본값으로 복원할까요?")) return;
+        if (!confirm("Google Sheet, Apps Script, 배포 URL과 점검 주기를 기본값으로 복원할까요?")) return;
         const reset = configApi.reset();
         renderConfig(reset);
         renderHistory();

@@ -7,6 +7,8 @@
         appMark: "FMA",
         storagePrefix: "fma_viewer",
         gasWebAppUrl: "https://script.google.com/macros/s/AKfycbxb89OH02WBeIljK-PY8-jqp6DYy31AnzqGh4U9DsPok2Zer6ccfFVXYsymXan5Gw5R/exec",
+        spreadsheetUrl: "https://docs.google.com/spreadsheets/d/1xNA955JIwe5cHETAMMMaCEfb1QtZnbuc9tKbEDQ573w/edit?gid=2013460554#gid=2013460554",
+        appsScriptProjectUrl: "https://script.google.com/u/0/home/projects/1uhzkAW5vS8kqRVG761QgQ_ft0yw7ujXpGGXm4lX-l9SGlcmGCAdb5zRB/edit",
         deprecatedGasWebAppUrls: [
             "https://script.google.com/macros/s/AKfycbwEcIy_jOmwBh1996tIMf1sCHMIBazfdAJffSSD0pLDDDuzuhKmz-0rRBx9Pm48G9v8/exec",
             "https://script.google.com/macros/s/AKfycbylMbOHMhWgGrFZb00zkidmvGdtRg7qYQUfFSuKSiwW4Lj1j1H2An_bpRgPCbsRlRjM/exec",

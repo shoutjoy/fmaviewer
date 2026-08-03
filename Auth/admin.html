@@ -5,8 +5,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>FMA Viewer 관리자 설정</title>
-    <meta id="adminDescription" name="description" content="FMA Viewer GAS 배포 URL과 등록·차단 점검 주기를 설정합니다.">
-    <link rel="stylesheet" href="admin.css?v=20260802-2">
+    <meta id="adminDescription" name="description" content="FMA Viewer Google Sheet, Apps Script와 GAS 배포 URL을 설정합니다.">
+    <link rel="stylesheet" href="admin.css?v=20260804-1">
 </head>
 
 <body>
@@ -15,11 +15,13 @@
             <div>
                 <p id="adminAppEyebrow" class="eyebrow">FMA VIEWER</p>
                 <h1>관리자 설정</h1>
-                <p>GAS 배포 주소와 사용자 등록·차단 확인 주기를 현재 브라우저에 저장합니다.</p>
+                <p>Google Sheet, Apps Script 편집기와 GAS 배포 주소를 현재 브라우저에 저장합니다.</p>
             </div>
             <nav class="header-links" aria-label="관리자 바로가기">
-                <a class="app-link" href="https://docs.google.com/spreadsheets/d/1xNA955JIwe5cHETAMMMaCEfb1QtZnbuc9tKbEDQ573w/edit?gid=2013460554#gid=2013460554"
-                    target="_blank" rel="noopener noreferrer">관리 스프레드시트 열기</a>
+                <a id="openSpreadsheetHeaderLink" class="app-link" href="#" target="_blank"
+                    rel="noopener noreferrer">Google Sheet 열기</a>
+                <a id="openAppsScriptHeaderLink" class="app-link" href="#" target="_blank"
+                    rel="noopener noreferrer">Apps Script 열기</a>
                 <a id="openAppLink" class="app-link" href="../index.html">FMA Viewer 열기</a>
             </nav>
         </header>
@@ -45,6 +47,29 @@
             </div>
 
             <form id="adminSettingsForm" novalidate>
+                <div class="resource-grid">
+                    <label class="field" for="spreadsheetUrl">
+                        <span>Google Sheet 주소</span>
+                        <input id="spreadsheetUrl" name="spreadsheetUrl" type="url" autocomplete="off"
+                            spellcheck="false" placeholder="https://docs.google.com/spreadsheets/d/.../edit" required>
+                        <small>사용자 인증 정보를 저장할 Sheet 주소입니다. 저장하면 아래 Code.gs의 <code>SPREADSHEET_ID</code>에 자동 반영됩니다.</small>
+                    </label>
+                    <label class="field" for="appsScriptProjectUrl">
+                        <span>Apps Script 편집기 주소 <em>선택</em></span>
+                        <input id="appsScriptProjectUrl" name="appsScriptProjectUrl" type="url" autocomplete="off"
+                            spellcheck="false" placeholder="https://script.google.com/.../home/projects/.../edit">
+                        <small>처음에는 Sheet에서 <strong>확장 프로그램 → Apps Script</strong>를 연 뒤, 열린 편집기 주소를 저장하세요. 다음부터 버튼으로 바로 열 수 있습니다.</small>
+                    </label>
+                </div>
+
+                <div class="resource-action-row">
+                    <a id="openSpreadsheetButton" class="button-link" href="#" target="_blank"
+                        rel="noopener noreferrer">Google Sheet 열기 ↗</a>
+                    <a id="openAppsScriptButton" class="button-link" href="#" target="_blank"
+                        rel="noopener noreferrer">Apps Script 편집기 열기 ↗</a>
+                    <span class="resource-id">Sheet ID <strong id="spreadsheetIdValue">확인 중…</strong></span>
+                </div>
+
                 <label class="field" for="gasWebAppUrl">
                     <span>Google Apps Script 배포 URL</span>
                     <input id="gasWebAppUrl" name="gasWebAppUrl" type="url" autocomplete="off" spellcheck="false"
@@ -104,6 +129,7 @@
                             <th>변경 시각</th>
                             <th>하루 점검</th>
                             <th>Blocked 감시</th>
+                            <th>Google Sheet</th>
                             <th>배포 URL</th>
                         </tr>
                     </thead>
@@ -123,16 +149,18 @@
             </div>
 
             <div class="gas-code-guide">
-                <p>아래 코드는 현재 앱과 맞는 최신 <code>Auth/gas/Code.gs</code>입니다. 복사한 뒤 Google Sheet의 <strong>확장 프로그램 → Apps Script</strong>에서 기존 <code>Code.gs</code> 전체를 교체하고 새 버전으로 배포하세요.</p>
+                <p>저장한 Google Sheet의 ID가 아래 <code>Code.gs</code>에 자동 반영됩니다. 코드를 복사한 뒤 해당 Sheet의 <strong>확장 프로그램 → Apps Script</strong>에서 기존 <code>Code.gs</code> 전체를 교체하고 새 버전으로 배포하세요.</p>
                 <ol>
-                    <li><strong>Code.gs 전체 복사</strong>를 누릅니다.</li>
+                    <li>위에서 Google Sheet 주소를 확인하고 <strong>설정만 저장</strong>을 누릅니다.</li>
+                    <li><strong>Code.gs 복사 후 Apps Script 열기</strong>를 누릅니다.</li>
                     <li>Apps Script 편집기의 기존 코드를 모두 선택해 붙여넣고 저장합니다.</li>
                     <li><code>authorizeServices</code>를 한 번 실행한 뒤 웹 앱을 <strong>새 버전</strong>으로 재배포합니다.</li>
                 </ol>
             </div>
 
             <div class="gas-code-actions">
-                <button id="copyGasCodeButton" class="primary" type="button" disabled>Code.gs 전체 복사</button>
+                <button id="copyAndOpenAppsScriptButton" class="primary" type="button" disabled>Code.gs 복사 후 Apps Script 열기</button>
+                <button id="copyGasCodeButton" type="button" disabled>Code.gs 전체 복사</button>
                 <button id="reloadGasCodeButton" type="button">최신 코드 다시 불러오기</button>
                 <label class="file-button" for="gasCodeFileInput">로컬 Code.gs 선택</label>
                 <input id="gasCodeFileInput" class="visually-hidden" type="file" accept=".gs,.js,.txt,text/plain">
@@ -153,9 +181,9 @@
         </footer>
     </main>
 
-    <script src="settings.js?v=20260804-2"></script>
-    <script src="config.js?v=20260803-1"></script>
-    <script src="admin.js?v=20260804-1"></script>
+    <script src="settings.js?v=20260804-3"></script>
+    <script src="config.js?v=20260804-2"></script>
+    <script src="admin.js?v=20260804-2"></script>
 </body>
 
 </html>

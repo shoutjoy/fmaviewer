@@ -56,12 +56,8 @@
                         <p id="authLoginStatus" class="first-use-status" role="status" aria-live="polite" hidden></p>
                         <p id="authLoginError" class="first-use-error" role="alert" hidden></p>
 
-                        <div class="auth-registration-link-card">
-                            <div>
-                                <strong>아직 이메일 인증을 받지 않았나요?</strong>
-                                <p>처음 사용하는 경우 또는 기존 계정에 비밀번호가 없는 경우 이메일 인증으로 비밀번호를 설정할 수 있습니다.</p>
-                            </div>
-                            <button id="btnAuthLogin" class="auth-link-button" type="button">로그인</button>
+                        <div class="auth-login-submit">
+                            <button id="btnAuthLogin" type="button">로그인</button>
                         </div>
                     </section>
 
@@ -131,8 +127,12 @@
                 </div>
 
                 <footer class="first-use-footer">
-                    <p id="authFooterNote">로그인 전에는 앱이 잠겨 있습니다.</p>
-                    <div class="first-use-footer-actions" data-auth-actions="login">
+                    <p id="authFooterNote" hidden>인증 대기 중에도 입력 내용을 수정해 새 인증 메일을 보낼 수 있습니다.</p>
+                    <div class="auth-registration-prompt" data-auth-actions="login">
+                        <div>
+                            <strong>아직 이메일 인증을 받지 않았나요?</strong>
+                            <p>처음 사용하는 경우 또는 기존 계정에 비밀번호가 없는 경우 이메일 인증으로 비밀번호를 설정할 수 있습니다.</p>
+                        </div>
                         <button id="btnShowRegistration" type="button">이메일 인증하기</button>
                     </div>
                     <div class="first-use-footer-actions" data-auth-actions="registration" hidden>
