@@ -8,6 +8,20 @@
     const appMark = String(settings.appMark || "FMA");
     const policyUrl = String(settings.privacyPolicyUrl || "Auth/privacy_policy.html");
     const recipient = String(settings.notificationRecipient || "shoutjoy1@yonsei.ac.kr");
+    const sessionStorageKey = `${String(settings.storagePrefix || "fma_viewer")}_session_v1`;
+
+    const hasResumableSession = (() => {
+        try {
+            const session = JSON.parse(global.sessionStorage.getItem(sessionStorageKey) || "null");
+            return Boolean(
+                session?.email &&
+                /^[a-f0-9]{64}$/i.test(String(session?.token || "")) &&
+                Date.parse(session?.expiresAt || "") > Date.now()
+            );
+        } catch (_) {
+            return false;
+        }
+    })();
 
     const escapeHtml = value => String(value)
         .replaceAll("&", "&amp;")
@@ -19,6 +33,7 @@
     const container = document.createElement("div");
     container.innerHTML = `
         <div id="firstUseModal" class="first-use-modal" role="dialog" aria-modal="true"
+            ${hasResumableSession ? 'data-auth-resuming="true" style="display:none;"' : ""}
             aria-labelledby="firstUseTitle" aria-describedby="firstUseDescription">
             <div class="first-use-dialog">
                 <header class="first-use-header">
@@ -143,16 +158,27 @@
                     </div>
                 </footer>
             </div>
-        </div>
-        <button id="authLogoutButton" class="auth-logout-button" type="button"
-            aria-label="로그아웃" title="로그아웃 · 드래그하여 이동" hidden>
+        </div>`;
+
+    document.documentElement.classList.add("first-use-locked");
+    while (container.firstElementChild) document.body.appendChild(container.firstElementChild);
+
+    // 설정 푸터가 없는 독립 연동 프로젝트에서는 기존처럼 접근 가능한
+    // 최소 로그아웃 버튼을 제공한다. FMA Viewer는 index.html의 설정 푸터 버튼을 사용한다.
+    if (!document.getElementById("authLogoutButton")) {
+        const fallbackLogoutButton = document.createElement("button");
+        fallbackLogoutButton.id = "authLogoutButton";
+        fallbackLogoutButton.className = "auth-logout-button";
+        fallbackLogoutButton.type = "button";
+        fallbackLogoutButton.hidden = true;
+        fallbackLogoutButton.title = "로그아웃";
+        fallbackLogoutButton.setAttribute("aria-label", "로그아웃");
+        fallbackLogoutButton.innerHTML = `
             <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
                 <path d="m16 17 5-5-5-5"></path>
                 <path d="M21 12H9"></path>
-            </svg>
-        </button>`;
-
-    document.documentElement.classList.add("first-use-locked");
-    while (container.firstElementChild) document.body.appendChild(container.firstElementChild);
+            </svg>`;
+        document.body.appendChild(fallbackLogoutButton);
+    }
 })(window, document);

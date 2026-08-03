@@ -28,8 +28,8 @@
 
 - `settings.js`: 앱 이름, 저장소 접두사, 기본 GAS URL, 서버 버전
 - `config.js`: 관리자 설정 저장 및 URL 매개변수로 전달된 최신 설정 가져오기
-- `modal.js`: 로그인·이메일 인증 팝업과 로그아웃 버튼 생성
-- `client.js`: 로그인, 아이디 저장, 인증 신청·확인, 세션·차단 감시
+- `modal.js`: 로그인·이메일 인증 팝업과 설정 푸터가 없는 독립 연동용 대체 로그아웃 버튼 생성
+- `client.js`: 로그인, 아이디 저장, 인증 신청·확인, 세션·차단 감시, 앱 설정 하단 로그아웃 처리
 - `auth.css`: 인증 화면 스타일
 - `admin.html`, `admin.js`, `admin.css`: 관리자 설정, 서버 검사, `Code.gs` 미리보기·복사, 앱 최신화
 - `privacy_policy.html`, `PRIVACY_POLICY.md`, `privacyPolicy.js`: 개인정보 처리방침

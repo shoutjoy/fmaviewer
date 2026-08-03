@@ -150,15 +150,16 @@ function setupEventListeners() {
         await handleImportFolder(Array.from(e.target.files));
         e.target.value = "";
     };
-    dom.btnSave.onclick = saveFMA;
+    dom.btnSave.onclick = () => saveFMA();
+    dom.btnSaveCompact.onclick = () => saveFMA({ compressImages: true });
     dom.btnSaveDbSnapshot.onclick = saveCurrentStateToDbHistory;
     dom.btnOpenDbHistory.onclick = openDbHistoryWindow;
-    dom.btnSaveFmaPanel.onclick = saveFMA;
+    dom.btnSaveFmaPanel.onclick = () => saveFMA();
     dom.btnClear.onclick = resetProject;
     dom.btnZip.onclick = downloadAllAsZIP;
     dom.btnRestoreRemove.onclick = restoreLastDeleted;
     dom.btnRestore.onclick = restoreLastSession;
-    [dom.btnOpen, dom.btnSave, dom.btnZip, dom.btnAddImg, dom.btnOpenFolder].forEach(button => {
+    [dom.btnOpen, dom.btnSave, dom.btnSaveCompact, dom.btnZip, dom.btnAddImg, dom.btnOpenFolder].forEach(button => {
         button.addEventListener("click", closeFileMenu);
     });
     [dom.btnSaveDbSnapshot, dom.btnOpenDbHistory].forEach(button => {

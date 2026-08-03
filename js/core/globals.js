@@ -82,6 +82,7 @@ var dom = {
     btnPasteImg: document.getElementById("btnPasteImg"),
     importStatus: document.getElementById("importStatus"),
     btnSave: document.getElementById("btnSave"),
+    btnSaveCompact: document.getElementById("btnSaveCompact"),
     btnSaveFmaPanel: document.getElementById("btnSaveFmaPanel"),
     btnClear: document.getElementById("btnClear"),
     btnZoomIn: document.getElementById("btnZoomIn"),

@@ -7,8 +7,8 @@
     <title>FMA Viewer Ultra</title>
 
     <!-- Project Styles -->
-    <link rel="stylesheet" href="css/styles.css?v=20260804-1">
-    <link rel="stylesheet" href="Auth/auth.css?v=20260804-5">
+    <link rel="stylesheet" href="css/styles.css?v=20260804-4">
+    <link rel="stylesheet" href="Auth/auth.css?v=20260804-6">
 
     <!-- JSZip CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -34,6 +34,8 @@
             <div id="fileMenuDropdown" class="header-dropdown-menu" style="display:none;">
                 <button id="btnOpen" type="button"><span>⌑</span> Open FMA</button>
                 <button id="btnSave" type="button"><span>◇</span> Save FMA</button>
+                <button id="btnSaveCompact" type="button"
+                    title="PNG/JPEG/BMP 이미지를 WebP 품질 82로 변환해 더 작게 저장"><span>◈</span> Save FMA (WebP 압축)</button>
                 <button id="btnZip" type="button"><span>ZIP</span> Download ZIP</button>
                 <button id="btnAddImg" type="button"><span>＋</span> Add Image</button>
                 <button id="btnOpenFolder" type="button"><span>▤</span> Open Folder</button>
@@ -125,24 +127,24 @@
     </header>
 
     <nav id="externalAppButtons" class="external-app-buttons" style="display:none;"
-        aria-label="내장 이미지 앱">
+        aria-label="내장 및 Gemini 이미지 앱">
         <div class="external-app-drag-handle" title="드래그하여 앱 도크 이동" aria-label="앱 도크 이동">
             <span aria-hidden="true">✦</span><b>APPS</b><i aria-hidden="true">⠿</i>
             <button class="external-app-compact-toggle" type="button" title="앱 도크 축소/확장"
                 aria-label="앱 도크 축소 또는 확장">◉</button>
         </div>
-        <button id="btnOpenStoryApp" class="external-app-button story" type="button"
-            style="display:none;" title="공유 Gemini Story 앱을 새 탭에서 열기"><span class="app-icon">S</span><span class="app-label">Story Gemini ↗</span></button>
         <button id="btnOpenStoryHtmlApp" class="external-app-button story-html" type="button"
             style="display:none;" title="Story Image HTML 내장 앱 열기"><span class="app-icon">H</span><span class="app-label">Story Image</span></button>
         <button id="btnOpenAuraApp" class="external-app-button aura" type="button"
             style="display:none;" title="Aura Local 열기"><span class="app-icon">A</span><span class="app-label">Aura Local</span></button>
+        <button id="btnOpenBgApp" class="external-app-button bg" type="button"
+            style="display:none;" title="BG Remover App 열기"><span class="app-icon">✂</span><span class="app-label">BG App</span></button>
+        <button id="btnOpenStoryApp" class="external-app-button story" type="button"
+            style="display:none;" title="공유 Gemini Story 앱을 새 탭에서 열기"><span class="app-icon">S</span><span class="app-label">Story Gemini ↗</span></button>
         <button id="btnOpenAuraGeminiApp" class="external-app-button aura-gemini" type="button"
             style="display:none;" title="공유 Gemini Aura 앱을 새 탭에서 열기"><span class="app-icon">G</span><span class="app-label">Aura Gemini ↗</span></button>
         <button id="btnOpenBackgroundGeminiApp" class="external-app-button background-gemini" type="button"
             style="display:none;" title="공유 Gemini 배경생성 앱을 새 탭에서 열기"><span class="app-icon">B</span><span class="app-label">배경생성 Gemini ↗</span></button>
-        <button id="btnOpenBgApp" class="external-app-button bg" type="button"
-            style="display:none;" title="BG Remover App 열기"><span class="app-icon">✂</span><span class="app-label">BG App</span></button>
     </nav>
 
     <div class="layout">
@@ -416,6 +418,8 @@
                         rel="noopener noreferrer" aria-label="Google AI Studio 사용량 확인 페이지 열기">
                         <span aria-hidden="true">↗</span> 사용량 체크
                     </a>
+                    <button id="authLogoutButton" class="settings-logout-button" type="button"
+                        aria-label="로그아웃" title="로그아웃" hidden>로그아웃</button>
                 </div>
                 <div>
                     <button id="btnSettingsCancel" type="button">취소</button>
@@ -1899,8 +1903,8 @@
     </div>
 
     <!-- Project Scripts (Modularized) -->
-    <script src="js/core/globals.js?v=20260802-1"></script>
-    <script src="js/storage/database.js?v=20260802-1"></script>
+    <script src="js/core/globals.js?v=20260804-1"></script>
+    <script src="js/storage/database.js?v=20260804-1"></script>
     <script src="js/gallery/gallery.js?v=20260802-1"></script>
     <script src="js/image/imageMetadata.js?v=20260802-1"></script>
     <script src="js/gallery/preview.js?v=20260802-1"></script>
@@ -1911,15 +1915,15 @@
     <script src="js/image/imageEditor.js?v=20260802-1"></script>
     <script src="js/image/backgroundMaskEditor.js?v=20260802-1"></script>
     <script src="js/image/backgroundRemove.js?v=20260802-1"></script>
-    <script src="js/files/fileHandlers.js?v=20260802-1"></script>
+    <script src="js/files/fileHandlers.js?v=20260804-1"></script>
     <script src="js/integrations/externalApps.js?v=20260804-1"></script>
     <script src="js/core/interaction.js?v=20260802-1"></script>
     <script src="Auth/settings.js?v=20260804-3"></script>
     <script src="Auth/config.js?v=20260804-2"></script>
-    <script src="Auth/modal.js?v=20260804-5"></script>
-    <script src="Auth/client.js?v=20260804-5"></script>
+    <script src="Auth/modal.js?v=20260804-7"></script>
+    <script src="Auth/client.js?v=20260804-7"></script>
     <script src="js/core/navigationGuard.js?v=20260802-1"></script>
-    <script src="js/core/app.js?v=20260802-1"></script>
+    <script src="js/core/app.js?v=20260804-1"></script>
 </body>
 
 </html>

@@ -435,6 +435,7 @@ async function restoreLastSession() {
         const legacy = await readStoreValue(db, STORE_NAME, KEY_NAME);
         if (!legacy) return;
         if (legacy._isMerged) {
+            if (typeof releaseFmaArchiveObjectUrls === "function") releaseFmaArchiveObjectUrls();
             images = legacy._data || [];
             normalizeRestoredImages(images);
             renderRestoredViewer({});
@@ -467,6 +468,7 @@ async function applyDbSnapshot(snapshot, progressTarget) {
     try {
         const metadataEntries = await readMetadataEntries(db, snapshot.imageIds || []);
         await report(32, "썸네일과 메타정보를 먼저 구성하는 중입니다.");
+        if (typeof releaseFmaArchiveObjectUrls === "function") releaseFmaArchiveObjectUrls();
         images = metadataEntries.map((entry, index) => {
             const payload = entry?.payload || {};
             const thumbnailSrc = entry?.thumbnailBlob
@@ -687,6 +689,7 @@ async function applyLegacyDbSnapshot(snapshot, progressTarget) {
     if (!restored.length) {
         throw new Error("이전 저장본에서 이미지 목록을 찾지 못했습니다.");
     }
+    if (typeof releaseFmaArchiveObjectUrls === "function") releaseFmaArchiveObjectUrls();
     images = restored;
     normalizeRestoredImages(images);
     restoreViewerState(snapshot.state || {});

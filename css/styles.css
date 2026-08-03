@@ -80,6 +80,10 @@ header button.active {
     backdrop-filter: blur(12px);
 }
 
+.file-menu .header-dropdown-menu {
+    width: 224px;
+}
+
 .header-dropdown-menu button {
     width: 100%;
     display: grid;
@@ -3444,6 +3448,30 @@ html[data-theme="light"] .editor-fma-picker-item.active {
     flex-wrap: wrap;
 }
 
+.settings-logout-button {
+    min-height: 36px;
+    padding: 0 13px !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    color: #d9f8ff !important;
+    border-color: rgba(112, 226, 255, .36) !important;
+    background: rgba(9, 32, 45, .62) !important;
+}
+
+.settings-logout-button[hidden] {
+    display: none;
+}
+
+.settings-logout-button:hover,
+.settings-logout-button:focus-visible {
+    color: #ffffff !important;
+    border-color: rgba(112, 226, 255, .72) !important;
+    background: rgba(18, 72, 91, .72) !important;
+    outline: none;
+}
+
 .settings-usage-link {
     display: inline-flex;
     align-items: center;
@@ -3507,6 +3535,12 @@ html[data-theme="light"] .settings-privacy-link {
     border-color: rgba(94, 65, 171, .27);
     color: #5d3ea8;
     background: rgba(116, 83, 203, .08);
+}
+
+html[data-theme="light"] .settings-logout-button {
+    color: #24546a !important;
+    border-color: rgba(31, 105, 130, .28) !important;
+    background: rgba(31, 105, 130, .08) !important;
 }
 
 

@@ -17,6 +17,8 @@ const registrationIds = [
 ];
 const elements = new Map(registrationIds.map((id) => [id, { id, disabled: false, textContent: '' }]));
 elements.set('authLoginEmail', { id: 'authLoginEmail', disabled: false, textContent: '', value: '' });
+elements.set('firstUseModal', { id: 'firstUseModal', style: { display: 'flex' }, dataset: {} });
+elements.set('authLogoutButton', { id: 'authLogoutButton', hidden: false });
 const noOp = () => {};
 let confirmMessage = '';
 const documentMock = {
@@ -71,18 +73,6 @@ for (const id of registrationIds) {
   assert.equal(elements.get(id).disabled, false, `${id}는 발송 처리 후 다시 활성화되어야 합니다.`);
 }
 
-assert.deepEqual(
-  { ...context.clampLogoutButtonCoordinates(-50, 900, 42, 42, 800, 600) },
-  { x: 8, y: 550 },
-  '플로팅 로그아웃 버튼은 화면 밖으로 이동하면 안 됩니다.'
-);
-
-assert.deepEqual(
-  { ...context.getDefaultLogoutButtonPosition(42, 42, 613, 654) },
-  { x: 563, y: 68 },
-  '로그아웃 버튼의 초기 위치는 우측 상단이어야 합니다.'
-);
-
 assert.equal(context.normalizeGmailAddress(' ShoutJoy97 '), 'shoutjoy97@gmail.com');
 assert.equal(context.normalizeGmailAddress('User.Name@gmail.com'), 'user.name@gmail.com');
 assert.equal(context.normalizeGmailAddress('user@example.com'), 'user@example.com');
@@ -90,7 +80,24 @@ elements.get('authLoginEmail').value = 'shoutjoy97';
 assert.equal(context.completeGmailInput(elements.get('authLoginEmail')), 'shoutjoy97@gmail.com');
 assert.equal(elements.get('authLoginEmail').value, 'shoutjoy97@gmail.com');
 
-context.handleLogoutButtonClick({ preventDefault: noOp, stopPropagation: noOp });
+context.hideAuthModalForSessionResume();
+assert.equal(elements.get('firstUseModal').style.display, 'none');
+assert.equal(elements.get('firstUseModal').dataset.authResuming, 'true');
+assert.equal(elements.get('authLogoutButton').hidden, true);
+
+context.handleLogoutButtonClick();
 assert.equal(confirmMessage, '로그아웃하시겠습니까?');
 
-console.log('auth-client.test.cjs: 인증 입력 및 플로팅 로그아웃 검증 통과');
+const indexSource = fs.readFileSync(path.join(__dirname, '..', '..', 'index.html'), 'utf8');
+const modalSource = fs.readFileSync(path.join(__dirname, '..', 'modal.js'), 'utf8');
+assert.match(
+  indexSource,
+  /id="authLogoutButton" class="settings-logout-button"/,
+  '로그아웃 버튼은 앱 설정 하단에 있어야 합니다.'
+);
+assert.match(modalSource, /설정 푸터가 없는 독립 연동 프로젝트/);
+assert.match(modalSource, /hasResumableSession/);
+assert.match(fs.readFileSync(codePath, 'utf8'), /resumeSession\(session\)[\s\S]*hideAuthModalForSessionResume\(\)/);
+assert.doesNotMatch(fs.readFileSync(codePath, 'utf8'), /beginLogoutButtonDrag|positionLogoutButton/);
+
+console.log('auth-client.test.cjs: 인증 입력, 세션 복원 숨김 및 설정 푸터 로그아웃 검증 통과');

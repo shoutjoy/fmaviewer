@@ -422,44 +422,27 @@ html.first-use-locked body {
     transform: none;
 }
 
+/* 설정 푸터가 없는 독립 Auth 연동 프로젝트용 대체 버튼 */
 .auth-logout-button {
     position: fixed;
     z-index: 29000;
     top: 68px;
     right: 8px;
-    bottom: auto;
     width: 42px;
     height: 42px;
     padding: 0;
+    display: grid;
+    place-items: center;
     border: 1px solid rgba(112, 226, 255, .3);
     border-radius: 9px;
     color: #d9f8ff;
-    background: rgba(9, 24, 36, .82);
+    background: rgba(9, 24, 36, .9);
     box-shadow: 0 8px 26px rgba(0, 0, 0, .28);
-    backdrop-filter: blur(10px);
-    display: grid;
-    place-items: center;
-    cursor: grab;
-    touch-action: none;
-    user-select: none;
-    -webkit-user-select: none;
+    cursor: pointer;
 }
 
-.auth-logout-button:hover {
-    border-color: rgba(112, 226, 255, .62);
-    background: rgba(18, 50, 67, .92);
-    transform: translateY(-1px);
-}
-
-.auth-logout-button:active,
-.auth-logout-button.is-dragging {
-    cursor: grabbing;
-    transform: none;
-}
-
-.auth-logout-button.is-dragging {
-    border-color: rgba(112, 226, 255, .82);
-    box-shadow: 0 12px 34px rgba(0, 0, 0, .4), 0 0 0 3px rgba(112, 226, 255, .12);
+.auth-logout-button[hidden] {
+    display: none;
 }
 
 .auth-logout-button svg {
@@ -470,7 +453,6 @@ html.first-use-locked body {
     stroke-width: 2;
     stroke-linecap: round;
     stroke-linejoin: round;
-    pointer-events: none;
 }
 
 html[data-theme="light"] .first-use-modal {
@@ -552,7 +534,7 @@ html[data-theme="light"] .first-use-footer .first-use-reset {
 html[data-theme="light"] .auth-logout-button {
     color: #244257;
     border-color: rgba(31, 105, 130, .24);
-    background: rgba(255, 255, 255, .9);
+    background: rgba(255, 255, 255, .94);
 }
 
 @media (max-width: 680px) {
@@ -599,9 +581,4 @@ html[data-theme="light"] .auth-logout-button {
         flex-direction: column;
     }
 
-    .auth-logout-button {
-        right: 8px;
-        top: 68px;
-        bottom: auto;
-    }
 }

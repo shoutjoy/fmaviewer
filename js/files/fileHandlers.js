@@ -2,26 +2,154 @@
    File Handling & Data Logic
    ======================================================= */
 
-function loadFMA(file) {
-    const reader = new FileReader();
-    reader.onload = e => {
-        try {
-            const data = JSON.parse(e.target.result);
-            saveToDB(data);
-            processFMAData(data);
-        } catch (err) {
-            alert("파일 형식이 잘못되었습니다.");
+const FMA_ARCHIVE_FORMAT = "fma-archive";
+const FMA_ARCHIVE_VERSION = 3;
+const FMA_MANIFEST_PATH = "manifest.json";
+const FMA_MEDIA_REF_KEY = "$fmaMedia";
+let fmaArchiveObjectUrls = new Set();
+
+async function loadFMA(file) {
+    if (!file) return;
+    showLoading(`FMA 파일 확인 중: ${file.name}`);
+    try {
+        if (await isZipBasedFma(file)) {
+            await loadFmaArchive(file);
+            await saveCurrentImagesToDB();
+            updateImportStatus(`${file.name}: 압축 FMA를 불러왔습니다.`);
+        } else {
+            const data = JSON.parse(await file.text());
+            releaseFmaArchiveObjectUrls();
+            saveToDB(data).catch(error => console.warn("Legacy FMA DB backup failed:", error));
+            await processFMAData(data);
+            updateImportStatus(`${file.name}: 기존 FMA를 불러왔습니다. 다시 저장하면 압축 형식으로 변환됩니다.`);
         }
-    };
-    reader.readAsText(file);
+    } catch (err) {
+        console.error("FMA load error:", err);
+        hideLoading();
+        alert("FMA 파일을 열 수 없습니다: " + (err?.message || "파일 형식이 잘못되었습니다."));
+    }
 }
 
-async function processFMAData(data) {
+async function isZipBasedFma(file) {
+    const signature = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+    return signature.length >= 4 &&
+        signature[0] === 0x50 && signature[1] === 0x4b &&
+        ((signature[2] === 0x03 && signature[3] === 0x04) ||
+            (signature[2] === 0x05 && signature[3] === 0x06) ||
+            (signature[2] === 0x07 && signature[3] === 0x08));
+}
+
+async function loadFmaArchive(file) {
+    if (typeof JSZip === "undefined") {
+        throw new Error("압축 FMA 처리 모듈을 불러오지 못했습니다.");
+    }
+    const zip = await JSZip.loadAsync(file);
+    const manifestEntry = zip.file(FMA_MANIFEST_PATH);
+    if (!manifestEntry) throw new Error("FMA manifest.json이 없습니다.");
+
+    const manifest = JSON.parse(await manifestEntry.async("string"));
+    if (manifest?.format !== FMA_ARCHIVE_FORMAT || Number(manifest?.version) < FMA_ARCHIVE_VERSION) {
+        throw new Error("지원하지 않는 압축 FMA 형식입니다.");
+    }
+    if (!Array.isArray(manifest.images) || manifest.images.length === 0 ||
+        !manifest.media || typeof manifest.media !== "object" || Array.isArray(manifest.media)) {
+        throw new Error("FMA manifest의 이미지 또는 미디어 정보가 올바르지 않습니다.");
+    }
+
+    const referencedIds = collectFmaMediaReferences(manifest.images);
+    const mediaUrls = new Map();
+    const createdUrls = [];
+    try {
+        let completed = 0;
+        for (const mediaId of referencedIds) {
+            const record = manifest.media[mediaId];
+            const entryPath = validateFmaMediaRecord(mediaId, record);
+            const entry = zip.file(entryPath);
+            if (!entry || entry.dir) throw new Error(`FMA 미디어를 찾을 수 없습니다: ${entryPath}`);
+            const extracted = await entry.async("blob");
+            const blob = new Blob([extracted], {
+                type: String(record.mimeType || extracted.type || "application/octet-stream")
+            });
+            const url = URL.createObjectURL(blob);
+            createdUrls.push(url);
+            mediaUrls.set(mediaId, url);
+            completed++;
+            updateLoading(10 + (completed / Math.max(1, referencedIds.size)) * 70);
+            if (completed % 3 === 0) await new Promise(resolve => requestAnimationFrame(resolve));
+        }
+
+        const restoredData = {
+            ...manifest,
+            images: restoreFmaMediaReferences(manifest.images, mediaUrls)
+        };
+        const invalidIndex = restoredData.images.findIndex(item =>
+            !item || typeof item.src !== "string" || !item.src.startsWith("blob:")
+        );
+        if (invalidIndex >= 0) {
+            throw new Error(`FMA 이미지 참조가 올바르지 않습니다: images[${invalidIndex}]`);
+        }
+        releaseFmaArchiveObjectUrls();
+        fmaArchiveObjectUrls = new Set(createdUrls);
+        await processFMAData(restoredData, { keepArchiveUrls: true });
+    } catch (error) {
+        createdUrls.forEach(url => URL.revokeObjectURL(url));
+        throw error;
+    }
+}
+
+function validateFmaMediaRecord(mediaId, record) {
+    if (!record || typeof record.path !== "string" || !record.path.startsWith("media/")) {
+        throw new Error(`FMA 미디어 참조가 올바르지 않습니다: ${mediaId}`);
+    }
+    const normalized = record.path.replace(/\\/g, "/");
+    if (normalized.includes("../") || normalized.startsWith("/") || normalized.includes("\0")) {
+        throw new Error(`허용되지 않은 FMA 미디어 경로입니다: ${record.path}`);
+    }
+    return normalized;
+}
+
+function collectFmaMediaReferences(value, result = new Set()) {
+    if (!value || typeof value !== "object") return result;
+    if (!Array.isArray(value) && typeof value[FMA_MEDIA_REF_KEY] === "string" &&
+        Object.keys(value).length === 1) {
+        result.add(value[FMA_MEDIA_REF_KEY]);
+        return result;
+    }
+    if (Array.isArray(value)) value.forEach(child => collectFmaMediaReferences(child, result));
+    else Object.values(value).forEach(child => collectFmaMediaReferences(child, result));
+    return result;
+}
+
+function restoreFmaMediaReferences(value, mediaUrls) {
+    if (!Array.isArray(value) && value && typeof value === "object" &&
+        typeof value[FMA_MEDIA_REF_KEY] === "string" && Object.keys(value).length === 1) {
+        const mediaId = value[FMA_MEDIA_REF_KEY];
+        const url = mediaUrls.get(mediaId);
+        if (!url) throw new Error(`FMA 미디어 참조를 복원할 수 없습니다: ${mediaId}`);
+        return url;
+    }
+    if (Array.isArray(value)) return value.map(child => restoreFmaMediaReferences(child, mediaUrls));
+    if (!value || typeof value !== "object") return value;
+    return Object.fromEntries(Object.entries(value).map(([key, child]) => [
+        key, restoreFmaMediaReferences(child, mediaUrls)
+    ]));
+}
+
+function releaseFmaArchiveObjectUrls() {
+    fmaArchiveObjectUrls.forEach(url => URL.revokeObjectURL(url));
+    fmaArchiveObjectUrls.clear();
+}
+
+window.addEventListener("beforeunload", releaseFmaArchiveObjectUrls);
+
+async function processFMAData(data, options = {}) {
+    if (!options.keepArchiveUrls) releaseFmaArchiveObjectUrls();
     images = [];
     showLoading("Extracting Data...");
     try {
         const exportedImages = Array.isArray(data?.images)
-            ? data.images.filter(item => item && typeof item.src === "string" && /^data:(image|video)\//.test(item.src))
+            ? data.images.filter(item => item && typeof item.src === "string" &&
+                /^(?:data:(?:image|video)\/|blob:)/.test(item.src))
             : [];
 
         if (exportedImages.length > 0) {
@@ -469,82 +597,288 @@ async function downloadAllAsZIP() {
     }
 }
 
-async function saveFMA() {
+async function saveFMA(options = {}) {
     if (images.length === 0) {
         alert("저장할 데이터가 없습니다.");
         return;
     }
+    if (typeof JSZip === "undefined") {
+        alert("압축 FMA 처리 모듈을 불러오지 못했습니다.");
+        return;
+    }
 
-    showLoading("FMA 파일 생성 중...");
+    const compressImages = Boolean(options.compressImages);
+    showLoading(compressImages
+        ? "WebP 고압축 FMA 파일 생성 중..."
+        : "압축 FMA 파일 생성 중...");
 
     await new Promise(resolve => requestAnimationFrame(resolve));
     try {
-            const exportedSources = [];
-            for (let index = 0; index < images.length; index++) {
-                await ensureImageOriginalLoaded?.(images[index]);
-                exportedSources.push(await imageSourceToPortableDataUrl(images[index].src));
-                updateLoading(Math.min(45, 5 + ((index + 1) / images.length) * 40));
-                if (index % 3 === 2) await new Promise(resolve => requestAnimationFrame(resolve));
-            }
-            const output = {
-                version: "2.0_Exported",
-                timestamp: new Date().toISOString(),
-                images: images.map((img, index) => ({
-                    path: img.path,
-                    src: exportedSources[index],
-                    group: img.group,
-                    date: img.date,
-                    createdAt: img.createdAt || img.date,
-                    size: img.size,
-                    mimeType: img.mimeType,
-                    mediaType: isVideoMedia(img) ? "video" : "image",
-                    isFav: img.isFav,
-                    width: img.width,
-                    height: img.height,
-                    modifiedAt: img.modifiedAt,
-                    metadata: img.metadata || {},
-                    embeddedMetadata: img.embeddedMetadata || {},
-                    embeddedMetadataScanned: Boolean(img.embeddedMetadataScanned),
-                    cropSourcePath: img.cropSourcePath,
-                    cropRect: img.cropRect,
-                    upscaleSourcePath: img.upscaleSourcePath,
-                    upscaleMethod: img.upscaleMethod,
-                    upscaleInfo: img.upscaleInfo,
-                    backgroundRemoveSourcePath: img.backgroundRemoveSourcePath,
-                    backgroundRemoveSourceSrc: img.backgroundRemoveSourceSrc,
-                    backgroundRemoveMethod: img.backgroundRemoveMethod,
-                    backgroundRemoveInfo: img.backgroundRemoveInfo,
-                    imageEditParentPath: img.imageEditParentPath,
-                    imageEditSourceSrc: img.imageEditSourceSrc,
-                    imageEditConfig: img.imageEditConfig,
-                    imageEditInfo: img.imageEditInfo,
-                    fmeProject: img.fmeProject
-                }))
-            };
-
-            updateLoading(55);
-
-            const json = JSON.stringify(output);
-            const blob = new Blob([json], { type: "application/json" });
-            const url = URL.createObjectURL(blob);
-
-            updateLoading(90);
-
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `project_export_${Date.now()}.fma`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-
-            URL.revokeObjectURL(url);
-            updateLoading(100);
+        const archive = await buildFmaArchive({ compressImages });
+        updateLoading(58);
+        const blob = await archive.zip.generateAsync({
+            type: "blob",
+            mimeType: "application/vnd.fma+zip",
+            compression: "DEFLATE",
+            compressionOptions: { level: 6 },
+            streamFiles: true
+        }, metadata => updateLoading(58 + (metadata.percent * .38)));
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `project_export_${Date.now()}.fma`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        updateLoading(100);
+        updateImportStatus(
+            `${compressImages ? "WebP 고압축" : "원본 보존"} FMA 저장 완료: ` +
+            `미디어 ${archive.mediaCount}개` +
+            (compressImages ? ` · WebP 변환 ${archive.convertedCount}개` : "") +
+            ` · ${formatFmaBytes(blob.size)}`
+        );
     } catch (err) {
-            console.error("Save error:", err);
-            alert("저장 중 오류가 발생했습니다: " + err.message);
+        console.error("Save error:", err);
+        alert("저장 중 오류가 발생했습니다: " + err.message);
     } finally {
-            setTimeout(hideLoading, 500);
+        setTimeout(hideLoading, 500);
     }
+}
+
+async function buildFmaArchive(options = {}) {
+    const zip = new JSZip();
+    const mediaFiles = new Map();
+    const mediaManifest = {};
+    const mediaSourceCache = new Map();
+    const conversionStats = { converted: 0 };
+    const archiveOptions = {
+        compressImages: Boolean(options.compressImages),
+        conversionStats
+    };
+    const exportedImages = [];
+
+    for (let index = 0; index < images.length; index++) {
+        const img = images[index];
+        if (typeof ensureImageOriginalLoaded === "function") await ensureImageOriginalLoaded(img);
+        const exportedItem = createFmaExportItem(img);
+        const primaryReference = await registerFmaMediaSource(
+            img.src, mediaFiles, mediaManifest, mediaSourceCache,
+            { mimeType: img.mimeType, sourcePath: img.path, ...archiveOptions }
+        );
+        exportedItem.src = primaryReference;
+        const primaryRecord = mediaManifest[primaryReference[FMA_MEDIA_REF_KEY]];
+        exportedItem.mimeType = primaryRecord.mimeType;
+        exportedItem.size = primaryRecord.size;
+        exportedItem.mediaType = primaryRecord.mimeType.startsWith("video/") ? "video" : "image";
+        await externalizeFmaNestedMedia(
+            exportedItem, mediaFiles, mediaManifest, mediaSourceCache, archiveOptions
+        );
+        exportedImages.push(exportedItem);
+        updateLoading(5 + ((index + 1) / images.length) * 45);
+        if (index % 3 === 2) await new Promise(resolve => requestAnimationFrame(resolve));
+    }
+
+    for (const { path, blob } of mediaFiles.values()) {
+        zip.file(path, blob, { binary: true, compression: "STORE", createFolders: true });
+    }
+    const timestamp = new Date().toISOString();
+    const manifest = {
+        format: FMA_ARCHIVE_FORMAT,
+        version: FMA_ARCHIVE_VERSION,
+        timestamp,
+        generator: "FMA Viewer Ultra",
+        images: exportedImages,
+        media: mediaManifest
+    };
+    zip.file(FMA_MANIFEST_PATH, JSON.stringify(manifest), {
+        compression: "DEFLATE",
+        compressionOptions: { level: 6 }
+    });
+    return {
+        zip,
+        mediaCount: mediaFiles.size,
+        convertedCount: conversionStats.converted
+    };
+}
+
+function createFmaExportItem(img) {
+    return {
+        path: img.path,
+        src: img.src,
+        group: img.group,
+        date: img.date,
+        createdAt: img.createdAt || img.date,
+        size: img.size,
+        mimeType: img.mimeType,
+        mediaType: isVideoMedia(img) ? "video" : "image",
+        isFav: img.isFav,
+        width: img.width,
+        height: img.height,
+        modifiedAt: img.modifiedAt,
+        metadata: cloneFmaValue(img.metadata || {}),
+        embeddedMetadata: cloneFmaValue(img.embeddedMetadata || {}),
+        embeddedMetadataScanned: Boolean(img.embeddedMetadataScanned),
+        cropSourcePath: img.cropSourcePath,
+        cropRect: cloneFmaValue(img.cropRect),
+        upscaleSourcePath: img.upscaleSourcePath,
+        upscaleMethod: img.upscaleMethod,
+        upscaleInfo: cloneFmaValue(img.upscaleInfo),
+        backgroundRemoveSourcePath: img.backgroundRemoveSourcePath,
+        backgroundRemoveSourceSrc: img.backgroundRemoveSourceSrc,
+        backgroundRemoveMethod: img.backgroundRemoveMethod,
+        backgroundRemoveInfo: cloneFmaValue(img.backgroundRemoveInfo),
+        imageEditParentPath: img.imageEditParentPath,
+        imageEditSourceSrc: img.imageEditSourceSrc,
+        imageEditConfig: cloneFmaValue(img.imageEditConfig),
+        imageEditInfo: cloneFmaValue(img.imageEditInfo),
+        fmeProject: cloneFmaValue(img.fmeProject)
+    };
+}
+
+function cloneFmaValue(value) {
+    if (value === undefined || value === null) return value;
+    if (typeof structuredClone === "function") return structuredClone(value);
+    return JSON.parse(JSON.stringify(value));
+}
+
+async function fetchFmaMediaBlob(src, fallbackMimeType = "") {
+    if (!src) throw new Error("FMA에 저장할 미디어 원본이 없습니다.");
+    const response = await fetch(src);
+    if (!response.ok) throw new Error("FMA에 저장할 미디어 원본을 읽지 못했습니다.");
+    const blob = await response.blob();
+    if (!blob.size) throw new Error("FMA에 저장할 미디어가 비어 있습니다.");
+    if (!blob.type && fallbackMimeType) return new Blob([blob], { type: fallbackMimeType });
+    return blob;
+}
+
+async function registerFmaMedia(blob, mediaFiles, mediaManifest, hints = {}) {
+    const mimeType = String(blob.type || hints.mimeType || "application/octet-stream");
+    const normalizedBlob = blob.type ? blob : new Blob([blob], { type: mimeType });
+    const mediaId = await hashImageBlob(normalizedBlob);
+    if (!mediaFiles.has(mediaId)) {
+        const extension = getFmaMediaExtension(mimeType, hints.sourcePath);
+        const safeId = mediaId.replace(/[^a-z0-9_-]/gi, "-");
+        const path = `media/${safeId}.${extension}`;
+        mediaFiles.set(mediaId, { path, blob: normalizedBlob });
+        mediaManifest[mediaId] = {
+            path,
+            mimeType,
+            size: normalizedBlob.size
+        };
+    }
+    return { [FMA_MEDIA_REF_KEY]: mediaId };
+}
+
+async function registerFmaMediaSource(src, mediaFiles, mediaManifest, sourceCache, hints = {}) {
+    if (sourceCache.has(src)) return { [FMA_MEDIA_REF_KEY]: sourceCache.get(src) };
+    let blob = await fetchFmaMediaBlob(src, hints.mimeType);
+    if (hints.compressImages) {
+        const optimized = await optimizeFmaImageBlob(blob);
+        if (optimized !== blob) {
+            blob = optimized;
+            if (hints.conversionStats) hints.conversionStats.converted++;
+        }
+    }
+    const reference = await registerFmaMedia(blob, mediaFiles, mediaManifest, hints);
+    sourceCache.set(src, reference[FMA_MEDIA_REF_KEY]);
+    return reference;
+}
+
+async function externalizeFmaNestedMedia(
+    value, mediaFiles, mediaManifest, sourceCache, archiveOptions = {}, visited = new WeakSet()
+) {
+    if (!value || typeof value !== "object") return;
+    if (visited.has(value)) throw new Error("FMA 메타정보에 순환 참조가 있어 저장할 수 없습니다.");
+    visited.add(value);
+    const entries = Array.isArray(value)
+        ? value.map((child, index) => [index, child])
+        : Object.entries(value);
+    for (const [key, child] of entries) {
+        if (typeof child === "string" && /^(?:data:(?:image|video)\/|blob:)/.test(child)) {
+            value[key] = await registerFmaMediaSource(
+                child, mediaFiles, mediaManifest, sourceCache, archiveOptions
+            );
+        } else if (typeof Blob !== "undefined" && child instanceof Blob) {
+            const optimized = archiveOptions.compressImages
+                ? await optimizeFmaImageBlob(child) : child;
+            if (optimized !== child && archiveOptions.conversionStats) {
+                archiveOptions.conversionStats.converted++;
+            }
+            value[key] = await registerFmaMedia(optimized, mediaFiles, mediaManifest);
+        } else if (child && typeof child === "object") {
+            await externalizeFmaNestedMedia(
+                child, mediaFiles, mediaManifest, sourceCache, archiveOptions, visited
+            );
+        }
+    }
+    visited.delete(value);
+}
+
+async function optimizeFmaImageBlob(blob) {
+    const mimeType = String(blob?.type || "").toLowerCase();
+    if (!/^image\/(?:png|jpeg|bmp)$/.test(mimeType)) return blob;
+    let bitmap;
+    let objectUrl = "";
+    try {
+        if (typeof createImageBitmap === "function") {
+            bitmap = await createImageBitmap(blob);
+        } else {
+            objectUrl = URL.createObjectURL(blob);
+            bitmap = await new Promise((resolve, reject) => {
+                const image = new Image();
+                image.onload = () => resolve(image);
+                image.onerror = () => reject(new Error("WebP 변환용 이미지를 읽지 못했습니다."));
+                image.src = objectUrl;
+            });
+        }
+        const width = bitmap.width || bitmap.naturalWidth;
+        const height = bitmap.height || bitmap.naturalHeight;
+        if (!width || !height) return blob;
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d").drawImage(bitmap, 0, 0, width, height);
+        const webpBlob = await new Promise(resolve =>
+            canvas.toBlob(resolve, "image/webp", .82)
+        );
+        return webpBlob?.type === "image/webp" && webpBlob.size < blob.size
+            ? webpBlob : blob;
+    } catch (error) {
+        console.warn("FMA WebP optimization skipped:", error);
+        return blob;
+    } finally {
+        bitmap?.close?.();
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+    }
+}
+
+function getFmaMediaExtension(mimeType, sourcePath = "") {
+    const extensions = {
+        "image/png": "png",
+        "image/jpeg": "jpg",
+        "image/webp": "webp",
+        "image/gif": "gif",
+        "image/bmp": "bmp",
+        "image/svg+xml": "svg",
+        "image/avif": "avif",
+        "video/mp4": "mp4",
+        "video/webm": "webm",
+        "video/quicktime": "mov",
+        "video/x-m4v": "m4v",
+        "video/ogg": "ogv"
+    };
+    if (extensions[mimeType]) return extensions[mimeType];
+    const match = String(sourcePath).match(/\.([a-z0-9]{1,8})(?:$|[?#])/i);
+    return match ? match[1].toLowerCase() : "bin";
+}
+
+function formatFmaBytes(bytes) {
+    const value = Number(bytes) || 0;
+    if (value < 1024) return `${value} B`;
+    if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)} KB`;
+    if (value < 1024 ** 3) return `${(value / (1024 ** 2)).toFixed(1)} MB`;
+    return `${(value / (1024 ** 3)).toFixed(2)} GB`;
 }
 
 async function imageSourceToPortableDataUrl(src) {
@@ -562,6 +896,7 @@ async function imageSourceToPortableDataUrl(src) {
 function resetProject() {
     if (!confirm("모든 데이터를 지우고 초기화할까요? 이 작업은 되돌릴 수 없습니다.")) return;
 
+    releaseFmaArchiveObjectUrls();
     images = [];
     currentIndex = 0;
     deletedImages = [];
