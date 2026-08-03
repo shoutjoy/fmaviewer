@@ -31,7 +31,13 @@ GAS 웹 앱은 인증 메일 발신 계정인 `shoutjoy1@gmail.com`에서 배포
 
 등록·알림 서버 코드는 `Auth/gas/Code.gs`에서 관리하며 관리자 화면의 코드 복사를 위해 정적 배포에 포함합니다. 같은 폴더의 로컬 배포 메모와 추가 파일은 GitHub 배포 대상에서 제외합니다.
 
-자세한 내용은 [FMA Viewer 개인정보 처리방침](Auth/PRIVACY_POLICY.md)을 확인하십시오.
+인증 모듈 관련 문서는 다음 위치에서 확인할 수 있습니다.
+
+- [Auth 모듈 안내](Auth/README.md)
+- [최신 Code.gs 적용 및 GAS 재배포](Auth/UPDATE_GUIDE.md)
+- [다른 앱 연결 빠른 가이드](Auth/connect/README.md)
+- [다른 앱 연결 상세 가이드](Auth/connect/connet.md)
+- [FMA Viewer 개인정보 처리방침](Auth/PRIVACY_POLICY.md)
 
 ## 개발자
 

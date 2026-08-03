@@ -1,14 +1,22 @@
-/* FMA Viewer verified email registration and status sync server (Google Apps Script) */
+/* FMA Viewer verified registration, password login, and status server (Google Apps Script) */
 
 const SHEET_NAME = 'Users';
 const NOTIFICATION_EMAIL = 'shoutjoy1@yonsei.ac.kr';
 const EXPECTED_SENDER_EMAIL = 'shoutjoy1@gmail.com';
-const SERVER_VERSION = '2026-08-02-email-verify-4';
+const SERVER_VERSION = '2026-08-04-password-login-1';
 const SPREADSHEET_ID = '1xNA955JIwe5cHETAMMMaCEfb1QtZnbuc9tKbEDQ573w';
 const VERIFICATION_TTL_MS = 30 * 60 * 1000;
 const VERIFICATION_GRANT_TTL_MS = 24 * 60 * 60 * 1000;
+const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
+const PASSWORD_KDF_ITERATIONS = 600000;
 const PENDING_TOKEN_PREFIX = 'fma_pending_token_';
 const PENDING_EMAIL_PREFIX = 'fma_pending_email_';
+const SESSION_PREFIX = 'fma_session_v1_';
+const LOGIN_FAILURE_PREFIX = 'fma_login_failure_v1_';
+const CREDENTIAL_PEPPER_KEY = 'fma_credential_pepper_v1';
+const LOGIN_FAILURE_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_LOCK_MS = 15 * 60 * 1000;
+const LOGIN_MAX_FAILURES = 5;
 const SHEET_HEADERS = [
   'RequestedAt',
   'Email',
@@ -19,105 +27,243 @@ const SHEET_HEADERS = [
   'NotificationError',
   'Name',
   'Organization',
-  'Purpose'
+  'Purpose',
+  'PasswordSalt',
+  'PasswordHash',
+  'PasswordIterations',
+  'PasswordUpdatedAt'
 ];
 
-// Send a verification email. A new user is not written to Users until the link is opened.
 function doPost(e) {
   try {
     if (!e || !e.postData || typeof e.postData.contents !== 'string') {
       console.warn('doPost는 웹 POST 요청으로 호출하십시오. 편집기에서는 authorizeServices 또는 testNotificationEmail을 실행할 수 있습니다.');
-      return json_({
-        success: false,
-        saved: false,
-        message: 'doPost must be called by an HTTP POST request.'
-      });
+      return json_({ success: false, message: 'doPost must be called by an HTTP POST request.' });
     }
 
     const requestData = JSON.parse(e.postData.contents);
-    const userEmail = normalizeEmail_(requestData.email);
-    const requestId = String(requestData.requestId || '').trim().toLowerCase();
-    const application = getApplicationDetails_(requestData);
-    if (!isValidGmail_(userEmail)) {
-      return json_({
-        success: false,
-        saved: false,
-        message: '올바른 @gmail.com 주소가 필요합니다.'
-      });
+    const action = String(requestData.action || 'register').trim().toLowerCase();
+    if (action === 'login') return handleLoginPost_(requestData);
+    if (action === 'logout') return handleLogoutPost_(requestData);
+    if (action === 'check' || action === 'status') return handleAuthenticatedStatusPost_(requestData, action);
+    if (action !== 'register') {
+      return json_({ success: false, message: '지원하지 않는 인증 요청입니다.', serverVersion: SERVER_VERSION });
     }
-    if (!/^[a-f0-9]{64}$/.test(requestId)) {
-      return json_({
-        success: false,
-        saved: false,
-        message: '올바른 이메일 인증 요청 ID가 필요합니다.'
-      });
-    }
-
-    const now = new Date();
-    const sheet = getUsersSheet_();
-    const lock = LockService.getScriptLock();
-    lock.waitLock(10000);
-
-    try {
-      const data = sheet.getDataRange().getValues();
-      const row = findUserRow_(data, userEmail);
-
-      if (row > 0) {
-        const currentStatus = normalizeStatus_(data[row - 1][2]);
-        if (currentStatus === 'Blocked') {
-          return json_({
-            success: false,
-            saved: false,
-            blocked: true,
-            status: 'Blocked',
-            message: '이 Gmail은 관리자에 의해 사용이 중지되었습니다.'
-          });
-        }
-        if (currentStatus !== 'Active') {
-          return json_({
-            success: false,
-            saved: false,
-            invalidStatus: true,
-            status: 'Invalid',
-            message: 'Users 시트의 Status를 Active 또는 Blocked로 수정해 주세요.'
-          });
-        }
-
-      }
-    } finally {
-      lock.releaseLock();
-    }
-
-    const pending = createPendingVerification_(userEmail, now, requestId, application);
-    try {
-      sendVerificationEmail_(userEmail, now, pending.verificationUrl);
-    } catch (mailError) {
-      clearPendingVerification_(pending.tokenHash, userEmail);
-      throw new Error('인증 메일 발송에 실패했습니다: ' + String(mailError && mailError.message || mailError));
-    }
-
-    return json_({
-      success: true,
-      registered: false,
-      pending: true,
-      verificationSent: true,
-      serverVersion: SERVER_VERSION,
-      status: 'Pending',
-      email: userEmail,
-      requestedAt: now.toISOString(),
-      expiresAt: pending.expiresAt
-    });
+    return handleRegistrationPost_(requestData);
   } catch (error) {
     console.error(error);
     return json_({
       success: false,
       saved: false,
+      serverVersion: SERVER_VERSION,
       message: String(error && error.message || error)
     });
   }
 }
 
-// Health check, full registration sync, and lightweight block-status check.
+// Send a verification email. Credentials are written to Users only after the link is opened.
+function handleRegistrationPost_(requestData) {
+  const userEmail = normalizeEmail_(requestData.email);
+  const requestId = String(requestData.requestId || '').trim().toLowerCase();
+  const application = getApplicationDetails_(requestData);
+  const passwordCredential = getPasswordCredentialRequest_(requestData);
+  if (!isValidGmail_(userEmail)) {
+    return json_({ success: false, saved: false, message: '올바른 @gmail.com 주소가 필요합니다.', serverVersion: SERVER_VERSION });
+  }
+  if (!/^[a-f0-9]{64}$/.test(requestId)) {
+    return json_({ success: false, saved: false, message: '올바른 이메일 인증 요청 ID가 필요합니다.', serverVersion: SERVER_VERSION });
+  }
+
+  const now = new Date();
+  const sheet = getUsersSheet_();
+  const data = sheet.getDataRange().getValues();
+  const row = findUserRow_(data, userEmail);
+  if (row > 0) {
+    const currentStatus = normalizeStatus_(data[row - 1][2]);
+    if (currentStatus === 'Blocked') {
+      return json_({
+        success: false,
+        saved: false,
+        blocked: true,
+        status: 'Blocked',
+        serverVersion: SERVER_VERSION,
+        message: '이 Gmail은 관리자에 의해 사용이 중지되었습니다.'
+      });
+    }
+    if (currentStatus !== 'Active') {
+      return json_({
+        success: false,
+        saved: false,
+        invalidStatus: true,
+        status: 'Invalid',
+        serverVersion: SERVER_VERSION,
+        message: 'Users 시트의 Status를 Active 또는 Blocked로 수정해 주세요.'
+      });
+    }
+  }
+
+  const pending = createPendingVerification_(userEmail, now, requestId, application, passwordCredential);
+  try {
+    sendVerificationEmail_(userEmail, now, pending.verificationUrl);
+  } catch (mailError) {
+    clearPendingVerification_(pending.tokenHash, userEmail);
+    throw new Error('인증 메일 발송에 실패했습니다: ' + String(mailError && mailError.message || mailError));
+  }
+
+  return json_({
+    success: true,
+    registered: false,
+    pending: true,
+    verificationSent: true,
+    serverVersion: SERVER_VERSION,
+    status: 'Pending',
+    email: userEmail,
+    requestedAt: now.toISOString(),
+    expiresAt: pending.expiresAt
+  });
+}
+
+function handleLoginPost_(requestData) {
+  const userEmail = normalizeEmail_(requestData.email);
+  const passwordVerifier = String(requestData.passwordVerifier || '').trim().toLowerCase();
+  if (!isValidGmail_(userEmail) || !/^[a-f0-9]{64}$/.test(passwordVerifier)) {
+    return loginFailureResponse_('이메일 또는 비밀번호가 올바르지 않습니다.');
+  }
+
+  const limited = getLoginRateLimit_(userEmail);
+  if (limited.locked) {
+    return json_({
+      success: false,
+      authenticated: false,
+      retryAfterSeconds: limited.retryAfterSeconds,
+      serverVersion: SERVER_VERSION,
+      message: '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.'
+    });
+  }
+
+  const sheet = getUsersSheet_();
+  const data = sheet.getDataRange().getValues();
+  const row = findUserRow_(data, userEmail);
+  const userRecord = row > 0 ? data[row - 1] : null;
+  const status = userRecord ? normalizeStatus_(userRecord[2]) : 'Invalid';
+  const storedHash = String(userRecord && userRecord[11] || '').trim().toLowerCase();
+  const submittedHash = hashPasswordVerifier_(passwordVerifier);
+  const passwordConfigured = Boolean(
+    userRecord &&
+    /^[a-f0-9]{32,128}$/i.test(String(userRecord[10] || '')) &&
+    /^[a-f0-9]{64}$/.test(storedHash)
+  );
+  const validCredential = passwordConfigured && constantTimeEquals_(submittedHash, storedHash);
+
+  if (status === 'Blocked') {
+    recordLoginFailure_(userEmail);
+    return json_({
+      success: false,
+      authenticated: false,
+      blocked: true,
+      status: 'Blocked',
+      serverVersion: SERVER_VERSION,
+      message: '관리자에 의해 사용이 중지된 계정입니다.'
+    });
+  }
+  if (status !== 'Active' || !validCredential) {
+    recordLoginFailure_(userEmail);
+    return json_({
+      success: false,
+      authenticated: false,
+      passwordSetupRequired: Boolean(userRecord && status === 'Active' && !passwordConfigured),
+      serverVersion: SERVER_VERSION,
+      message: '이메일 또는 비밀번호가 올바르지 않습니다.'
+    });
+  }
+
+  clearLoginFailure_(userEmail);
+  const checkedAt = new Date();
+  sheet.getRange(row, 4).setValue(checkedAt);
+  const session = createSession_(userEmail);
+  SpreadsheetApp.flush();
+  return json_({
+    success: true,
+    authenticated: true,
+    registered: true,
+    status: 'Active',
+    email: userEmail,
+    sessionToken: session.token,
+    expiresAt: session.expiresAt,
+    checkedAt: checkedAt.toISOString(),
+    serverVersion: SERVER_VERSION
+  });
+}
+
+function handleLogoutPost_(requestData) {
+  const userEmail = normalizeEmail_(requestData.email);
+  const sessionToken = String(requestData.sessionToken || '').trim().toLowerCase();
+  revokeSession_(userEmail, sessionToken);
+  return json_({ success: true, authenticated: false, serverVersion: SERVER_VERSION });
+}
+
+function handleAuthenticatedStatusPost_(requestData, action) {
+  const userEmail = normalizeEmail_(requestData.email);
+  const sessionToken = String(requestData.sessionToken || '').trim().toLowerCase();
+  const session = validateSession_(userEmail, sessionToken);
+  if (!session) {
+    return json_({
+      success: false,
+      authenticated: false,
+      status: 'Unauthorized',
+      serverVersion: SERVER_VERSION,
+      message: '로그인 세션이 만료되었습니다.'
+    });
+  }
+
+  const sheet = getUsersSheet_();
+  const data = sheet.getDataRange().getValues();
+  const row = findUserRow_(data, userEmail);
+  if (row < 0) {
+    revokeSession_(userEmail, sessionToken);
+    return json_({ success: false, authenticated: false, status: 'Missing', serverVersion: SERVER_VERSION });
+  }
+
+  const status = normalizeStatus_(data[row - 1][2]);
+  if (status !== 'Active') {
+    revokeSession_(userEmail, sessionToken);
+    return json_({
+      success: true,
+      authenticated: false,
+      blocked: status === 'Blocked',
+      invalidStatus: status === 'Invalid',
+      status: status,
+      serverVersion: SERVER_VERSION
+    });
+  }
+
+  const checkedAt = new Date();
+  if (action === 'check') {
+    sheet.getRange(row, 4).setValue(checkedAt);
+    SpreadsheetApp.flush();
+  }
+  return json_({
+    success: true,
+    authenticated: true,
+    registered: true,
+    status: 'Active',
+    email: userEmail,
+    checkedAt: checkedAt.toISOString(),
+    verifiedAt: toIsoString_(data[row - 1][4]),
+    serverVersion: SERVER_VERSION
+  });
+}
+
+function loginFailureResponse_(message) {
+  return json_({
+    success: false,
+    authenticated: false,
+    serverVersion: SERVER_VERSION,
+    message: message
+  });
+}
+
+// Health, login parameters, and email-verification polling.
 function doGet(e) {
   try {
     const action = String(e && e.parameter && e.parameter.action || '').toLowerCase();
@@ -134,15 +280,21 @@ function doGet(e) {
         mailSender: EXPECTED_SENDER_EMAIL,
         mailSenderDetection: 'deployment-setting',
         expectedMailSender: EXPECTED_SENDER_EMAIL,
-        message: '이메일 인증 서버가 정상입니다. 실제 발신자는 웹 앱 배포의 실행 사용자입니다.'
+        authMode: 'email-password-session',
+        message: '이메일 인증 및 비밀번호 로그인 서버가 정상입니다. 실제 발신자는 웹 앱 배포의 실행 사용자입니다.'
       });
     }
 
-    if (action !== 'check' && action !== 'status') {
+    if (action === 'login-params') {
+      return getLoginParametersResponse_(e && e.parameter && e.parameter.email);
+    }
+
+    if (action !== 'check') {
       return json_({
         success: true,
         service: 'FMA Viewer verified email registration',
-        message: 'Use POST to request verification, GET action=verify to approve, GET action=check to sync, or GET action=status to watch blocking.'
+        version: SERVER_VERSION,
+        message: 'Use POST action=register/login/status/check/logout, GET action=verify, login-params, or check with a verification request ID.'
       });
     }
 
@@ -152,69 +304,55 @@ function doGet(e) {
         success: false,
         registered: false,
         status: 'Invalid',
+        serverVersion: SERVER_VERSION,
         message: '올바른 @gmail.com 주소가 필요합니다.'
       });
     }
 
     const requestId = String(e && e.parameter && e.parameter.requestId || '').trim().toLowerCase();
-    let pending = null;
-    let approvedRequest = false;
-    if (action === 'check' && requestId) {
-      if (!/^[a-f0-9]{64}$/.test(requestId)) {
-        return json_({
-          success: false,
-          registered: false,
-          status: 'Invalid',
-          message: '올바른 이메일 인증 요청 ID가 필요합니다.'
-        });
-      }
+    if (!/^[a-f0-9]{64}$/.test(requestId)) {
+      return json_({
+        success: false,
+        registered: false,
+        status: 'Invalid',
+        serverVersion: SERVER_VERSION,
+        message: '올바른 이메일 인증 요청 ID가 필요합니다.'
+      });
+    }
 
-      pending = getPendingVerificationByEmail_(userEmail);
-      if (!pending || pending.requestIdHash !== sha256Hex_(requestId)) {
-        return json_({
-          success: true,
-          registered: false,
-          status: 'VerificationRequired',
-          email: userEmail
-        });
-      }
-
-      if (pending.state === 'Verified') {
-        approvedRequest = true;
-      } else {
-        return json_({
-          success: true,
-          registered: false,
-          pending: true,
-          status: 'Pending',
-          email: userEmail,
-          requestedAt: pending.requestedAt,
-          expiresAt: pending.expiresAt
-        });
-      }
+    const pending = getPendingVerificationByEmail_(userEmail);
+    if (!pending || pending.requestIdHash !== sha256Hex_(requestId)) {
+      return json_({
+        success: true,
+        registered: false,
+        status: 'VerificationRequired',
+        email: userEmail,
+        serverVersion: SERVER_VERSION
+      });
+    }
+    if (pending.state !== 'Verified') {
+      return json_({
+        success: true,
+        registered: false,
+        pending: true,
+        status: 'Pending',
+        email: userEmail,
+        requestedAt: pending.requestedAt,
+        expiresAt: pending.expiresAt,
+        serverVersion: SERVER_VERSION
+      });
     }
 
     const sheet = getUsersSheet_();
     const data = sheet.getDataRange().getValues();
     const row = findUserRow_(data, userEmail);
     if (row < 0) {
-      pending = pending || getPendingVerificationByEmail_(userEmail);
-      if (pending) {
-        return json_({
-          success: true,
-          registered: false,
-          pending: true,
-          status: 'Pending',
-          email: userEmail,
-          requestedAt: pending.requestedAt,
-          expiresAt: pending.expiresAt
-        });
-      }
       return json_({
         success: true,
         registered: false,
         status: 'Missing',
-        email: userEmail
+        email: userEmail,
+        serverVersion: SERVER_VERSION
       });
     }
 
@@ -225,7 +363,8 @@ function doGet(e) {
         registered: false,
         blocked: true,
         status: 'Blocked',
-        email: userEmail
+        email: userEmail,
+        serverVersion: SERVER_VERSION
       });
     }
     if (status !== 'Active') {
@@ -235,39 +374,21 @@ function doGet(e) {
         invalidStatus: true,
         status: 'Invalid',
         email: userEmail,
+        serverVersion: SERVER_VERSION,
         message: 'Users 시트의 Status는 Active 또는 Blocked여야 합니다.'
       });
-    }
-
-    // Fast block watching must not change the full-sync timestamp.
-    if (action === 'status') {
-      return json_({
-        success: true,
-        registered: true,
-        status: 'Active',
-        email: userEmail,
-        checkedAt: new Date().toISOString(),
-        verifiedAt: toIsoString_(data[row - 1][4])
-      });
-    }
-
-    const checkedAt = new Date();
-    sheet.getRange(row, 3, 1, 2).setValues([[
-      'Active',
-      checkedAt
-    ]]);
-    SpreadsheetApp.flush();
-    if (approvedRequest && pending) {
-      clearPendingVerification_(pending.tokenHash, userEmail);
     }
 
     return json_({
       success: true,
       registered: true,
+      verified: true,
+      passwordConfigured: Boolean(data[row - 1][10] && data[row - 1][11]),
       status: 'Active',
       email: userEmail,
-      checkedAt: checkedAt.toISOString(),
-      verifiedAt: toIsoString_(data[row - 1][4])
+      checkedAt: new Date().toISOString(),
+      verifiedAt: toIsoString_(data[row - 1][4]),
+      serverVersion: SERVER_VERSION
     });
   } catch (error) {
     console.error(error);
@@ -275,12 +396,13 @@ function doGet(e) {
       success: false,
       registered: false,
       status: 'Error',
+      serverVersion: SERVER_VERSION,
       message: String(error && error.message || error)
     });
   }
 }
 
-function createPendingVerification_(userEmail, requestedAt, requestId, application) {
+function createPendingVerification_(userEmail, requestedAt, requestId, application, passwordCredential) {
   const serviceUrl = ScriptApp.getService().getUrl();
   if (!serviceUrl) {
     throw new Error('배포된 GAS 웹 앱 URL을 확인할 수 없습니다. 새 버전으로 웹 앱을 배포해 주세요.');
@@ -308,7 +430,10 @@ function createPendingVerification_(userEmail, requestedAt, requestId, applicati
         expiresAt: expiresAt,
         name: application.name,
         organization: application.organization,
-        purpose: application.purpose
+        purpose: application.purpose,
+        passwordSalt: passwordCredential.salt,
+        passwordHash: passwordCredential.hash,
+        passwordIterations: passwordCredential.iterations
       });
       values[PENDING_EMAIL_PREFIX + emailHash] = tokenHash;
       return values;
@@ -385,7 +510,7 @@ function verifyEmailAddress_(tokenValue) {
 
   const userEmail = normalizeEmail_(pending.email);
   if (pending.state === 'Verified') {
-    return verificationPage_(true, userEmail + ' 인증이 이미 완료되었습니다.', 'FMA Viewer 창으로 돌아가면 자동으로 시작됩니다.');
+    return verificationPage_(true, userEmail + ' 인증이 이미 완료되었습니다.', 'FMA Viewer 창으로 돌아가 이메일과 비밀번호로 로그인해 주세요.');
   }
   if (!isValidGmail_(userEmail) || Date.parse(pending.expiresAt) <= Date.now()) {
     clearPendingVerification_(tokenHash, userEmail);
@@ -398,6 +523,20 @@ function verifyEmailAddress_(tokenValue) {
   } catch (error) {
     clearPendingVerification_(tokenHash, userEmail);
     return verificationPage_(false, '신청자 정보를 확인할 수 없습니다.', 'FMA Viewer에서 이름, 소속, 사용목적을 입력하고 인증 메일을 다시 요청해 주세요.');
+  }
+
+  const passwordSalt = String(pending.passwordSalt || '').trim().toLowerCase();
+  const passwordHash = String(pending.passwordHash || '').trim().toLowerCase();
+  const passwordIterations = Number(pending.passwordIterations);
+  if (
+    !/^[a-f0-9]{32,128}$/.test(passwordSalt) ||
+    !/^[a-f0-9]{64}$/.test(passwordHash) ||
+    !Number.isInteger(passwordIterations) ||
+    passwordIterations < 200000 ||
+    passwordIterations > 1000000
+  ) {
+    clearPendingVerification_(tokenHash, userEmail);
+    return verificationPage_(false, '비밀번호 설정 정보를 확인할 수 없습니다.', 'FMA Viewer에서 인증 메일을 다시 요청해 주세요.');
   }
 
   const sheet = getUsersSheet_();
@@ -422,6 +561,7 @@ function verifyEmailAddress_(tokenValue) {
       }
       sheet.getRange(row, 3, 1, 3).setValues([['Active', verifiedAt, verifiedAt]]);
       sheet.getRange(row, 8, 1, 3).setValues([[safeSheetText_(application.name), safeSheetText_(application.organization), safeSheetText_(application.purpose)]]);
+      sheet.getRange(row, 11, 1, 4).setValues([[passwordSalt, passwordHash, passwordIterations, verifiedAt]]);
     } else {
       sheet.appendRow([
         Number.isNaN(requestedAt.getTime()) ? verifiedAt : requestedAt,
@@ -433,7 +573,11 @@ function verifyEmailAddress_(tokenValue) {
         '',
         safeSheetText_(application.name),
         safeSheetText_(application.organization),
-        safeSheetText_(application.purpose)
+        safeSheetText_(application.purpose),
+        passwordSalt,
+        passwordHash,
+        passwordIterations,
+        verifiedAt
       ]);
       row = sheet.getLastRow();
       newlyVerified = true;
@@ -442,6 +586,10 @@ function verifyEmailAddress_(tokenValue) {
     pending.state = 'Verified';
     pending.verifiedAt = verifiedAt.toISOString();
     pending.grantExpiresAt = new Date(verifiedAt.getTime() + VERIFICATION_GRANT_TTL_MS).toISOString();
+    pending.passwordConfigured = true;
+    delete pending.passwordSalt;
+    delete pending.passwordHash;
+    delete pending.passwordIterations;
     properties.setProperty(PENDING_TOKEN_PREFIX + tokenHash, JSON.stringify(pending));
   } finally {
     lock.releaseLock();
@@ -458,7 +606,9 @@ function verifyEmailAddress_(tokenValue) {
     SpreadsheetApp.flush();
   }
 
-  return verificationPage_(true, userEmail + ' 인증이 완료되었습니다.', 'FMA Viewer 창으로 돌아가면 자동으로 시작됩니다.');
+  revokeAllSessionsForEmail_(userEmail);
+
+  return verificationPage_(true, userEmail + ' 인증과 비밀번호 설정이 완료되었습니다.', 'FMA Viewer 창으로 돌아가 이메일과 비밀번호로 로그인해 주세요.');
 }
 
 function sendVerificationEmail_(userEmail, requestedAt, verificationUrl) {
@@ -469,7 +619,7 @@ function sendVerificationEmail_(userEmail, requestedAt, verificationUrl) {
   );
   const subject = '[FMA Viewer] 이메일 인증을 완료해 주세요';
   const body = [
-    'FMA Viewer 사용 신청을 완료하려면 아래 인증 링크를 열어 주세요.',
+    'FMA Viewer 이메일 인증과 전용 비밀번호 설정을 완료하려면 아래 인증 링크를 열어 주세요.',
     '',
     verificationUrl,
     '',
@@ -479,9 +629,9 @@ function sendVerificationEmail_(userEmail, requestedAt, verificationUrl) {
   const htmlBody = [
     '<div style="font-family:Arial,sans-serif;line-height:1.65;color:#172333">',
     '<h2 style="margin-bottom:8px">FMA Viewer 이메일 인증</h2>',
-    '<p><strong>' + escapeHtml_(userEmail) + '</strong> 주소로 사용 신청이 접수되었습니다.</p>',
-    '<p>아래 버튼을 눌러 이메일 인증을 완료해 주세요.</p>',
-    '<p style="margin:24px 0"><a href="' + escapeHtml_(verificationUrl) + '" style="display:inline-block;padding:12px 20px;border-radius:8px;background:#087f8c;color:#fff;text-decoration:none;font-weight:bold">이메일 인증하기</a></p>',
+    '<p><strong>' + escapeHtml_(userEmail) + '</strong> 주소로 인증 요청이 접수되었습니다.</p>',
+    '<p>아래 버튼을 눌러 이메일 인증과 FMA Viewer 전용 비밀번호 설정을 완료해 주세요.</p>',
+    '<p style="margin:24px 0"><a href="' + escapeHtml_(verificationUrl) + '" style="display:inline-block;padding:12px 20px;border-radius:8px;background:#087f8c;color:#fff;text-decoration:none;font-weight:bold">이메일 인증 및 비밀번호 설정</a></p>',
     '<p style="color:#687587;font-size:12px">링크는 ' + escapeHtml_(expiresAtText) + '까지 유효합니다. 본인이 신청하지 않았다면 이 메일을 무시해 주세요.</p>',
     '</div>'
   ].join('');
@@ -543,6 +693,10 @@ function ensureUsersSchema_(sheet) {
   const nameIndex = header.indexOf('Name');
   const organizationIndex = header.indexOf('Organization');
   const purposeIndex = header.indexOf('Purpose');
+  const passwordSaltIndex = header.indexOf('PasswordSalt');
+  const passwordHashIndex = header.indexOf('PasswordHash');
+  const passwordIterationsIndex = header.indexOf('PasswordIterations');
+  const passwordUpdatedAtIndex = header.indexOf('PasswordUpdatedAt');
   const usersByEmail = {};
   const emailOrder = [];
 
@@ -555,6 +709,10 @@ function ensureUsersSchema_(sheet) {
         data[index][0] || new Date(),
         userEmail,
         'Active',
+        '',
+        '',
+        '',
+        '',
         '',
         '',
         '',
@@ -598,6 +756,19 @@ function ensureUsersSchema_(sheet) {
     }
     if (purposeIndex >= 0 && data[index][purposeIndex]) {
       record[9] = data[index][purposeIndex];
+    }
+    if (
+      passwordSaltIndex >= 0 &&
+      passwordHashIndex >= 0 &&
+      data[index][passwordSaltIndex] &&
+      data[index][passwordHashIndex]
+    ) {
+      record[10] = data[index][passwordSaltIndex];
+      record[11] = data[index][passwordHashIndex];
+      record[12] = passwordIterationsIndex >= 0 && data[index][passwordIterationsIndex]
+        ? data[index][passwordIterationsIndex]
+        : PASSWORD_KDF_ITERATIONS;
+      record[13] = passwordUpdatedAtIndex >= 0 ? data[index][passwordUpdatedAtIndex] : '';
     }
   }
 
@@ -696,6 +867,226 @@ function sendNotificationEmail_(userEmail, application, requestedAt, verifiedAt)
   });
 }
 
+function getPasswordCredentialRequest_(source) {
+  const salt = String(source && source.passwordSalt || '').trim().toLowerCase();
+  const verifier = String(source && source.passwordVerifier || '').trim().toLowerCase();
+  const iterations = Number(source && source.passwordIterations);
+  if (!/^[a-f0-9]{32,128}$/.test(salt)) throw new Error('비밀번호 솔트 형식이 올바르지 않습니다.');
+  if (!/^[a-f0-9]{64}$/.test(verifier)) throw new Error('비밀번호 인증 정보가 올바르지 않습니다.');
+  if (!Number.isInteger(iterations) || iterations < 200000 || iterations > 1000000) {
+    throw new Error('비밀번호 보안 반복 횟수가 올바르지 않습니다.');
+  }
+  return {
+    salt: salt,
+    hash: hashPasswordVerifier_(verifier),
+    iterations: iterations
+  };
+}
+
+function getLoginParametersResponse_(emailValue) {
+  const userEmail = normalizeEmail_(emailValue);
+  if (!isValidGmail_(userEmail)) {
+    return json_({
+      success: false,
+      serverVersion: SERVER_VERSION,
+      message: '올바른 @gmail.com 주소가 필요합니다.'
+    });
+  }
+
+  const sheet = getUsersSheet_();
+  const data = sheet.getDataRange().getValues();
+  const row = findUserRow_(data, userEmail);
+  const record = row > 0 ? data[row - 1] : null;
+  const configured = Boolean(
+    record &&
+    normalizeStatus_(record[2]) === 'Active' &&
+    /^[a-f0-9]{32,128}$/i.test(String(record[10] || '')) &&
+    /^[a-f0-9]{64}$/i.test(String(record[11] || ''))
+  );
+  const storedIterations = configured ? Number(record[12]) : NaN;
+  const iterations = configured
+    && Number.isInteger(storedIterations)
+    && storedIterations >= 200000
+    && storedIterations <= 1000000
+    ? storedIterations
+    : PASSWORD_KDF_ITERATIONS;
+  const salt = configured
+    ? String(record[10]).trim().toLowerCase()
+    : hmacSha256Hex_('login-salt:' + userEmail, getCredentialPepper_()).slice(0, 32);
+  return json_({
+    success: true,
+    passwordSalt: salt,
+    passwordIterations: iterations,
+    serverVersion: SERVER_VERSION
+  });
+}
+
+function getCredentialPepper_() {
+  const properties = PropertiesService.getScriptProperties();
+  let pepper = String(properties.getProperty(CREDENTIAL_PEPPER_KEY) || '');
+  if (/^[a-f0-9]{64}$/i.test(pepper)) return pepper.toLowerCase();
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    pepper = String(properties.getProperty(CREDENTIAL_PEPPER_KEY) || '');
+    if (!/^[a-f0-9]{64}$/i.test(pepper)) {
+      pepper = createRandomToken_();
+      properties.setProperty(CREDENTIAL_PEPPER_KEY, pepper);
+    }
+  } finally {
+    lock.releaseLock();
+  }
+  return pepper.toLowerCase();
+}
+
+function createRandomToken_() {
+  return (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '').toLowerCase();
+}
+
+function bytesToHex_(bytes) {
+  return bytes.map(function(byte) {
+    return ('0' + (byte & 0xff).toString(16)).slice(-2);
+  }).join('');
+}
+
+function hmacSha256Hex_(value, key) {
+  return bytesToHex_(Utilities.computeHmacSha256Signature(String(value), String(key)));
+}
+
+function hashPasswordVerifier_(verifier) {
+  return hmacSha256Hex_('credential:' + String(verifier), getCredentialPepper_());
+}
+
+function constantTimeEquals_(leftValue, rightValue) {
+  const left = String(leftValue || '');
+  const right = String(rightValue || '');
+  const length = Math.max(left.length, right.length);
+  let difference = left.length ^ right.length;
+  for (let index = 0; index < length; index += 1) {
+    difference |= (left.charCodeAt(index) || 0) ^ (right.charCodeAt(index) || 0);
+  }
+  return difference === 0;
+}
+
+function createSession_(userEmail) {
+  cleanupExpiredSessions_();
+  const token = createRandomToken_();
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
+  PropertiesService.getScriptProperties().setProperty(
+    SESSION_PREFIX + sha256Hex_(token),
+    JSON.stringify({ email: userEmail, createdAt: new Date().toISOString(), expiresAt: expiresAt })
+  );
+  return { token: token, expiresAt: expiresAt };
+}
+
+function validateSession_(userEmail, tokenValue) {
+  const token = String(tokenValue || '').trim().toLowerCase();
+  if (!isValidGmail_(userEmail) || !/^[a-f0-9]{64}$/.test(token)) return null;
+  const properties = PropertiesService.getScriptProperties();
+  const key = SESSION_PREFIX + sha256Hex_(token);
+  const raw = properties.getProperty(key);
+  if (!raw) return null;
+  try {
+    const session = JSON.parse(raw);
+    if (normalizeEmail_(session.email) !== userEmail || Date.parse(session.expiresAt) <= Date.now()) {
+      properties.deleteProperty(key);
+      return null;
+    }
+    return session;
+  } catch (error) {
+    properties.deleteProperty(key);
+    return null;
+  }
+}
+
+function revokeSession_(userEmail, tokenValue) {
+  const token = String(tokenValue || '').trim().toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(token)) return;
+  const properties = PropertiesService.getScriptProperties();
+  const key = SESSION_PREFIX + sha256Hex_(token);
+  const raw = properties.getProperty(key);
+  if (!raw) return;
+  try {
+    const session = JSON.parse(raw);
+    if (!userEmail || normalizeEmail_(session.email) === normalizeEmail_(userEmail)) properties.deleteProperty(key);
+  } catch (error) {
+    properties.deleteProperty(key);
+  }
+}
+
+function revokeAllSessionsForEmail_(userEmail) {
+  const properties = PropertiesService.getScriptProperties();
+  properties.getKeys().filter(function(key) {
+    return key.indexOf(SESSION_PREFIX) === 0;
+  }).forEach(function(key) {
+    try {
+      const session = JSON.parse(properties.getProperty(key) || 'null');
+      if (normalizeEmail_(session && session.email) === userEmail) properties.deleteProperty(key);
+    } catch (error) {
+      properties.deleteProperty(key);
+    }
+  });
+}
+
+function cleanupExpiredSessions_() {
+  const properties = PropertiesService.getScriptProperties();
+  properties.getKeys().filter(function(key) {
+    return key.indexOf(SESSION_PREFIX) === 0;
+  }).forEach(function(key) {
+    try {
+      const session = JSON.parse(properties.getProperty(key) || 'null');
+      if (!session || Date.parse(session.expiresAt) <= Date.now()) properties.deleteProperty(key);
+    } catch (error) {
+      properties.deleteProperty(key);
+    }
+  });
+}
+
+function getLoginRateLimit_(userEmail) {
+  const properties = PropertiesService.getScriptProperties();
+  const key = LOGIN_FAILURE_PREFIX + sha256Hex_(userEmail);
+  const raw = properties.getProperty(key);
+  if (!raw) return { locked: false, retryAfterSeconds: 0 };
+  try {
+    const record = JSON.parse(raw);
+    const lockedUntil = Number(record.lockedUntil || 0);
+    if (lockedUntil > Date.now()) {
+      return { locked: true, retryAfterSeconds: Math.ceil((lockedUntil - Date.now()) / 1000) };
+    }
+    if (Date.now() - Number(record.firstAt || 0) > LOGIN_FAILURE_WINDOW_MS) {
+      properties.deleteProperty(key);
+    }
+  } catch (error) {
+    properties.deleteProperty(key);
+  }
+  return { locked: false, retryAfterSeconds: 0 };
+}
+
+function recordLoginFailure_(userEmail) {
+  const properties = PropertiesService.getScriptProperties();
+  const key = LOGIN_FAILURE_PREFIX + sha256Hex_(userEmail);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const now = Date.now();
+    let record = { count: 0, firstAt: now, lockedUntil: 0 };
+    try {
+      const saved = JSON.parse(properties.getProperty(key) || 'null');
+      if (saved && now - Number(saved.firstAt || 0) <= LOGIN_FAILURE_WINDOW_MS) record = saved;
+    } catch (_) {}
+    record.count = Number(record.count || 0) + 1;
+    if (record.count >= LOGIN_MAX_FAILURES) record.lockedUntil = now + LOGIN_LOCK_MS;
+    properties.setProperty(key, JSON.stringify(record));
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function clearLoginFailure_(userEmail) {
+  PropertiesService.getScriptProperties().deleteProperty(LOGIN_FAILURE_PREFIX + sha256Hex_(userEmail));
+}
+
 function normalizeEmail_(value) {
   return String(value || '').trim().toLowerCase();
 }
@@ -766,8 +1157,11 @@ function json_(payload) {
 function authorizeServices() {
   const sheet = getUsersSheet_();
   applyStatusValidation_(sheet);
+  getCredentialPepper_();
+  cleanupExpiredSessions_();
   console.log('인증 메일 발신 계정: ' + getMailSenderEmail_());
   console.log('등록 사용자 수: ' + Math.max(sheet.getLastRow() - 1, 0));
+  console.log('비밀번호 로그인용 서버 보안 키가 준비되었습니다.');
   console.log('남은 일일 메일 발송 한도: ' + MailApp.getRemainingDailyQuota());
 }
 

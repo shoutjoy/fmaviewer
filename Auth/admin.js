@@ -27,7 +27,7 @@
     const testButton = document.getElementById("testConnectionButton");
     const applyDeploymentToAppButton = document.getElementById("applyDeploymentToAppButton");
     const openAppLink = document.getElementById("openAppLink");
-    const expectedServerVersion = String(window.FMAAuthSettings?.serverVersion || "2026-08-02-email-verify-4");
+    const expectedServerVersion = String(window.FMAAuthSettings?.serverVersion || "2026-08-04-password-login-1");
     const gasCodePreview = document.getElementById("gasCodePreview");
     const gasCodeStatus = document.getElementById("gasCodeStatus");
     const gasCodeVersionBadge = document.getElementById("gasCodeVersionBadge");

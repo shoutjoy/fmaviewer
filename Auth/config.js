@@ -12,6 +12,11 @@
         blockedCheckMinutes: 5,
         updatedAt: ""
     });
+    const DEPRECATED_GAS_WEB_APP_URLS = new Set(
+        (Array.isArray(authSettings.deprecatedGasWebAppUrls) ? authSettings.deprecatedGasWebAppUrls : [])
+            .map(value => String(value || "").trim().replace(/\/+$/, ""))
+            .filter(Boolean)
+    );
 
     function normalizeGasWebAppUrl(value) {
         const url = String(value || "").trim().replace(/\/+$/, "");
@@ -49,13 +54,33 @@
         };
     }
 
+    function migrateDeprecatedGasWebAppUrl(config) {
+        if (
+            !DEPRECATED_GAS_WEB_APP_URLS.has(config.gasWebAppUrl) ||
+            config.gasWebAppUrl === DEFAULT_CONFIG.gasWebAppUrl
+        ) {
+            return config;
+        }
+
+        return {
+            ...config,
+            gasWebAppUrl: DEFAULT_CONFIG.gasWebAppUrl,
+            updatedAt: new Date().toISOString()
+        };
+    }
+
     function load() {
         try {
             const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
             const legacy = stored ? null : JSON.parse(localStorage.getItem(LEGACY_STORAGE_KEY) || "null");
-            const loaded = normalizeConfig(stored || legacy || DEFAULT_CONFIG);
+            let loaded = normalizeConfig(stored || legacy || DEFAULT_CONFIG);
             if (!stored) {
                 loaded.gasWebAppUrl = DEFAULT_CONFIG.gasWebAppUrl;
+            }
+            const migrated = migrateDeprecatedGasWebAppUrl(loaded);
+            if (migrated !== loaded) {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+                loaded = migrated;
             }
             return loaded;
         } catch (error) {

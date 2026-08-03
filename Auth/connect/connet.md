@@ -2,6 +2,8 @@
 
 이 문서는 `Auth` 폴더의 이메일 인증 모듈을 **임의의 다른 웹 앱**에 연결하는 절차를 설명합니다. 사람뿐 아니라 코드를 수정하는 AI도 같은 규칙으로 작업할 수 있도록 앱별 변수, 수정 파일, Google Sheet 생성, Google Apps Script(GAS) 배포, 연결 확인 순서까지 명시합니다.
 
+> 빠른 연결 순서는 [`README.md`](README.md), 현재 프로젝트의 코드 교체·재배포 절차는 [`../UPDATE_GUIDE.md`](../UPDATE_GUIDE.md)에서 확인할 수 있습니다. 이 문서는 앱별 복제와 운영 검증을 위한 상세 참고 문서입니다.
+
 > 현재 구현은 `@gmail.com` 주소만 허용합니다. 회사·학교 Google Workspace 주소까지 받으려면 클라이언트의 `isValidGmailAddress()`와 GAS의 `isValidGmail_()`를 함께 변경하고 개인정보 처리방침 및 테스트도 갱신해야 합니다.
 
 ## 1. 가장 중요한 원칙
@@ -67,6 +69,8 @@ GAS `/exec` 주소는 비밀번호가 아닙니다. 반면 Google Sheet는 공�
 target-app/
 ├─ index.html
 └─ Auth/
+   ├─ README.md
+   ├─ UPDATE_GUIDE.md
    ├─ settings.js
    ├─ config.js
    ├─ modal.js
@@ -78,9 +82,11 @@ target-app/
    ├─ privacy_policy.html
    ├─ PRIVACY_POLICY.md
    ├─ privacyPolicy.js
+   ├─ connect/
+   │  ├─ README.md
+   │  └─ connet.md
    └─ gas/
-      ├─ Code.gs
-      └─ README.md
+      └─ Code.gs
 ```
 
 `Auth/gas/Code.gs`는 Apps Script에 붙여넣는 배포용 원본입니다. `admin.html`에서 최신 코드를 자동으로 불러와 복사하게 하려면 `Code.gs`만 정적 배포에 포함하고 나머지 배포 메모는 제외합니다.
@@ -324,14 +330,15 @@ window.FMA_AUTH_SETTINGS = {
 <script src="admin.js"></script>
 ```
 
-관리자 페이지의 설정은 `localStorage`에 저장됩니다. 앱과 관리자 페이지가 같은 프로토콜·호스트·포트에서 열려야 같은 설정을 사용합니다. 운영 시에는 둘을 같은 사이트에 배포하고, 로컬 테스트도 간단한 HTTP 서버를 사용하는 것이 가장 예측 가능합니다.
+관리자 페이지의 설정은 `localStorage`에 저장됩니다. 같은 프로토콜·호스트·포트에서 열면 관리자와 앱이 같은 설정을 바로 사용합니다. 저장 환경이 다르거나 `file://`로 실행하는 경우에는 관리자 화면의 **배포 URL로 앱 최신화**를 사용합니다. 이 버튼은 `fmaGasUrl`, `fmaChecks`, `fmaBlockMinutes`를 `index.html`로 전달하고, `config.js`가 앱 환경의 저장소에 가져온 뒤 주소창에서 해당 매개변수를 제거합니다.
 
 관리자 페이지에서 다음 순서로 확인합니다.
 
-1. GAS `/exec` URL이 맞는지 확인하고 저장합니다.
+1. GAS `/exec` URL이 맞는지 입력합니다.
 2. `서버 연결 테스트`를 실행합니다.
 3. 서비스 이름, 버전, 발신 기대 계정이 대상 앱 값인지 확인합니다.
 4. 하루 전체 점검 횟수와 `Blocked` 확인 간격을 운영 정책에 맞게 설정합니다.
+5. GAS URL이 변경되었으면 **설정만 저장**이 아니라 **배포 URL로 앱 최신화**를 눌러 `index.html`에 전달합니다.
 
 관리자 설정을 사용하지 않을 경우에도 `settings.js`의 `gasWebAppUrl` 기본값 또는 HTML의 앱별 설정에는 올바른 URL이 있어야 합니다.
 
@@ -382,7 +389,7 @@ window.FMA_AUTH_SETTINGS = {
 
 1. 앱을 닫았다 다시 열어 재인증 없이 시작되는지 확인합니다.
 2. 같은 사이트의 다른 앱을 열어 등록 상태가 공유되지 않는지 확인합니다.
-3. 개발자 도구의 `localStorage` 키가 `STORAGE_PREFIX_registration_v4`, `STORAGE_PREFIX_admin_config_v2` 형식으로 분리되는지 확인합니다.
+3. 개발자 도구에서 아이디 저장용 `STORAGE_PREFIX_remembered_email_v1`, 인증 대기용 `STORAGE_PREFIX_registration_pending_v5`, 관리자용 `STORAGE_PREFIX_admin_config_v2` 키가 앱별로 분리되는지 확인합니다. 로그인 세션은 `sessionStorage`의 `STORAGE_PREFIX_session_v1`에만 저장됩니다.
 
 ### 14.3 차단 반영
 
@@ -399,14 +406,17 @@ window.FMA_AUTH_SETTINGS = {
 
 GAS 코드를 변경할 때마다 다음 절차를 반복합니다.
 
-1. `SERVER_VERSION`을 증가시킵니다.
-2. Apps Script에 수정한 `Code.gs`를 저장합니다.
-3. 필요하면 `authorizeServices`를 다시 실행하여 스키마와 권한을 확인합니다.
-4. 기존 웹 앱 배포를 `새 버전`으로 갱신합니다.
-5. `?action=health`에서 새 버전을 확인합니다.
-6. 앱과 `admin.html`의 `serverVersion`을 같은 값으로 바꿉니다.
-7. 클라이언트 파일의 캐시 버전을 사용한다면 함께 증가시킵니다.
-8. 관리자 페이지 연결 테스트와 신규 인증 테스트를 다시 수행합니다.
+1. 프로젝트의 `Auth/gas/Code.gs`와 클라이언트 `serverVersion`을 함께 갱신합니다.
+2. 최신 웹 파일을 배포해 관리자 화면이 새 `Code.gs`를 읽을 수 있게 합니다.
+3. `Auth/admin.html` 하단에서 코드 버전을 확인하고 **Code.gs 전체 복사**를 누릅니다.
+4. Apps Script의 `Code.gs` 전체를 복사한 코드로 교체하고 저장합니다.
+5. 필요하면 `authorizeServices`를 다시 실행하여 스키마와 권한을 확인합니다.
+6. 기존 웹 앱 배포를 반드시 **새 버전**으로 갱신합니다.
+7. `/exec?action=health`에서 새 서버 버전을 확인합니다.
+8. `/exec` URL이 바뀌었거나 앱에 이전 설정이 남아 있으면 관리자에서 새 URL을 입력하고 **배포 URL로 앱 최신화**를 누릅니다.
+9. 관리자 연결 테스트와 신규 인증 테스트를 다시 수행합니다.
+
+현재 프로젝트의 화면별 업데이트 절차는 [`../UPDATE_GUIDE.md`](../UPDATE_GUIDE.md)를 기준으로 합니다.
 
 정기적으로 Sheet의 `NotificationError`, Apps Script 실행 기록, `MailApp` 일일 발송 한도를 확인합니다. 실패한 완료 알림은 `retryFailedNotifications`로 재시도할 수 있습니다.
 
@@ -425,7 +435,8 @@ GAS 코드를 변경할 때마다 다음 절차를 반복합니다.
 | 한 앱의 승인이 다른 앱에도 적용됨 | 같은 GAS·Sheet를 공유함 | 앱별 Sheet와 GAS 배포로 분리 |
 | `Blocked`가 반영되지 않음 | 잘못된 Sheet/GAS, 상태 오타, 확인 간격 미경과 | 연결 대상, 정확한 `Blocked` 값, 관리자 설정 간격 확인 |
 | 개인정보 처리방침이 로컬에서 예전 내용임 | Markdown `fetch` 실패 후 HTML 내장 원문 사용 | `privacy_policy.html`의 내장 대체 원문도 함께 수정하거나 HTTP 서버 사용 |
-| 관리자 설정이 앱에 적용되지 않음 | 서로 다른 origin 또는 접두사 | 앱과 관리 페이지의 주소 및 `storagePrefix` 확인 |
+| 관리자 설정이 앱에 적용되지 않음 | 서로 다른 origin, `file://` 저장소 분리 또는 접두사 불일치 | `storagePrefix`를 확인하고 새 URL 입력 후 **배포 URL로 앱 최신화** 클릭 |
+| 관리자에는 새 URL인데 앱은 이전 URL 사용 | **설정만 저장**으로 관리자 저장소만 변경 | **배포 URL로 앱 최신화**를 눌러 `index.html`에 전달 |
 
 ## 17. AI 작업용 필수 검사 목록
 

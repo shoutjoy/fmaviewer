@@ -1,4 +1,4 @@
-/* First-use privacy and Gmail gate */
+/* Login, verified registration, and Gmail gate */
 html.first-use-locked,
 html.first-use-locked body {
     overflow: hidden !important;
@@ -68,6 +68,89 @@ html.first-use-locked body {
 .first-use-body {
     overflow: auto;
     padding: 20px 24px 22px;
+}
+
+.auth-view[hidden],
+[data-auth-actions][hidden] {
+    display: none !important;
+}
+
+.auth-login-view {
+    width: min(520px, 100%);
+    margin: 0 auto;
+}
+
+.auth-login-intro,
+.auth-registration-link-card {
+    border: 1px solid rgba(112, 226, 255, .16);
+    border-radius: 14px;
+    background: rgba(61, 130, 151, .08);
+}
+
+.auth-login-intro {
+    padding: 16px 18px;
+}
+
+.auth-login-intro strong,
+.auth-registration-link-card strong {
+    color: #eaf8ff;
+    font-size: 15px;
+}
+
+.auth-login-intro p,
+.auth-registration-link-card p {
+    margin: 7px 0 0;
+    color: rgba(235, 244, 255, .68);
+    font-size: 12px;
+    line-height: 1.65;
+}
+
+.auth-login-form {
+    display: grid;
+    gap: 15px;
+    margin-top: 18px;
+}
+
+.auth-remember-check {
+    display: inline-flex;
+    align-items: center;
+    justify-self: start;
+    gap: 8px;
+    color: rgba(241, 244, 255, .82);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.auth-remember-check input {
+    width: 17px;
+    height: 17px;
+    accent-color: #6feadf;
+}
+
+.auth-registration-link-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    margin-top: 18px;
+    padding: 15px 17px;
+}
+
+.auth-link-button {
+    min-height: 38px;
+    flex: 0 0 auto;
+    padding: 0 14px;
+    border: 1px solid rgba(129, 234, 255, .38);
+    border-radius: 10px;
+    color: #aeefff;
+    background: rgba(66, 181, 206, .11);
+    font-weight: 850;
+    cursor: pointer;
+}
+
+.auth-link-button:hover {
+    border-color: rgba(129, 234, 255, .7);
+    background: rgba(66, 181, 206, .18);
 }
 
 .first-use-notice,
@@ -164,6 +247,12 @@ html.first-use-locked body {
 .first-use-field textarea:focus {
     border-color: #72eaff;
     box-shadow: 0 0 0 3px rgba(63, 214, 239, .14);
+}
+
+.first-use-field input:disabled,
+.first-use-field textarea:disabled {
+    cursor: wait;
+    opacity: .68;
 }
 
 .first-use-field small {
@@ -312,6 +401,28 @@ html.first-use-locked body {
     transform: none;
 }
 
+.auth-logout-button {
+    position: fixed;
+    z-index: 29000;
+    top: 14px;
+    right: 16px;
+    min-height: 36px;
+    padding: 0 13px;
+    border: 1px solid rgba(112, 226, 255, .3);
+    border-radius: 10px;
+    color: #d9f8ff;
+    background: rgba(9, 24, 36, .82);
+    box-shadow: 0 8px 26px rgba(0, 0, 0, .28);
+    backdrop-filter: blur(10px);
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.auth-logout-button:hover {
+    border-color: rgba(112, 226, 255, .62);
+    background: rgba(18, 50, 67, .92);
+}
+
 html[data-theme="light"] .first-use-modal {
     color: #172333;
     background: rgba(224, 232, 242, .88);
@@ -337,9 +448,28 @@ html[data-theme="light"] .first-use-field small {
 }
 
 html[data-theme="light"] .first-use-notice,
-html[data-theme="light"] .first-use-policy {
+html[data-theme="light"] .first-use-policy,
+html[data-theme="light"] .auth-login-intro,
+html[data-theme="light"] .auth-registration-link-card {
     border-color: rgba(31, 133, 159, .18);
     background: rgba(48, 171, 201, .06);
+}
+
+html[data-theme="light"] .auth-login-intro strong,
+html[data-theme="light"] .auth-registration-link-card strong {
+    color: #172333;
+}
+
+html[data-theme="light"] .auth-login-intro p,
+html[data-theme="light"] .auth-registration-link-card p,
+html[data-theme="light"] .auth-remember-check {
+    color: #5a6879;
+}
+
+html[data-theme="light"] .auth-link-button {
+    color: #17647a;
+    border-color: rgba(31, 133, 159, .25);
+    background: rgba(48, 171, 201, .08);
 }
 
 html[data-theme="light"] .first-use-field input,
@@ -374,6 +504,12 @@ html[data-theme="light"] .first-use-footer .first-use-reset {
     border-color: rgba(48, 67, 91, .2);
     color: #405169;
     background: rgba(48, 67, 91, .06);
+}
+
+html[data-theme="light"] .auth-logout-button {
+    color: #244257;
+    border-color: rgba(31, 105, 130, .24);
+    background: rgba(255, 255, 255, .9);
 }
 
 @media (max-width: 680px) {
@@ -413,5 +549,19 @@ html[data-theme="light"] .first-use-footer .first-use-reset {
     .first-use-footer-actions {
         width: 100%;
         flex-direction: column-reverse;
+    }
+
+    .auth-registration-link-card {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .auth-link-button {
+        width: 100%;
+    }
+
+    .auth-logout-button {
+        top: 8px;
+        right: 8px;
     }
 }
