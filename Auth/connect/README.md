@@ -49,7 +49,8 @@ target-app/
 4. Apps Script의 `Code.gs` 전체를 교체합니다.
 5. `authorizeServices`를 실행하고 권한을 승인합니다.
 6. 웹 앱을 실행 사용자 `나`, 액세스 `모든 사용자`로 새 배포합니다.
-7. `/exec` URL과 `?action=health` 응답을 확인합니다.
+7. 하나의 `/exec` URL과 `?action=health` 응답을 확인합니다.
+8. 관리자 페이지에서 초기 아이디·비밀번호로 로그인하고 새 비밀번호를 설정합니다.
 
 `Users` 탭은 다음 구조로 관리됩니다.
 
@@ -76,7 +77,7 @@ window.FMA_AUTH_SETTINGS = {
   privacyPolicyVersion: "2026-08-04-1",
   notificationRecipient: "operator@example.com",
   serverServiceName: "APP_NAME verified email registration",
-  serverVersion: "2026-08-04-password-login-1",
+  serverVersion: "2026-08-05-admin-password-1",
   passwordIterations: 600000,
   sessionTtlMs: 8 * 60 * 60 * 1000
 };

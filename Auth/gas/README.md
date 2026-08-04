@@ -22,6 +22,7 @@ https://docs.google.com/spreadsheets/d/1xNA955JIwe5cHETAMMMaCEfb1QtZnbuc9tKbEDQ5
 8. 앱은 `POST action=check` 및 `POST action=status`로 로그인 세션과 `Blocked` 변경을 확인합니다.
 9. 로그인 실패는 이메일별 15분 창에서 5회까지 허용하며 초과 시 15분 동안 잠깁니다.
 10. 서버 연결이 일시적으로 실패하면 아직 만료되지 않은 세션은 유지하고 다음 주기에 재시도합니다.
+11. 관리자 페이지는 `admin` 아이디와 비밀번호를 확인해 1시간 관리자 세션을 발급합니다. 최초 비밀번호 `a1234567890`은 첫 로그인 직후 변경해야 하며 이후에는 사용할 수 없습니다.
 
 ## 코드 적용과 데이터 통합
 
@@ -49,10 +50,14 @@ RequestedAt | Email | Status | LastVerifiedAt | VerifiedAt | NotifiedAt | Notifi
 
 ## 웹 앱 재배포
 
+일반 사용자와 관리자 인증이 같은 웹 앱 배포 하나를 사용합니다.
+
 1. `배포 → 배포 관리`에서 현재 배포의 연필 아이콘을 누릅니다.
 2. 버전을 반드시 `새 버전`으로 선택합니다.
 3. 배포 계정이 `shoutjoy1@gmail.com`인지 확인하고, 실행 사용자는 `나`, 액세스 권한은 `모든 사용자`로 설정합니다.
 4. 배포 후 `/exec` URL을 확인합니다.
+
+배포 후 `https://fmaviewer.vercel.app/Auth/admin.html`에서 `admin / a1234567890`으로 최초 로그인하고 새 비밀번호를 설정합니다. 관리자 비밀번호 해시는 Script Properties에 저장되며 `Users` 또는 `Admin` 시트에는 기록되지 않습니다.
 
 새 URL이 발급되면 `admin.html`에 배포 URL을 입력하고 **배포 URL로 앱 최신화**를 누릅니다. **설정만 저장**은 관리자 저장소만 갱신하므로 `index.html`이 별도 저장 환경에 있으면 이전 URL이 계속 사용될 수 있습니다.
 
@@ -61,11 +66,12 @@ RequestedAt | Email | Status | LastVerifiedAt | VerifiedAt | NotifiedAt | Notifi
 정상 health 응답:
 
 ```json
-{"success":true,"service":"FMA Viewer verified email registration","version":"2026-08-04-password-login-1","status":"OK","authMode":"email-password-session"}
+{"success":true,"service":"FMA Viewer verified email registration","version":"2026-08-05-admin-password-1","status":"OK","authMode":"email-password-session"}
 ```
 
 ## 관리 함수
 
-- `authorizeServices`: 권한 승인, 이전 스키마 변환, 이메일 중복 통합
+- `authorizeServices`: 권한 승인, 이전 스키마 변환, 이메일 중복 통합, 최초 관리자 인증 준비
+- `resetAdminAccount`: 관리자 비밀번호를 잊었을 때 초기 비밀번호 상태로 되돌림
 - `testNotificationEmail`: 개발자 주소로 인증 완료 알림 테스트 메일 발송
 - `retryFailedNotifications`: 알림 발송 실패 행 재시도

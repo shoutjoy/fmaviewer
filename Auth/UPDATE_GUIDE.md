@@ -15,11 +15,12 @@
 - GAS 배포 URL이 바뀌면 **배포 URL로 앱 최신화**가 URL과 점검 설정을 `index.html`에 전달합니다.
 - `config.js`는 전달된 값을 앱의 로컬 저장소에 저장한 뒤 주소창의 전달 매개변수를 제거합니다.
 - 클라이언트는 GAS 응답의 서버 버전을 검사하여 구버전 배포를 감지합니다.
+- 관리자 페이지는 `admin` 아이디와 관리자 비밀번호로 로그인한 뒤에만 열립니다. 최초 비밀번호 `a1234567890`으로 로그인하면 새 비밀번호 변경이 강제됩니다.
 
 현재 기대 서버 버전:
 
 ```text
-2026-08-04-password-login-1
+2026-08-05-admin-password-1
 ```
 
 ## 전체 업데이트 순서
@@ -31,6 +32,7 @@
 ```text
 index.html
 Auth/admin.html
+Auth/admin-auth.js
 Auth/admin.js
 Auth/admin.css
 Auth/config.js
@@ -39,20 +41,25 @@ Auth/modal.js
 Auth/settings.js
 Auth/auth.css
 Auth/gas/Code.gs
+vercel.json
 ```
 
 관리자 화면이 `Auth/gas/Code.gs`를 자동으로 읽으려면 이 파일을 정적 사이트에서 접근할 수 있어야 합니다. 현재 루트 `.gitignore`는 `Auth/gas/Code.gs`만 게시 대상으로 허용합니다.
 
 배포 후 관리자 화면이 이전 모습이면 강력 새로고침을 하거나 브라우저 캐시를 지우고 다시 엽니다.
 
-### 2. 관리자 화면에서 최신 `Code.gs` 복사
+### 2. 첫 적용은 원본 `Code.gs` 직접 복사
 
-1. `Auth/admin.html`을 엽니다.
-2. 화면 하단의 **Google Apps Script Code.gs** 영역으로 이동합니다.
-3. 코드 버전이 `2026-08-04-password-login-1`인지 확인합니다.
-4. **Code.gs 전체 복사**를 누릅니다.
+기존 GAS가 새 관리자 로그인을 처리하기 전에는 관리자 화면이 잠겨 있으므로 다음 원본을 직접 엽니다.
 
-자동 불러오기가 실패하면 다음 중 하나를 사용합니다.
+```text
+https://fmaviewer.vercel.app/Auth/gas/Code.gs
+```
+
+1. 원본 전체를 선택해 복사합니다.
+2. 코드 버전이 `2026-08-05-admin-password-1`인지 확인합니다.
+
+이미 관리자 비밀번호 로그인이 설정된 이후 업데이트라면 관리자 화면 하단의 다음 기능도 사용할 수 있습니다.
 
 - **최신 코드 다시 불러오기**
 - **로컬 Code.gs 선택** 후 프로젝트의 `Auth/gas/Code.gs` 선택
@@ -78,6 +85,8 @@ RequestedAt | Email | Status | LastVerifiedAt | VerifiedAt | NotifiedAt | Notifi
 
 ### 4. 웹 앱을 새 버전으로 재배포
 
+일반 사용자와 관리자가 동일한 **공개 배포 하나**를 사용합니다.
+
 1. Apps Script 오른쪽 위의 `배포 → 배포 관리`를 엽니다.
 2. 사용 중인 웹 앱 배포의 연필 아이콘을 누릅니다.
 3. 버전을 반드시 **새 버전**으로 선택합니다.
@@ -101,7 +110,7 @@ https://script.google.com/macros/s/배포ID/exec?action=health
 {
   "success": true,
   "service": "FMA Viewer verified email registration",
-  "version": "2026-08-04-password-login-1",
+  "version": "2026-08-05-admin-password-1",
   "status": "OK",
   "authMode": "email-password-session"
 }
@@ -111,10 +120,13 @@ https://script.google.com/macros/s/배포ID/exec?action=health
 
 ### 6. 새 배포 URL을 `index.html`에 반영
 
-1. `Auth/admin.html` 상단의 **Google Apps Script 배포 URL**에 새 `/exec` URL을 입력합니다.
-2. 필요한 경우 하루 점검 횟수와 차단 확인 간격을 조정합니다.
-3. **배포 URL로 앱 최신화**를 누릅니다.
-4. `index.html`이 자동으로 열리는지 확인합니다.
+1. `https://fmaviewer.vercel.app/Auth/admin.html`을 엽니다.
+2. 최초 안내에 표시된 `admin / a1234567890`으로 로그인합니다.
+3. 강제로 표시되는 새 비밀번호 설정 화면에서 앞으로 사용할 비밀번호를 입력합니다.
+4. 변경이 끝나 관리자 설정이 열리면 **Google Apps Script 배포 URL**에 4단계의 `/exec` URL을 입력합니다.
+5. 필요한 경우 하루 점검 횟수와 차단 확인 간격을 조정합니다.
+6. **배포 URL로 앱 최신화**를 누릅니다.
+7. 로그아웃한 뒤 변경한 비밀번호로 다시 로그인되는지 확인합니다.
 
 이 버튼은 다음 값을 URL 매개변수로 앱에 전달합니다.
 
@@ -148,6 +160,8 @@ fmaBlockMinutes
 7. **아이디 저장** 선택 시 Gmail만 다음 방문에 채워지고 비밀번호는 저장되지 않는지 확인합니다.
 8. 로그아웃하면 앱이 다시 잠기고 로그인 화면이 표시되는지 확인합니다.
 9. Sheet 상태를 `Blocked`로 바꾸었을 때 설정된 간격 안에 앱이 잠기는지 확인합니다.
+10. 최초 `admin / a1234567890` 로그인 후 비밀번호 변경이 강제되는지 확인합니다.
+11. 변경 후 초기 비밀번호가 거부되고 새 비밀번호로만 로그인되는지 확인합니다.
 
 ## 문제 해결
 
@@ -159,16 +173,21 @@ fmaBlockMinutes
 | health 주소에서 로그인 화면 표시 | 웹 앱 공개 범위가 제한됨 | 실행 사용자 `나`, 액세스 `모든 사용자`로 재배포 |
 | health 버전이 계속 이전 값 | 잘못된 배포 URL 또는 새 버전 미선택 | 현재 편집 프로젝트의 배포 URL과 버전 다시 확인 |
 | 변경 후 관리자 화면이 예전 모습 | 브라우저 또는 호스팅 캐시 | 강력 새로고침 후 최신 배포 파일 확인 |
+| 초기 비밀번호 안내가 보이지 않음 | 이미 새 관리자 비밀번호로 변경했거나 GAS가 이전 버전 | 변경한 비밀번호로 로그인하거나 GAS health 버전 확인 |
+| 비밀번호를 잊음 | 변경한 관리자 비밀번호를 확인할 수 없음 | Apps Script에서 `resetAdminAccount`를 한 번 실행하고 초기 비밀번호로 다시 로그인 |
 
 ## 완료 체크리스트
 
-- [ ] 관리자 하단의 `Code.gs` 버전이 `2026-08-04-password-login-1`이다.
+- [ ] 원본 `Code.gs` 버전이 `2026-08-05-admin-password-1`이다.
 - [ ] Apps Script의 `Code.gs` 전체를 최신 코드로 교체했다.
 - [ ] `authorizeServices`를 실행했다.
 - [ ] 웹 앱을 **새 버전**으로 재배포했다.
+- [ ] 웹 앱 배포는 하나만 사용한다.
+- [ ] `admin / a1234567890` 최초 로그인 후 새 비밀번호를 설정했다.
 - [ ] `/exec?action=health`의 버전이 기대 버전과 같다.
 - [ ] 새 `/exec` URL 입력 후 **배포 URL로 앱 최신화**를 눌렀다.
 - [ ] 인증 전에는 Sheet에 기록되지 않는다.
 - [ ] 인증 후 신청 정보, `Active` 상태와 비밀번호 인증 정보가 Sheet에 기록된다.
 - [ ] Gmail·비밀번호 로그인, 아이디 저장, 로그아웃이 동작한다.
 - [ ] 관리자 연결 테스트와 `Blocked` 반영 테스트가 통과한다.
+- [ ] 관리자 로그아웃, 초기 비밀번호 폐기와 새 비밀번호 재로그인이 동작한다.

@@ -1807,6 +1807,13 @@ html[data-theme="light"] .ai-jena-label {
     color: rgba(24, 33, 45, .72);
 }
 
+html[data-theme="light"] .fill-layer-color-row label,
+html[data-theme="light"] .fill-layer-range,
+html[data-theme="light"] .fill-layer-status,
+html[data-theme="light"] .fill-layer-inspector .editor-panel-title em {
+    color: rgba(24, 33, 45, .68);
+}
+
 html[data-theme="light"] .settings-header-button {
     color: #4f3f80 !important;
     border-color: rgba(90, 69, 145, .3) !important;
@@ -5605,7 +5612,7 @@ html[data-theme="light"] .settings-logout-button {
 
 .editor-layer-content-actions {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 7px;
     margin: 8px 0;
 }
@@ -5615,6 +5622,126 @@ html[data-theme="light"] .settings-logout-button {
     color: #d8f5ff;
     border-color: rgba(127, 221, 255, .26);
     background: rgba(39, 132, 160, .1);
+}
+
+.editor-layer-content-actions .editor-color-layer-button {
+    color: #ffe8b0;
+    border-color: rgba(255, 205, 112, .34);
+    background: rgba(255, 174, 80, .08);
+}
+
+.fill-layer-inspector {
+    gap: 9px;
+}
+
+.fill-layer-inspector .editor-panel-title em {
+    color: rgba(255, 255, 255, .4);
+    font-size: calc(var(--editor-ui-font-size) - 2px);
+    font-style: normal;
+}
+
+.fill-layer-mode {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.fill-layer-mode button {
+    min-width: 0;
+    padding: 7px 4px;
+}
+
+.fill-layer-mode button.active {
+    color: #061118;
+    border-color: #7fddff;
+    background: linear-gradient(135deg, #7fddff, #77f5d1);
+}
+
+.fill-layer-preview {
+    min-height: 46px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, .14);
+    border-radius: 8px;
+    background-color: #121821;
+    background-image:
+        linear-gradient(45deg, #202733 25%, transparent 25%),
+        linear-gradient(-45deg, #202733 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #202733 75%),
+        linear-gradient(-45deg, transparent 75%, #202733 75%);
+    background-size: 14px 14px;
+    background-position: 0 0, 0 7px, 7px -7px, -7px 0;
+}
+
+.fill-layer-color-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 7px;
+}
+
+.fill-layer-color-row label {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+    color: rgba(255, 255, 255, .55);
+    font-size: calc(var(--editor-ui-font-size) - 1px);
+}
+
+.fill-layer-color-row input[type="color"] {
+    width: 100%;
+    height: 34px;
+    padding: 3px;
+}
+
+.fill-layer-eyedropper {
+    min-width: 82px;
+    height: 34px;
+    padding: 5px 7px;
+    color: #bfffe8;
+    border-color: rgba(113, 247, 208, .3);
+}
+
+.fill-layer-eyedropper.active {
+    color: #071118;
+    border-color: #ffd170;
+    background: #ffd170;
+}
+
+.fill-layer-range {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr) 42px;
+    align-items: center;
+    gap: 7px;
+    color: rgba(255, 255, 255, .58);
+    font-size: calc(var(--editor-ui-font-size) - 1px);
+}
+
+.fill-layer-range .editor-stepper {
+    min-width: 0;
+}
+
+.fill-layer-range output {
+    color: #9eeaff;
+    text-align: right;
+    font-weight: 750;
+}
+
+.fill-layer-swap {
+    width: 100%;
+    color: #d6c7ff;
+    border-color: rgba(175, 138, 255, .28);
+}
+
+.fill-layer-status {
+    color: rgba(255, 255, 255, .43);
+    font-size: calc(var(--editor-ui-font-size) - 2px);
+    line-height: 1.55;
+}
+
+#imageEditorCanvas.fill-eyedropper-active,
+#imageEditorCanvas.fill-eyedropper-active:hover {
+    cursor: crosshair;
 }
 
 .image-layer-edit-actions {

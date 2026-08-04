@@ -3,7 +3,7 @@
 const SHEET_NAME = 'Users';
 const NOTIFICATION_EMAIL = 'shoutjoy1@yonsei.ac.kr';
 const EXPECTED_SENDER_EMAIL = 'shoutjoy1@gmail.com';
-const SERVER_VERSION = '2026-08-04-password-login-1';
+const SERVER_VERSION = '2026-08-05-admin-password-1';
 const SPREADSHEET_ID = '1xNA955JIwe5cHETAMMMaCEfb1QtZnbuc9tKbEDQ573w';
 const VERIFICATION_TTL_MS = 30 * 60 * 1000;
 const VERIFICATION_GRANT_TTL_MS = 24 * 60 * 60 * 1000;
@@ -17,6 +17,12 @@ const CREDENTIAL_PEPPER_KEY = 'fma_credential_pepper_v1';
 const LOGIN_FAILURE_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_LOCK_MS = 15 * 60 * 1000;
 const LOGIN_MAX_FAILURES = 5;
+const ADMIN_ID = 'admin';
+const ADMIN_INITIAL_PASSWORD = 'a1234567890';
+const ADMIN_SESSION_TTL_MS = 60 * 60 * 1000;
+const ADMIN_CREDENTIAL_KEY = 'fma_admin_credential_v1';
+const ADMIN_SESSION_PREFIX = 'fma_admin_session_v1_';
+const ADMIN_LOGIN_RATE_KEY = 'fma-admin-login:admin';
 const SHEET_HEADERS = [
   'RequestedAt',
   'Email',
@@ -43,6 +49,11 @@ function doPost(e) {
 
     const requestData = JSON.parse(e.postData.contents);
     const action = String(requestData.action || 'register').trim().toLowerCase();
+    if (action === 'admin-login-params') return getAdminLoginParametersResponse_(requestData.adminId);
+    if (action === 'admin-login') return handleAdminLoginPost_(requestData);
+    if (action === 'admin-change-password') return handleAdminChangePasswordPost_(requestData);
+    if (action === 'admin-status') return handleAdminStatusPost_(requestData);
+    if (action === 'admin-logout') return handleAdminLogoutPost_(requestData);
     if (action === 'login') return handleLoginPost_(requestData);
     if (action === 'logout') return handleLogoutPost_(requestData);
     if (action === 'check' || action === 'status') return handleAuthenticatedStatusPost_(requestData, action);
@@ -251,6 +262,268 @@ function handleAuthenticatedStatusPost_(requestData, action) {
     checkedAt: checkedAt.toISOString(),
     verifiedAt: toIsoString_(data[row - 1][4]),
     serverVersion: SERVER_VERSION
+  });
+}
+
+function getAdminLoginParametersResponse_(adminIdValue) {
+  const adminId = String(adminIdValue || '').trim().toLowerCase();
+  if (!getAdminCredential_()) initializeAdminCredential_();
+  const credential = getAdminCredential_();
+  if (adminId !== ADMIN_ID) return adminFailureResponse_('관리자 아이디 또는 비밀번호가 올바르지 않습니다.');
+  return json_({
+    success: true,
+    adminId: ADMIN_ID,
+    bootstrapPasswordRequired: Boolean(credential.passwordChangeRequired),
+    passwordSalt: credential.passwordChangeRequired ? '' : credential.passwordSalt,
+    passwordIterations: credential.passwordChangeRequired ? PASSWORD_KDF_ITERATIONS : credential.passwordIterations,
+    serverVersion: SERVER_VERSION
+  });
+}
+
+function handleAdminLoginPost_(requestData) {
+  const adminId = String(requestData.adminId || '').trim().toLowerCase();
+  const limited = getLoginRateLimit_(ADMIN_LOGIN_RATE_KEY);
+  if (limited.locked) {
+    return adminFailureResponse_('관리자 로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.', {
+      retryAfterSeconds: limited.retryAfterSeconds
+    });
+  }
+
+  const credential = getAdminCredential_();
+  let validCredential = false;
+  if (credential && adminId === ADMIN_ID) {
+    if (credential.passwordChangeRequired) {
+      const bootstrapPassword = String(requestData.bootstrapPassword || '');
+      validCredential = bootstrapPassword.length >= 10 && bootstrapPassword.length <= 128 &&
+        constantTimeEquals_(hashAdminBootstrapPassword_(bootstrapPassword), credential.bootstrapHash);
+    } else {
+      const verifier = String(requestData.passwordVerifier || '').trim().toLowerCase();
+      validCredential = /^[a-f0-9]{64}$/.test(verifier) &&
+        constantTimeEquals_(hashPasswordVerifier_(verifier), credential.passwordHash);
+    }
+  }
+
+  if (!validCredential) {
+    recordLoginFailure_(ADMIN_LOGIN_RATE_KEY);
+    return adminFailureResponse_('관리자 아이디 또는 비밀번호가 올바르지 않습니다.');
+  }
+
+  clearLoginFailure_(ADMIN_LOGIN_RATE_KEY);
+  const session = createAdminSession_(ADMIN_ID);
+  return json_({
+    success: true,
+    adminAuthenticated: true,
+    adminId: ADMIN_ID,
+    passwordChangeRequired: Boolean(credential.passwordChangeRequired),
+    adminSessionToken: session.token,
+    expiresAt: session.expiresAt,
+    serverVersion: SERVER_VERSION
+  });
+}
+
+function handleAdminChangePasswordPost_(requestData) {
+  const currentSession = validateAdminSession_(requestData.adminSessionToken);
+  if (!currentSession) return adminFailureResponse_('관리자 세션이 만료되었습니다. 다시 로그인해 주세요.');
+
+  const passwordCredential = getPasswordCredentialRequest_({
+    passwordSalt: requestData.passwordSalt,
+    passwordVerifier: requestData.passwordVerifier,
+    passwordIterations: requestData.passwordIterations
+  });
+  const previous = getAdminCredential_();
+  PropertiesService.getScriptProperties().setProperty(ADMIN_CREDENTIAL_KEY, JSON.stringify({
+    adminId: ADMIN_ID,
+    passwordSalt: passwordCredential.salt,
+    passwordHash: passwordCredential.hash,
+    passwordIterations: passwordCredential.iterations,
+    passwordChangeRequired: false,
+    createdAt: previous && previous.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }));
+
+  revokeAllAdminSessions_();
+  const session = createAdminSession_(ADMIN_ID);
+  return json_({
+    success: true,
+    adminAuthenticated: true,
+    adminId: ADMIN_ID,
+    passwordChangeRequired: false,
+    adminSessionToken: session.token,
+    expiresAt: session.expiresAt,
+    serverVersion: SERVER_VERSION
+  });
+}
+
+function handleAdminStatusPost_(requestData) {
+  const session = validateAdminSession_(requestData.adminSessionToken);
+  if (!session) return adminFailureResponse_('관리자 세션이 만료되었습니다. 다시 로그인해 주세요.');
+  return json_({
+    success: true,
+    adminAuthenticated: true,
+    adminId: ADMIN_ID,
+    passwordChangeRequired: Boolean(session.passwordChangeRequired),
+    expiresAt: session.expiresAt,
+    serverVersion: SERVER_VERSION
+  });
+}
+
+function handleAdminLogoutPost_(requestData) {
+  revokeAdminSession_(requestData.adminSessionToken);
+  return json_({
+    success: true,
+    adminAuthenticated: false,
+    serverVersion: SERVER_VERSION
+  });
+}
+
+function adminFailureResponse_(message, extra) {
+  return json_(Object.assign({
+    success: false,
+    adminAuthenticated: false,
+    serverVersion: SERVER_VERSION,
+    message: message
+  }, extra || {}));
+}
+
+function getAdminCredential_() {
+  const raw = PropertiesService.getScriptProperties().getProperty(ADMIN_CREDENTIAL_KEY);
+  if (!raw) return null;
+  try {
+    const credential = JSON.parse(raw);
+    if (!credential || String(credential.adminId || '').toLowerCase() !== ADMIN_ID) return null;
+    if (credential.passwordChangeRequired) {
+      return /^[a-f0-9]{64}$/i.test(String(credential.bootstrapHash || '')) ? credential : null;
+    }
+    if (
+      !/^[a-f0-9]{32,128}$/i.test(String(credential.passwordSalt || '')) ||
+      !/^[a-f0-9]{64}$/i.test(String(credential.passwordHash || '')) ||
+      Number(credential.passwordIterations) !== PASSWORD_KDF_ITERATIONS
+    ) return null;
+    return credential;
+  } catch (_) {
+    return null;
+  }
+}
+
+function hashAdminBootstrapPassword_(password) {
+  return hmacSha256Hex_('admin-bootstrap:' + String(password), getCredentialPepper_());
+}
+
+function initializeAdminCredential_() {
+  getCredentialPepper_();
+  const bootstrapHash = hashAdminBootstrapPassword_(ADMIN_INITIAL_PASSWORD);
+  const properties = PropertiesService.getScriptProperties();
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    if (getAdminCredential_()) return { created: false, adminId: ADMIN_ID };
+    properties.setProperty(ADMIN_CREDENTIAL_KEY, JSON.stringify({
+      adminId: ADMIN_ID,
+      bootstrapHash: bootstrapHash,
+      passwordChangeRequired: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }));
+  } finally {
+    lock.releaseLock();
+  }
+  return { created: true, adminId: ADMIN_ID };
+}
+
+function initializeAdminAccount() {
+  const result = initializeAdminCredential_();
+  if (!result.created) {
+    console.log('관리자 계정은 이미 준비되어 있습니다. 비밀번호를 잊었다면 resetAdminAccount를 실행하세요.');
+    return;
+  }
+  console.log('관리자 아이디: ' + ADMIN_ID);
+  console.log('최초 임시 비밀번호: ' + ADMIN_INITIAL_PASSWORD);
+  console.log('관리자 페이지에서 로그인한 뒤 새 비밀번호로 반드시 변경하세요.');
+}
+
+function resetAdminAccount() {
+  getCredentialPepper_();
+  PropertiesService.getScriptProperties().setProperty(ADMIN_CREDENTIAL_KEY, JSON.stringify({
+    adminId: ADMIN_ID,
+    bootstrapHash: hashAdminBootstrapPassword_(ADMIN_INITIAL_PASSWORD),
+    passwordChangeRequired: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }));
+  revokeAllAdminSessions_();
+  clearLoginFailure_(ADMIN_LOGIN_RATE_KEY);
+  console.log('관리자 계정을 임시 비밀번호 상태로 초기화했습니다.');
+  console.log('관리자 아이디: ' + ADMIN_ID);
+  console.log('초기 비밀번호: ' + ADMIN_INITIAL_PASSWORD);
+}
+
+function createAdminSession_(adminId) {
+  cleanupExpiredAdminSessions_();
+  const token = createRandomToken_();
+  const expiresAt = new Date(Date.now() + ADMIN_SESSION_TTL_MS).toISOString();
+  PropertiesService.getScriptProperties().setProperty(
+    ADMIN_SESSION_PREFIX + sha256Hex_(token),
+    JSON.stringify({
+      adminId: adminId,
+      createdAt: new Date().toISOString(),
+      expiresAt: expiresAt
+    })
+  );
+  return { token: token, expiresAt: expiresAt };
+}
+
+function validateAdminSession_(tokenValue) {
+  const token = String(tokenValue || '').trim().toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(token)) return null;
+  const properties = PropertiesService.getScriptProperties();
+  const key = ADMIN_SESSION_PREFIX + sha256Hex_(token);
+  const raw = properties.getProperty(key);
+  if (!raw) return null;
+  try {
+    const session = JSON.parse(raw);
+    const credential = getAdminCredential_();
+    if (
+      Date.parse(session.expiresAt) <= Date.now() ||
+      String(session.adminId || '').toLowerCase() !== ADMIN_ID ||
+      !credential
+    ) {
+      properties.deleteProperty(key);
+      return null;
+    }
+    session.passwordChangeRequired = Boolean(credential.passwordChangeRequired);
+    return session;
+  } catch (_) {
+    properties.deleteProperty(key);
+    return null;
+  }
+}
+
+function revokeAdminSession_(tokenValue) {
+  const token = String(tokenValue || '').trim().toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(token)) return;
+  PropertiesService.getScriptProperties().deleteProperty(ADMIN_SESSION_PREFIX + sha256Hex_(token));
+}
+
+function revokeAllAdminSessions_() {
+  const properties = PropertiesService.getScriptProperties();
+  properties.getKeys().filter(function(key) {
+    return key.indexOf(ADMIN_SESSION_PREFIX) === 0;
+  }).forEach(function(key) {
+    properties.deleteProperty(key);
+  });
+}
+
+function cleanupExpiredAdminSessions_() {
+  const properties = PropertiesService.getScriptProperties();
+  properties.getKeys().filter(function(key) {
+    return key.indexOf(ADMIN_SESSION_PREFIX) === 0;
+  }).forEach(function(key) {
+    try {
+      const record = JSON.parse(properties.getProperty(key) || 'null');
+      if (!record || Date.parse(record.expiresAt) <= Date.now()) properties.deleteProperty(key);
+    } catch (_) {
+      properties.deleteProperty(key);
+    }
   });
 }
 
@@ -1158,10 +1431,16 @@ function authorizeServices() {
   const sheet = getUsersSheet_();
   applyStatusValidation_(sheet);
   getCredentialPepper_();
+  const adminSetup = initializeAdminCredential_();
   cleanupExpiredSessions_();
   console.log('인증 메일 발신 계정: ' + getMailSenderEmail_());
   console.log('등록 사용자 수: ' + Math.max(sheet.getLastRow() - 1, 0));
   console.log('비밀번호 로그인용 서버 보안 키가 준비되었습니다.');
+  if (adminSetup.created) {
+    console.log('관리자 아이디: ' + ADMIN_ID);
+    console.log('최초 임시 비밀번호: ' + ADMIN_INITIAL_PASSWORD);
+    console.log('첫 관리자 로그인 직후 새 비밀번호로 변경해야 합니다.');
+  }
   console.log('남은 일일 메일 발송 한도: ' + MailApp.getRemainingDailyQuota());
 }
 

@@ -1371,6 +1371,7 @@
                                 <button id="btnPutImageInLayer" type="button">▣ PC 이미지</button>
                                 <button id="btnPutFmaImageInLayer" type="button">▦ FMA 이미지</button>
                                 <button id="btnPutTextInLayer" type="button">T 텍스트 넣기</button>
+                                <button id="btnPutColorInLayer" class="editor-color-layer-button" type="button">◉ 색상 넣기</button>
                             </div>
                             <div class="editor-layer-actions">
                                 <button id="btnImageLayerUp" type="button" title="레이어 위로">↑</button>
@@ -1405,6 +1406,50 @@
                                 <label><span>세로</span><div><input id="imageLayerHeight" type="range"
                                         min="1" max="8000" step="1" value="1"><output id="imageLayerHeightValue">1px</output></div></label>
                             </div>
+                        </section>
+                        <section id="fillLayerInspector" class="editor-panel fill-layer-inspector" style="display:none;">
+                            <div class="editor-panel-title">
+                                <span>색상 레이어</span>
+                                <em>캔버스 전체 채우기</em>
+                            </div>
+                            <div class="fill-layer-mode" role="group" aria-label="색상 레이어 채우기 방식">
+                                <button type="button" data-fill-layer-mode="solid" aria-pressed="true">단색</button>
+                                <button type="button" data-fill-layer-mode="linear" aria-pressed="false">선형</button>
+                                <button type="button" data-fill-layer-mode="radial" aria-pressed="false">방사형</button>
+                            </div>
+                            <div id="fillLayerPreview" class="fill-layer-preview" aria-label="색상 미리보기"></div>
+                            <div class="fill-layer-color-row">
+                                <label>
+                                    <span id="fillLayerColorStartLabel">색상</span>
+                                    <input id="fillLayerColorStart" type="color" value="#57e6c1">
+                                </label>
+                                <button id="btnPickFillColorStart" class="fill-layer-eyedropper" type="button"
+                                    title="캔버스에서 색상 추출">◉ 스포이드</button>
+                            </div>
+                            <div id="fillLayerColorEndRow" class="fill-layer-color-row" style="display:none;">
+                                <label>
+                                    <span>끝 색</span>
+                                    <input id="fillLayerColorEnd" type="color" value="#668cff">
+                                </label>
+                                <button id="btnPickFillColorEnd" class="fill-layer-eyedropper" type="button"
+                                    title="캔버스에서 끝 색상 추출">◉ 스포이드</button>
+                            </div>
+                            <label class="fill-layer-range">
+                                <span>Alpha</span>
+                                <input id="fillLayerOpacity" type="range" min="0" max="100" step="1" value="100">
+                                <output id="fillLayerOpacityValue">100%</output>
+                            </label>
+                            <label id="fillLayerAngleRow" class="fill-layer-range" style="display:none;">
+                                <span>각도</span>
+                                <input id="fillLayerAngle" type="range" min="0" max="360" step="1" value="0">
+                                <output id="fillLayerAngleValue">0°</output>
+                            </label>
+                            <button id="btnSwapFillLayerColors" class="fill-layer-swap" type="button" style="display:none;">
+                                ⇄ 시작/끝 색 바꾸기
+                            </button>
+                            <small id="fillLayerEyedropperStatus" class="fill-layer-status">
+                                스포이드를 누른 뒤 캔버스의 색을 클릭하세요.
+                            </small>
                         </section>
                         <section class="editor-panel base-layer-controls">
                             <div class="editor-panel-title"><span>베이스 이미지</span><em>잠금</em></div>
@@ -1918,8 +1963,8 @@
     <script src="js/files/fileHandlers.js?v=20260804-2"></script>
     <script src="js/integrations/externalApps.js?v=20260804-1"></script>
     <script src="js/core/interaction.js?v=20260802-1"></script>
-    <script src="Auth/settings.js?v=20260804-3"></script>
-    <script src="Auth/config.js?v=20260804-2"></script>
+    <script src="Auth/settings.js?v=20260805-2"></script>
+    <script src="Auth/config.js?v=20260805-2"></script>
     <script src="Auth/modal.js?v=20260804-7"></script>
     <script src="Auth/client.js?v=20260804-7"></script>
     <script src="js/core/navigationGuard.js?v=20260802-1"></script>

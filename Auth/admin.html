@@ -6,11 +6,53 @@
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>FMA Viewer 관리자 설정</title>
     <meta id="adminDescription" name="description" content="FMA Viewer Google Sheet, Apps Script와 GAS 배포 URL을 설정합니다.">
-    <link rel="stylesheet" href="admin.css?v=20260804-1">
+    <link rel="stylesheet" href="admin.css?v=20260805-2">
 </head>
 
 <body>
-    <main class="admin-shell">
+    <section id="adminAuthGate" class="admin-auth-gate" aria-labelledby="adminAuthTitle">
+        <div class="admin-auth-card">
+            <div class="admin-auth-mark" aria-hidden="true">FMA</div>
+            <p class="eyebrow">ADMIN ACCESS</p>
+            <h1 id="adminAuthTitle">관리자 로그인</h1>
+            <p id="adminAuthDescription">FMA Viewer 관리자 아이디와 비밀번호를 입력해 주세요.</p>
+            <div id="adminInitialPasswordNotice" class="admin-initial-password-notice" hidden>
+                <strong>최초 관리자 로그인 안내</strong>
+                <span>아이디 <code>admin</code></span>
+                <span>초기 비밀번호 <code>a1234567890</code></span>
+                <p>초기 비밀번호로 로그인하면 새 비밀번호 설정 화면으로 바로 이동하며, 변경 전에는 관리자 설정을 열 수 없습니다.</p>
+            </div>
+            <form id="adminLoginForm" class="admin-auth-form" novalidate>
+                <label class="field" for="adminLoginId">
+                    <span>관리자 아이디</span>
+                    <input id="adminLoginId" type="text" value="admin" autocomplete="username" required>
+                </label>
+                <label class="field" for="adminLoginPassword">
+                    <span>비밀번호</span>
+                    <input id="adminLoginPassword" type="password" autocomplete="current-password" required>
+                </label>
+                <button id="adminLoginButton" class="primary admin-auth-login" type="submit">로그인</button>
+            </form>
+            <form id="adminPasswordChangeForm" class="admin-auth-form" hidden novalidate>
+                <h2>새 관리자 비밀번호 설정</h2>
+                <p>최초 임시 비밀번호는 다시 사용할 수 없습니다. 앞으로 사용할 비밀번호를 설정해 주세요.</p>
+                <label class="field" for="adminNewPassword">
+                    <span>새 비밀번호</span>
+                    <input id="adminNewPassword" type="password" autocomplete="new-password" minlength="10" required>
+                    <small>10자 이상이며 영문 대·소문자, 숫자, 특수문자 중 세 종류 이상을 사용하세요.</small>
+                </label>
+                <label class="field" for="adminNewPasswordConfirm">
+                    <span>새 비밀번호 확인</span>
+                    <input id="adminNewPasswordConfirm" type="password" autocomplete="new-password" minlength="10" required>
+                </label>
+                <button id="adminPasswordChangeButton" class="primary admin-auth-login" type="submit">비밀번호 변경 후 관리자 열기</button>
+            </form>
+            <p id="adminAuthStatus" class="admin-status" role="status" aria-live="polite" hidden></p>
+            <a class="text-link admin-auth-back" href="../index.html">FMA Viewer로 돌아가기</a>
+        </div>
+    </section>
+
+    <main id="adminShell" class="admin-shell" hidden>
         <header class="admin-header">
             <div>
                 <p id="adminAppEyebrow" class="eyebrow">FMA VIEWER</p>
@@ -18,11 +60,13 @@
                 <p>Google Sheet, Apps Script 편집기와 GAS 배포 주소를 현재 브라우저에 저장합니다.</p>
             </div>
             <nav class="header-links" aria-label="관리자 바로가기">
+                <span id="adminIdentityBadge" class="admin-identity-badge"></span>
                 <a id="openSpreadsheetHeaderLink" class="app-link" href="#" target="_blank"
                     rel="noopener noreferrer">Google Sheet 열기</a>
                 <a id="openAppsScriptHeaderLink" class="app-link" href="#" target="_blank"
                     rel="noopener noreferrer">Apps Script 열기</a>
                 <a id="openAppLink" class="app-link" href="../index.html">FMA Viewer 열기</a>
+                <button id="adminLogoutButton" class="app-link admin-logout" type="button">로그아웃</button>
             </nav>
         </header>
 
@@ -177,13 +221,13 @@
         </section>
 
         <footer>
-            <p>이 페이지에는 서버 비밀번호나 Google 계정 인증정보를 입력하지 않습니다. 공개되는 Code.gs에도 비밀번호와 인증 토큰은 포함되지 않습니다.</p>
+            <p>관리자 비밀번호 원문은 Google Sheet에 저장되지 않으며, 변경한 비밀번호의 보호된 인증값만 GAS Script Properties에 보관됩니다.</p>
         </footer>
     </main>
 
-    <script src="settings.js?v=20260804-3"></script>
-    <script src="config.js?v=20260804-2"></script>
-    <script src="admin.js?v=20260804-2"></script>
+    <script src="settings.js?v=20260805-2"></script>
+    <script src="config.js?v=20260805-2"></script>
+    <script src="admin-auth.js?v=20260805-2"></script>
 </body>
 
 </html>

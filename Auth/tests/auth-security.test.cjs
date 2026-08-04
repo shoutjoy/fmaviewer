@@ -5,6 +5,8 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const values = new Map();
+let activeGoogleEmail = 'sheet.owner@gmail.com';
+let sheetOwnerEmail = 'sheet.owner@gmail.com';
 const scriptProperties = {
   getProperty(key) {
     return values.has(key) ? values.get(key) : null;
@@ -37,6 +39,28 @@ const context = vm.createContext({
   Array,
   RegExp,
   Error,
+  Session: {
+    getActiveUser: () => ({ getEmail: () => activeGoogleEmail })
+  },
+  SpreadsheetApp: {
+    openById: () => ({
+      getOwner: () => ({ getEmail: () => sheetOwnerEmail })
+    })
+  },
+  HtmlService: {
+    createHtmlOutput: (html) => ({
+      html,
+      setTitle() { return this; }
+    })
+  },
+  ContentService: {
+    MimeType: { JSON: 'JSON' },
+    createTextOutput: (text) => ({
+      text,
+      setMimeType() { return this; },
+      getContent() { return this.text; }
+    })
+  },
   PropertiesService: {
     getScriptProperties: () => scriptProperties
   },
@@ -94,6 +118,57 @@ assert.equal(
 );
 context.revokeSession_('security.test@gmail.com', session.token);
 assert.equal(context.validateSession_('security.test@gmail.com', session.token), null);
+
+const initialAdminParams = JSON.parse(
+  context.getAdminLoginParametersResponse_('admin').getContent()
+);
+assert.equal(initialAdminParams.success, true);
+assert.equal(initialAdminParams.bootstrapPasswordRequired, true);
+assert.equal(
+  Array.from(values.values()).some((value) => String(value).includes('a1234567890')),
+  false,
+  '초기 관리자 비밀번호 원문은 Script Properties에 저장되면 안 됩니다.'
+);
+
+const invalidInitialAdminLogin = JSON.parse(context.handleAdminLoginPost_({
+  adminId: 'admin',
+  bootstrapPassword: 'wrong-password'
+}).getContent());
+assert.equal(invalidInitialAdminLogin.adminAuthenticated, false);
+
+const initialAdminLogin = JSON.parse(context.handleAdminLoginPost_({
+  adminId: 'admin',
+  bootstrapPassword: 'a1234567890'
+}).getContent());
+assert.equal(initialAdminLogin.adminAuthenticated, true);
+assert.equal(initialAdminLogin.passwordChangeRequired, true);
+assert.match(initialAdminLogin.adminSessionToken, /^[a-f0-9]{64}$/);
+
+const changedVerifier = 'c'.repeat(64);
+const changedAdminPassword = JSON.parse(context.handleAdminChangePasswordPost_({
+  adminSessionToken: initialAdminLogin.adminSessionToken,
+  passwordSalt: 'fedcba9876543210fedcba9876543210',
+  passwordVerifier: changedVerifier,
+  passwordIterations: 600000
+}).getContent());
+assert.equal(changedAdminPassword.adminAuthenticated, true);
+assert.equal(changedAdminPassword.passwordChangeRequired, false);
+assert.equal(context.validateAdminSession_(initialAdminLogin.adminSessionToken), null);
+assert.equal(context.validateAdminSession_(changedAdminPassword.adminSessionToken).adminId, 'admin');
+
+const initialPasswordReuse = JSON.parse(context.handleAdminLoginPost_({
+  adminId: 'admin',
+  bootstrapPassword: 'a1234567890'
+}).getContent());
+assert.equal(initialPasswordReuse.adminAuthenticated, false, '비밀번호 변경 후 초기 비밀번호는 폐기되어야 합니다.');
+
+const changedAdminLogin = JSON.parse(context.handleAdminLoginPost_({
+  adminId: 'admin',
+  passwordVerifier: changedVerifier
+}).getContent());
+assert.equal(changedAdminLogin.adminAuthenticated, true);
+context.revokeAdminSession_(changedAdminLogin.adminSessionToken);
+assert.equal(context.validateAdminSession_(changedAdminLogin.adminSessionToken), null);
 
 for (let attempt = 0; attempt < 5; attempt += 1) {
   context.recordLoginFailure_('security.test@gmail.com');

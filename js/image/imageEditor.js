@@ -122,7 +122,9 @@ var imageEditorState = {
     externalReturn: null,
     quickControlsDragging: false,
     quickControlsDragStart: null,
-    magneticSnap: true
+    magneticSnap: true,
+    fillEyedropperTarget: null,
+    fillEyedropperLayerId: null
 };
 
 function createDefaultImageEditorConfig() {
@@ -131,7 +133,7 @@ function createDefaultImageEditorConfig() {
     IMAGE_EDITOR_PARAMS.forEach(key => adjustments[key] = 0);
     IMAGE_EDITOR_EFFECTS.forEach(key => effects[key] = 0);
     return {
-        version: 3,
+        version: 4,
         preset: "original",
         adjustments: adjustments,
         effects: effects,
@@ -207,7 +209,22 @@ function normalizeEmptyLayer(layer) {
         id: String(layer?.id || createImageEditorLayerId("empty")),
         name: String(layer?.name || "빈 레이어"),
         visible: layer?.visible !== false,
-        locked: layer?.locked === true
+        locked: layer?.locked === true,
+        fill: normalizeImageEditorLayerFill(layer?.fill)
+    };
+}
+
+function normalizeImageEditorLayerFill(fill) {
+    const mode = ["solid", "linear", "radial"].includes(fill?.mode)
+        ? fill.mode
+        : "solid";
+    return {
+        enabled: fill?.enabled === true,
+        mode,
+        color1: validEditorHex(fill?.color1, "#57e6c1"),
+        color2: validEditorHex(fill?.color2, "#668cff"),
+        opacity: editorClamp(Number(fill?.opacity ?? 1), 0, 1),
+        angle: editorClamp(Number(fill?.angle) || 0, 0, 360)
     };
 }
 
@@ -413,6 +430,11 @@ function initImageEditorFeature() {
     });
     document.addEventListener("keydown", event => {
         if (dom.imageEditorModal.style.display === "none") return;
+        if (event.key === "Escape" && imageEditorState.fillEyedropperTarget) {
+            event.preventDefault();
+            cancelImageEditorFillEyedropper("스포이드가 취소되었습니다.");
+            return;
+        }
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z" &&
             !event.target.closest("input, textarea, select, [contenteditable='true']")) {
             event.preventDefault();
@@ -1264,6 +1286,7 @@ function clearImageEditorExternalReturn(removeTemporary = true) {
 
 function closeImageEditor() {
     if (imageEditorState.processing) return;
+    cancelImageEditorFillEyedropper();
     clearImageEditorExternalReturn(true);
     dom.imageEditorModal.style.display = "none";
     closeImageEditorFmaPicker();
@@ -1394,8 +1417,52 @@ function drawImageEditorStackLayers(canvas, config, scale, showSelection) {
         } else if (entry.type === "shape") {
             const layer = config.shapeLayers.find(item => item.id === entry.id);
             if (layer) drawImageEditorShapeLayers(canvas, [layer], scale, showSelection);
+        } else if (entry.type === "empty") {
+            const layer = config.emptyLayers.find(item => item.id === entry.id);
+            if (layer?.fill?.enabled) drawImageEditorFillLayer(canvas, layer);
         }
     });
+}
+
+function drawImageEditorFillLayer(canvas, layer) {
+    if (!layer?.visible || !layer.fill?.enabled) return;
+    const context = canvas.getContext("2d");
+    const fill = layer.fill;
+    let style = fill.color1;
+    if (fill.mode === "linear") {
+        const radians = fill.angle * Math.PI / 180;
+        const directionX = Math.cos(radians);
+        const directionY = Math.sin(radians);
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const radius = (
+            Math.abs(canvas.width * directionX) +
+            Math.abs(canvas.height * directionY)
+        ) / 2;
+        style = context.createLinearGradient(
+            centerX - directionX * radius,
+            centerY - directionY * radius,
+            centerX + directionX * radius,
+            centerY + directionY * radius
+        );
+        style.addColorStop(0, fill.color1);
+        style.addColorStop(1, fill.color2);
+    } else if (fill.mode === "radial") {
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const radius = Math.hypot(canvas.width, canvas.height) / 2;
+        style = context.createRadialGradient(
+            centerX, centerY, 0,
+            centerX, centerY, Math.max(1, radius)
+        );
+        style.addColorStop(0, fill.color1);
+        style.addColorStop(1, fill.color2);
+    }
+    context.save();
+    context.globalAlpha = fill.opacity;
+    context.fillStyle = style;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.restore();
 }
 
 function drawImageEditorShapeLayers(canvas, layers, scale, showSelection) {
@@ -1799,6 +1866,7 @@ function resetImageEditorAdjustments() {
 
 function resetEntireImageEditor() {
     if (!confirm("모든 보정, 이미지·텍스트 레이어와 그리기를 초기화할까요?")) return;
+    cancelImageEditorFillEyedropper();
     imageEditorState.config = createDefaultImageEditorConfig();
     imageEditorState.selectedLayerId = null;
     imageEditorState.selectedImageLayerId = null;
@@ -1901,6 +1969,7 @@ function initImageEditorShapeControls() {
 
 function initImageLayerControls() {
     dom.btnAddImageLayer.onclick = addEmptyImageEditorLayer;
+    dom.btnPutColorInLayer.onclick = putColorInSelectedImageEditorLayer;
     dom.btnPutImageInLayer.onclick = () => {
         if (!imageEditorState.selectedEmptyLayerId) addEmptyImageEditorLayer();
         dom.imageLayerFileInput.click();
@@ -1942,6 +2011,34 @@ function initImageLayerControls() {
         requestImageEditorRender();
     };
     dom.baseImageLayerOpacity.oninput = updateImageEditorBaseLayer;
+    document.querySelectorAll("[data-fill-layer-mode]").forEach(button => {
+        button.onclick = () => updateSelectedImageEditorFillLayer({
+            mode: button.dataset.fillLayerMode
+        });
+    });
+    dom.fillLayerColorStart.oninput = () => updateSelectedImageEditorFillLayer({
+        color1: dom.fillLayerColorStart.value
+    });
+    dom.fillLayerColorEnd.oninput = () => updateSelectedImageEditorFillLayer({
+        color2: dom.fillLayerColorEnd.value
+    });
+    dom.fillLayerOpacity.oninput = () => updateSelectedImageEditorFillLayer({
+        opacity: editorClamp(Number(dom.fillLayerOpacity.value) / 100, 0, 1)
+    });
+    dom.fillLayerAngle.oninput = () => updateSelectedImageEditorFillLayer({
+        angle: editorClamp(Number(dom.fillLayerAngle.value) || 0, 0, 360)
+    });
+    dom.btnSwapFillLayerColors.onclick = () => {
+        const layer = getSelectedImageEditorFillLayer();
+        if (!layer || layer.locked) return;
+        [layer.fill.color1, layer.fill.color2] = [layer.fill.color2, layer.fill.color1];
+        syncImageEditorFillLayerInspector();
+        renderImageLayerList();
+        renderImageEditorLayerList();
+        requestImageEditorRender();
+    };
+    dom.btnPickFillColorStart.onclick = () => toggleImageEditorFillEyedropper("start");
+    dom.btnPickFillColorEnd.onclick = () => toggleImageEditorFillEyedropper("end");
     [
         [dom.imageLayerOpacity, "opacity", value => editorClamp(Number(value) / 100, 0, 1)],
         [dom.imageLayerRotation, "rotation", value => editorClamp(Number(value) || 0, -180, 180)],
@@ -2018,6 +2115,199 @@ function addEmptyImageEditorLayer() {
     renderImageLayerList();
     requestImageEditorRender();
     return layer;
+}
+
+function putColorInSelectedImageEditorLayer() {
+    if (!imageEditorState.config) return;
+    let layer = imageEditorState.config.emptyLayers.find(
+        item => item.id === imageEditorState.selectedEmptyLayerId
+    );
+    if (!layer) layer = addEmptyImageEditorLayer();
+    if (!layer) return;
+    layer.fill = normalizeImageEditorLayerFill({
+        ...layer.fill,
+        enabled: true
+    });
+    if (/^레이어\s+\d+$/u.test(layer.name) || layer.name === "빈 레이어") {
+        const count = imageEditorState.config.emptyLayers.filter(
+            item => item.fill?.enabled
+        ).length;
+        layer.name = `색상 레이어 ${Math.max(1, count)}`;
+    }
+    selectImageEditorStackLayer(layer.id, "empty");
+    syncImageEditorFillLayerInspector();
+    renderImageLayerList();
+    renderImageEditorLayerList();
+    requestImageEditorRender();
+}
+
+function getSelectedImageEditorFillLayer() {
+    const layer = imageEditorState.config?.emptyLayers.find(
+        item => item.id === imageEditorState.selectedEmptyLayerId
+    ) || null;
+    return layer?.fill?.enabled ? layer : null;
+}
+
+function updateSelectedImageEditorFillLayer(patch) {
+    const layer = getSelectedImageEditorFillLayer();
+    if (!layer || layer.locked) return;
+    Object.assign(layer.fill, patch || {});
+    layer.fill = normalizeImageEditorLayerFill(layer.fill);
+    syncImageEditorFillLayerInspector();
+    renderImageLayerList();
+    renderImageEditorLayerList();
+    requestImageEditorRender();
+}
+
+function getImageEditorFillModeLabel(mode) {
+    return ({
+        solid: "단색",
+        linear: "선형 그라데이션",
+        radial: "방사형 그라데이션"
+    })[mode] || "단색";
+}
+
+function syncImageEditorFillLayerInspector() {
+    const layer = getSelectedImageEditorFillLayer();
+    if (!dom.fillLayerInspector) return;
+    dom.fillLayerInspector.style.display = layer ? "flex" : "none";
+    if (!layer) {
+        cancelImageEditorFillEyedropper();
+        return;
+    }
+    const fill = layer.fill;
+    const gradient = fill.mode !== "solid";
+    const linear = fill.mode === "linear";
+    document.querySelectorAll("[data-fill-layer-mode]").forEach(button => {
+        const active = button.dataset.fillLayerMode === fill.mode;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", String(active));
+        button.disabled = layer.locked;
+    });
+    dom.fillLayerColorStartLabel.innerText = gradient ? "시작 색" : "색상";
+    dom.fillLayerColorStart.value = fill.color1;
+    dom.fillLayerColorEnd.value = fill.color2;
+    dom.fillLayerOpacity.value = Math.round(fill.opacity * 100);
+    dom.fillLayerOpacityValue.innerText = `${Math.round(fill.opacity * 100)}%`;
+    dom.fillLayerAngle.value = Math.round(fill.angle);
+    dom.fillLayerAngleValue.innerText = `${Math.round(fill.angle)}°`;
+    dom.fillLayerColorEndRow.style.display = gradient ? "grid" : "none";
+    dom.fillLayerAngleRow.style.display = linear ? "grid" : "none";
+    dom.btnSwapFillLayerColors.style.display = gradient ? "block" : "none";
+    [
+        dom.fillLayerColorStart, dom.fillLayerColorEnd, dom.fillLayerOpacity,
+        dom.fillLayerAngle, dom.btnPickFillColorStart, dom.btnPickFillColorEnd,
+        dom.btnSwapFillLayerColors
+    ].forEach(control => control.disabled = layer.locked);
+    const color1 = editorHexToRgba(fill.color1, fill.opacity);
+    const color2 = editorHexToRgba(fill.color2, fill.opacity);
+    const fillPreview = fill.mode === "linear"
+        ? `linear-gradient(${fill.angle + 90}deg, ${color1}, ${color2})`
+        : fill.mode === "radial"
+            ? `radial-gradient(circle at center, ${color1}, ${color2})`
+            : `linear-gradient(${color1}, ${color1})`;
+    dom.fillLayerPreview.style.backgroundImage = [
+        fillPreview,
+        "linear-gradient(45deg, #202733 25%, transparent 25%)",
+        "linear-gradient(-45deg, #202733 25%, transparent 25%)",
+        "linear-gradient(45deg, transparent 75%, #202733 75%)",
+        "linear-gradient(-45deg, transparent 75%, #202733 75%)"
+    ].join(",");
+    dom.fillLayerPreview.style.backgroundSize = "auto, 14px 14px, 14px 14px, 14px 14px, 14px 14px";
+    dom.fillLayerPreview.style.backgroundPosition = "0 0, 0 0, 0 7px, 7px -7px, -7px 0";
+}
+
+function toggleImageEditorFillEyedropper(target) {
+    const layer = getSelectedImageEditorFillLayer();
+    if (!layer || layer.locked) return;
+    if (imageEditorState.fillEyedropperTarget === target &&
+        imageEditorState.fillEyedropperLayerId === layer.id) {
+        cancelImageEditorFillEyedropper("스포이드가 취소되었습니다.");
+        return;
+    }
+    if (imageEditorState.drawingActive) setImageEditorDrawingActive(false);
+    imageEditorState.fillEyedropperTarget = target;
+    imageEditorState.fillEyedropperLayerId = layer.id;
+    dom.imageEditorCanvas.classList.add("fill-eyedropper-active");
+    dom.btnPickFillColorStart.classList.toggle("active", target === "start");
+    dom.btnPickFillColorEnd.classList.toggle("active", target === "end");
+    dom.fillLayerEyedropperStatus.innerText = target === "end"
+        ? "캔버스에서 그라데이션의 끝 색을 클릭하세요. Esc로 취소할 수 있습니다."
+        : "캔버스에서 색을 클릭하세요. Esc로 취소할 수 있습니다.";
+}
+
+function cancelImageEditorFillEyedropper(message) {
+    imageEditorState.fillEyedropperTarget = null;
+    imageEditorState.fillEyedropperLayerId = null;
+    dom.imageEditorCanvas?.classList.remove("fill-eyedropper-active");
+    dom.btnPickFillColorStart?.classList.remove("active");
+    dom.btnPickFillColorEnd?.classList.remove("active");
+    if (message && dom.fillLayerEyedropperStatus) {
+        dom.fillLayerEyedropperStatus.innerText = message;
+    }
+}
+
+function sampleImageEditorFillColor(event) {
+    const target = imageEditorState.fillEyedropperTarget;
+    const layer = getSelectedImageEditorFillLayer();
+    if (!target || !layer || layer.id !== imageEditorState.fillEyedropperLayerId) {
+        cancelImageEditorFillEyedropper();
+        return false;
+    }
+    const sampleCanvas = document.createElement("canvas");
+    sampleCanvas.width = dom.imageEditorCanvas.width;
+    sampleCanvas.height = dom.imageEditorCanvas.height;
+    const wasEnabled = layer.fill.enabled;
+    layer.fill.enabled = false;
+    try {
+        renderImageEditorCanvas(
+            sampleCanvas,
+            imageEditorState.sourceImage,
+            imageEditorState.config,
+            imageEditorState.bypass,
+            imageEditorState.previewScale,
+            false
+        );
+        if (imageEditorState.drawingHasContent && !imageEditorState.bypass) {
+            sampleCanvas.getContext("2d").drawImage(
+                dom.imageEditorDrawingCanvas,
+                0,
+                0,
+                sampleCanvas.width,
+                sampleCanvas.height
+            );
+        }
+    } finally {
+        layer.fill.enabled = wasEnabled;
+    }
+    const rect = dom.imageEditorCanvas.getBoundingClientRect();
+    const x = editorClamp(
+        Math.floor((event.clientX - rect.left) * sampleCanvas.width / Math.max(1, rect.width)),
+        0,
+        sampleCanvas.width - 1
+    );
+    const y = editorClamp(
+        Math.floor((event.clientY - rect.top) * sampleCanvas.height / Math.max(1, rect.height)),
+        0,
+        sampleCanvas.height - 1
+    );
+    const pixel = sampleCanvas.getContext("2d", { willReadFrequently: true })
+        .getImageData(x, y, 1, 1).data;
+    const color = `#${[pixel[0], pixel[1], pixel[2]]
+        .map(value => value.toString(16).padStart(2, "0"))
+        .join("")}`;
+    if (target === "end") layer.fill.color2 = color;
+    else layer.fill.color1 = color;
+    cancelImageEditorFillEyedropper(
+        pixel[3] === 0
+            ? `투명 영역에서 ${color}을(를) 추출했습니다.`
+            : `${color} 색상을 추출했습니다.`
+    );
+    syncImageEditorFillLayerInspector();
+    renderImageLayerList();
+    renderImageEditorLayerList();
+    requestImageEditorRender();
+    return true;
 }
 
 function addTextToSelectedImageEditorLayer() {
@@ -2454,11 +2744,15 @@ function renderImageLayerList() {
                 ? (layer.text.replace(/\s+/g, " ").slice(0, 28) || "빈 텍스트")
                 : entry.type === "shape"
                     ? `${getEditorShapeLabel(layer.shape)} · ${Math.round(layer.width)} × ${Math.round(layer.height)}`
-                : "이미지 또는 텍스트를 넣으세요";
+                    : layer.fill?.enabled
+                        ? `${getImageEditorFillModeLabel(layer.fill.mode)} · Alpha ${Math.round(layer.fill.opacity * 100)}%`
+                        : "이미지·텍스트·색상을 넣으세요";
         details.append(title, preview);
         const type = document.createElement("em");
         type.innerText = entry.type === "image" ? "IMG" :
-            entry.type === "text" ? "T" : entry.type === "shape" ? "◆" : "＋";
+            entry.type === "text" ? "T" : entry.type === "shape" ? "◆" :
+                layer.fill?.enabled ? "COL" : "＋";
+        if (layer.fill?.enabled) type.style.color = layer.fill.color1;
         const lock = document.createElement("span");
         lock.className = `layer-lock-toggle${layer.locked ? " locked" : ""}`;
         lock.innerText = layer.locked ? "🔒" : "🔓";
@@ -2575,6 +2869,10 @@ function getSelectedImageEditorStackLayerId() {
 }
 
 function selectImageEditorStackLayer(id, type) {
+    if (imageEditorState.fillEyedropperTarget &&
+        (type !== "empty" || id !== imageEditorState.fillEyedropperLayerId)) {
+        cancelImageEditorFillEyedropper("스포이드가 취소되었습니다.");
+    }
     imageEditorState.selectedImageLayerId = type === "image" ? id : null;
     imageEditorState.selectedLayerId = type === "text" ? id : null;
     imageEditorState.selectedShapeLayerId = type === "shape" ? id : null;
@@ -2697,17 +2995,19 @@ function getSelectedImageLayer() {
 
 function syncImageLayerInspector() {
     const layer = getSelectedImageLayer();
+    const fillLayer = getSelectedImageEditorFillLayer();
     const selectedId = getSelectedImageEditorStackLayerId();
     dom.imageLayerInspector.style.display = layer ? "flex" : "none";
-    dom.imageLayerEmpty.style.display = layer ? "none" : "block";
-    if (!layer) {
+    dom.imageLayerEmpty.style.display = layer || fillLayer ? "none" : "block";
+    syncImageEditorFillLayerInspector();
+    if (!layer && !fillLayer) {
         dom.imageLayerEmpty.innerText = imageEditorState.selectedLayerId
             ? "선택한 텍스트는 Text 탭에서 편집할 수 있습니다."
             : imageEditorState.selectedShapeLayerId
                 ? "선택한 도형은 도형 탭에서 편집할 수 있습니다."
             : imageEditorState.selectedEmptyLayerId
-                ? "이 빈 레이어에 이미지 또는 텍스트를 넣으세요."
-                : "＋ 레이어를 먼저 만든 뒤 이미지 또는 텍스트를 넣으세요.";
+                ? "이 빈 레이어에 이미지·텍스트·색상을 넣으세요."
+                : "＋ 레이어를 먼저 만든 뒤 이미지·텍스트·색상을 넣으세요.";
     }
     [dom.btnImageLayerUp, dom.btnImageLayerDown, dom.btnDuplicateImageLayer,
         dom.btnDeleteImageLayer].forEach(button => button.disabled = !selectedId);
@@ -2772,6 +3072,8 @@ function duplicateSelectedImageEditorStackLayer() {
     );
     if (!selected) return;
     const clone = normalizeEmptyLayer({
+        ...JSON.parse(JSON.stringify(selected)),
+        id: "",
         name: `${selected.name} Copy`,
         visible: selected.visible
     });
@@ -3154,11 +3456,15 @@ function renderImageEditorLayerList() {
                 ? (layer.text.replace(/\s+/g, " ").slice(0, 28) || "빈 텍스트")
                 : entry.type === "shape"
                     ? `${getEditorShapeLabel(layer.shape)} · ${Math.round(layer.width)} × ${Math.round(layer.height)}`
-                : "빈 레이어";
+                    : layer.fill?.enabled
+                        ? `${getImageEditorFillModeLabel(layer.fill.mode)} · Alpha ${Math.round(layer.fill.opacity * 100)}%`
+                        : "빈 레이어";
         details.append(title, preview);
         const type = document.createElement("em");
         type.innerText = entry.type === "image" ? "IMG" :
-            entry.type === "text" ? "T" : entry.type === "shape" ? "◆" : "＋";
+            entry.type === "text" ? "T" : entry.type === "shape" ? "◆" :
+                layer.fill?.enabled ? "COL" : "＋";
+        if (layer.fill?.enabled) type.style.color = layer.fill.color1;
         const lock = document.createElement("span");
         lock.className = `layer-lock-toggle${layer.locked ? " locked" : ""}`;
         lock.innerText = layer.locked ? "🔒" : "🔓";
@@ -3363,6 +3669,13 @@ function syncTextLayerInspector() {
 }
 
 function beginTextLayerDrag(event) {
+    if (imageEditorState.fillEyedropperTarget) {
+        if (sampleImageEditorFillColor(event)) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        return;
+    }
     if (imageEditorState.bypass || imageEditorState.drawingActive || event.altKey || imageEditorState.panMode) return;
     const point = getImageEditorSourcePoint(event);
     const selectedShape = getSelectedShapeLayer();
@@ -3970,9 +4283,11 @@ function updateImageEditorStatus() {
         (config.preset === "original" ? "Original" : "Custom");
     const hasDrawing = imageEditorState.drawingHasContent ||
         Boolean(config.drawingDataUrl);
+    const fillLayerCount = config.emptyLayers.filter(layer => layer.fill?.enabled).length;
     dom.imageEditorStatus.innerText =
         `${preset} · ${adjusted ? "보정 적용" : "보정 없음"} · ` +
-        `그리기 ${hasDrawing ? "적용" : "없음"} · Text ${config.textLayers.length}개`;
+        `그리기 ${hasDrawing ? "적용" : "없음"} · ` +
+        `색상 ${fillLayerCount}개 · Text ${config.textLayers.length}개`;
 }
 
 function createTextLayerId() {

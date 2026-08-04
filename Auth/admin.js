@@ -34,7 +34,7 @@
     const openSpreadsheetButton = document.getElementById("openSpreadsheetButton");
     const openAppsScriptButton = document.getElementById("openAppsScriptButton");
     const spreadsheetIdValue = document.getElementById("spreadsheetIdValue");
-    const expectedServerVersion = String(window.FMAAuthSettings?.serverVersion || "2026-08-04-password-login-1");
+    const expectedServerVersion = String(window.FMAAuthSettings?.serverVersion || "2026-08-05-admin-password-1");
     const gasCodePreview = document.getElementById("gasCodePreview");
     const gasCodeStatus = document.getElementById("gasCodeStatus");
     const gasCodeVersionBadge = document.getElementById("gasCodeVersionBadge");

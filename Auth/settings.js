@@ -18,7 +18,7 @@
         privacyPolicyVersion: "2026-08-04-1",
         notificationRecipient: "shoutjoy1@yonsei.ac.kr",
         serverServiceName: "FMA Viewer verified email registration",
-        serverVersion: "2026-08-04-password-login-1",
+        serverVersion: "2026-08-05-admin-password-1",
         passwordIterations: 600000,
         sessionTtlMs: 8 * 60 * 60 * 1000,
         registrationTimeoutMs: 60000,

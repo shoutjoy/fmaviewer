@@ -77,6 +77,7 @@ target-app/
    ├─ client.js
    ├─ auth.css
    ├─ admin.html
+   ├─ admin-auth.js
    ├─ admin.js
    ├─ admin.css
    ├─ privacy_policy.html
@@ -192,6 +193,8 @@ rg -n "FMA Viewer|fma_|shoutjoy1|SPREADSHEET_ID|SERVER_VERSION|service:" Auth/ga
 
 ## 8. GAS 웹 앱 배포
 
+일반 사용자와 관리자 인증은 같은 공개 배포 하나를 사용합니다.
+
 1. Apps Script 오른쪽 위에서 `배포 → 새 배포`를 선택합니다.
 2. 배포 유형에서 `웹 앱`을 선택합니다.
 3. 설명에 `SERVER_VERSION`이나 변경 내용을 기록합니다.
@@ -208,6 +211,8 @@ rg -n "FMA Viewer|fma_|shoutjoy1|SPREADSHEET_ID|SERVER_VERSION|service:" Auth/ga
 4. 배포한 뒤 `/exec` URL과 응답 버전을 다시 확인합니다.
 
 새 배포를 별도로 만들면 URL이 바뀔 수 있습니다. 기존 배포의 새 버전으로 갱신하면 일반적으로 기존 `/exec` URL을 유지할 수 있습니다.
+
+관리자 페이지의 최초 아이디는 `admin`, 최초 비밀번호는 `Code.gs`의 `ADMIN_INITIAL_PASSWORD`입니다. 최초 로그인 직후 새 비밀번호 변경이 강제되며 보호된 인증값은 Script Properties에 저장됩니다.
 
 ## 9. GAS 단독 상태 확인
 
@@ -327,18 +332,19 @@ window.FMA_AUTH_SETTINGS = {
 </script>
 <script src="settings.js"></script>
 <script src="config.js"></script>
-<script src="admin.js"></script>
+<script src="admin-auth.js"></script>
 ```
 
 관리자 페이지의 설정은 `localStorage`에 저장됩니다. 같은 프로토콜·호스트·포트에서 열면 관리자와 앱이 같은 설정을 바로 사용합니다. 저장 환경이 다르거나 `file://`로 실행하는 경우에는 관리자 화면의 **배포 URL로 앱 최신화**를 사용합니다. 이 버튼은 `fmaGasUrl`, `fmaChecks`, `fmaBlockMinutes`를 `index.html`로 전달하고, `config.js`가 앱 환경의 저장소에 가져온 뒤 주소창에서 해당 매개변수를 제거합니다.
 
 관리자 페이지에서 다음 순서로 확인합니다.
 
-1. GAS `/exec` URL이 맞는지 입력합니다.
-2. `서버 연결 테스트`를 실행합니다.
-3. 서비스 이름, 버전, 발신 기대 계정이 대상 앱 값인지 확인합니다.
-4. 하루 전체 점검 횟수와 `Blocked` 확인 간격을 운영 정책에 맞게 설정합니다.
-5. GAS URL이 변경되었으면 **설정만 저장**이 아니라 **배포 URL로 앱 최신화**를 눌러 `index.html`에 전달합니다.
+1. 최초 관리자 아이디·비밀번호로 로그인하고 새 비밀번호를 설정합니다.
+2. GAS `/exec` URL이 맞는지 입력합니다.
+3. `서버 연결 테스트`를 실행합니다.
+4. 서비스 이름, 버전, 발신 기대 계정이 대상 앱 값인지 확인합니다.
+5. 하루 전체 점검 횟수와 `Blocked` 확인 간격을 운영 정책에 맞게 설정합니다.
+6. GAS URL이 변경되었으면 **설정만 저장**이 아니라 **배포 URL로 앱 최신화**를 눌러 `index.html`에 전달합니다.
 
 관리자 설정을 사용하지 않을 경우에도 `settings.js`의 `gasWebAppUrl` 기본값 또는 HTML의 앱별 설정에는 올바른 URL이 있어야 합니다.
 
@@ -411,7 +417,7 @@ GAS 코드를 변경할 때마다 다음 절차를 반복합니다.
 3. `Auth/admin.html` 하단에서 코드 버전을 확인하고 **Code.gs 전체 복사**를 누릅니다.
 4. Apps Script의 `Code.gs` 전체를 복사한 코드로 교체하고 저장합니다.
 5. 필요하면 `authorizeServices`를 다시 실행하여 스키마와 권한을 확인합니다.
-6. 기존 웹 앱 배포를 반드시 **새 버전**으로 갱신합니다.
+6. 웹 앱 배포를 반드시 **새 버전**으로 갱신합니다.
 7. `/exec?action=health`에서 새 서버 버전을 확인합니다.
 8. `/exec` URL이 바뀌었거나 앱에 이전 설정이 남아 있으면 관리자에서 새 URL을 입력하고 **배포 URL로 앱 최신화**를 누릅니다.
 9. 관리자 연결 테스트와 신규 인증 테스트를 다시 수행합니다.
