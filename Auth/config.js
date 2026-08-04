@@ -3,8 +3,8 @@
 
     const authSettings = global.FMAAuthSettings || {};
     const storagePrefix = String(authSettings.storagePrefix || "fma_viewer");
-    const STORAGE_KEY = `${storagePrefix}_admin_config_v2`;
-    const LEGACY_STORAGE_KEY = `${storagePrefix}_admin_config_v1`;
+    const STORAGE_KEY = `${storagePrefix}_admin_config_v3`;
+    const LEGACY_STORAGE_KEY = `${storagePrefix}_admin_config_v2`;
     const HISTORY_KEY = `${storagePrefix}_admin_config_history_v1`;
     const DEFAULT_CONFIG = Object.freeze({
         gasWebAppUrl: String(authSettings.gasWebAppUrl || ""),
@@ -26,6 +26,11 @@
             throw new Error("GAS 웹 앱의 /exec 주소를 정확히 입력해 주세요.");
         }
         return url;
+    }
+
+    function normalizeOptionalGasWebAppUrl(value) {
+        const text = String(value || "").trim();
+        return text ? normalizeGasWebAppUrl(text) : "";
     }
 
     function normalizeSpreadsheetUrl(value) {
@@ -101,7 +106,7 @@
         const candidate = value && typeof value === "object" ? value : {};
         const hasAppsScriptProjectUrl = Object.prototype.hasOwnProperty.call(candidate, "appsScriptProjectUrl");
         return {
-            gasWebAppUrl: normalizeGasWebAppUrl(candidate.gasWebAppUrl || DEFAULT_CONFIG.gasWebAppUrl),
+            gasWebAppUrl: normalizeOptionalGasWebAppUrl(candidate.gasWebAppUrl || DEFAULT_CONFIG.gasWebAppUrl),
             spreadsheetUrl: normalizeSpreadsheetUrl(candidate.spreadsheetUrl || DEFAULT_CONFIG.spreadsheetUrl),
             appsScriptProjectUrl: normalizeAppsScriptProjectUrl(
                 hasAppsScriptProjectUrl ? candidate.appsScriptProjectUrl : DEFAULT_CONFIG.appsScriptProjectUrl

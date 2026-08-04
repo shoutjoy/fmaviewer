@@ -410,6 +410,68 @@ input:focus {
     margin: 18px auto 0;
 }
 
+.admin-auth-connection-check {
+    display: grid;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.admin-auth-connection-check label {
+    display: grid;
+    gap: 8px;
+    text-align: left;
+    color: var(--text);
+    font-weight: 750;
+}
+
+.admin-auth-connection-check label[hidden] {
+    display: none;
+}
+
+.admin-auth-connection-check input {
+    width: 100%;
+}
+
+.admin-auth-connection-check button {
+    width: 100%;
+}
+
+.admin-auth-connection-check small {
+    color: var(--muted);
+}
+
+.admin-auth-connection-check code {
+    margin-left: 5px;
+    color: var(--green);
+}
+
+.connection-version-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    background: rgba(7, 17, 28, .5);
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.connection-version-row code {
+    margin-left: 6px;
+    color: var(--cyan);
+}
+
+#connectionVersionBadge[data-tone="success"] {
+    color: var(--green);
+}
+
+#connectionVersionBadge[data-tone="error"] {
+    color: #ff8d98;
+}
+
 .button-link {
     display: inline-flex;
     min-height: 41px;

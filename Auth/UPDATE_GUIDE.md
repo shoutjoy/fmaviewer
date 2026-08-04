@@ -20,7 +20,7 @@
 현재 기대 서버 버전:
 
 ```text
-2026-08-05-admin-password-1
+2026-08-05-admin-sheet-account-v2
 ```
 
 ## 전체 업데이트 순서
@@ -57,7 +57,7 @@ https://fmaviewer.vercel.app/Auth/gas/Code.gs
 ```
 
 1. 원본 전체를 선택해 복사합니다.
-2. 코드 버전이 `2026-08-05-admin-password-1`인지 확인합니다.
+2. 코드 상단 주석과 `SERVER_VERSION`이 `2026-08-05-admin-sheet-account-v2`인지 확인합니다. Apps Script 함수 목록에서 `version`을 실행해도 확인할 수 있습니다.
 
 이미 관리자 비밀번호 로그인이 설정된 이후 업데이트라면 관리자 화면 하단의 다음 기능도 사용할 수 있습니다.
 
@@ -75,13 +75,23 @@ https://fmaviewer.vercel.app/Auth/gas/Code.gs
 5. 함수 목록에서 `authorizeServices`를 선택해 실행합니다.
 6. Sheet와 Gmail 발송 권한을 요청하면 운영 계정으로 승인합니다.
 
-`authorizeServices`는 `Users` 탭의 스키마와 상태값을 정리합니다. 현재 열 구조는 다음과 같습니다.
+`authorizeServices`는 `Users` 탭의 스키마와 상태값을 정리하고, 비어 있는 `Admin` 탭에 최초 관리자 계정을 만듭니다. 현재 열 구조는 다음과 같습니다.
 
 ```text
 RequestedAt | Email | Status | LastVerifiedAt | VerifiedAt | NotifiedAt | NotificationError | Name | Organization | Purpose | PasswordSalt | PasswordHash | PasswordIterations | PasswordUpdatedAt
 ```
 
 기존 열은 유지하고 뒤에 신청 정보와 `PasswordSalt`, `PasswordHash`, `PasswordIterations`, `PasswordUpdatedAt`을 추가합니다. 기존 `Active` 사용자는 처음 한 번 **이메일 인증하기**에서 전용 비밀번호를 설정해야 합니다.
+
+`Admin` 탭에는 다음 값이 만들어져야 합니다.
+
+```text
+Category | ID | PW | etc | status
+Temporary | admin | a1234567890 | init pw | active
+In fact |  |  | pbkdf2-sha256-v1 | inactive
+```
+
+최초 로그인 후 비밀번호를 변경하면 `Temporary` 행은 PW가 지워지고 `inactive`가 됩니다. `In fact` 행에는 보호된 인증값이 기록되고 `active`가 되며 이후 로그인은 이 행만 사용합니다.
 
 ### 4. 웹 앱을 새 버전으로 재배포
 
@@ -110,7 +120,7 @@ https://script.google.com/macros/s/배포ID/exec?action=health
 {
   "success": true,
   "service": "FMA Viewer verified email registration",
-  "version": "2026-08-05-admin-password-1",
+  "version": "2026-08-05-admin-sheet-account-v2",
   "status": "OK",
   "authMode": "email-password-session"
 }
@@ -121,12 +131,15 @@ https://script.google.com/macros/s/배포ID/exec?action=health
 ### 6. 새 배포 URL을 `index.html`에 반영
 
 1. `https://fmaviewer.vercel.app/Auth/admin.html`을 엽니다.
-2. 최초 안내에 표시된 `admin / a1234567890`으로 로그인합니다.
-3. 강제로 표시되는 새 비밀번호 설정 화면에서 앞으로 사용할 비밀번호를 입력합니다.
-4. 변경이 끝나 관리자 설정이 열리면 **Google Apps Script 배포 URL**에 4단계의 `/exec` URL을 입력합니다.
-5. 필요한 경우 하루 점검 횟수와 차단 확인 간격을 조정합니다.
-6. **배포 URL로 앱 최신화**를 누릅니다.
-7. 로그아웃한 뒤 변경한 비밀번호로 다시 로그인되는지 확인합니다.
+2. 로그인 화면의 **GAS 웹 앱 배포 URL**에 4단계의 `/exec` URL을 직접 입력합니다.
+3. **인증 서버 연결 및 버전 점검**을 눌러 서버 버전과 Admin 시트 준비 상태를 확인합니다.
+4. 점검이 통과하면 `admin / a1234567890`으로 로그인합니다.
+5. 강제로 표시되는 새 비밀번호 설정 화면에서 앞으로 사용할 비밀번호를 입력합니다.
+6. 관리자 설정이 열리면 필요한 경우 하루 점검 횟수와 차단 확인 간격을 조정합니다.
+7. **배포 URL로 앱 최신화**를 누릅니다.
+8. 로그아웃한 뒤 변경한 비밀번호로 다시 로그인되는지 확인합니다.
+
+관리자 설정의 **연결 및 버전 점검**을 누르면 입력한 GAS URL의 실제 `version`과 앱 요구 버전을 비교합니다. 두 버전이 같을 때만 정상으로 표시됩니다.
 
 이 버튼은 다음 값을 URL 매개변수로 앱에 전달합니다.
 
@@ -178,7 +191,7 @@ fmaBlockMinutes
 
 ## 완료 체크리스트
 
-- [ ] 원본 `Code.gs` 버전이 `2026-08-05-admin-password-1`이다.
+- [ ] 원본 `Code.gs` 버전이 `2026-08-05-admin-sheet-account-v2`이다.
 - [ ] Apps Script의 `Code.gs` 전체를 최신 코드로 교체했다.
 - [ ] `authorizeServices`를 실행했다.
 - [ ] 웹 앱을 **새 버전**으로 재배포했다.

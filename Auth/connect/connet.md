@@ -45,7 +45,7 @@ GAS `/exec` 주소는 비밀번호가 아닙니다. 반면 Google Sheet는 공�
 - `STORAGE_PREFIX`는 영문 소문자, 숫자, 밑줄만 사용하는 것을 권장합니다.
 - `STORAGE_PREFIX`는 배포 후 함부로 변경하지 않습니다. 변경하면 기존 브라우저가 새 앱으로 인식하여 다시 인증을 요구합니다.
 - `SERVER_SERVICE_NAME`은 앱마다 고유해야 하며 클라이언트와 GAS의 문자열이 완전히 같아야 합니다.
-- `SERVER_VERSION`은 GAS 코드를 새로 배포할 때 증가시키고 클라이언트 설정에도 같은 값을 넣습니다.
+- `SERVER_VERSION`은 `Auth/gas/Code.gs`에서만 증가시킵니다. `settings.js`가 이 값을 자동으로 읽으므로 클라이언트에 중복 입력하지 않습니다.
 - `GAS_WEB_APP_URL`은 테스트용 `/dev` 주소가 아니라 `/exec`로 끝나는 배포 주소를 사용합니다.
 
 ## 3. 전체 연결 순서
@@ -212,7 +212,7 @@ rg -n "FMA Viewer|fma_|shoutjoy1|SPREADSHEET_ID|SERVER_VERSION|service:" Auth/ga
 
 새 배포를 별도로 만들면 URL이 바뀔 수 있습니다. 기존 배포의 새 버전으로 갱신하면 일반적으로 기존 `/exec` URL을 유지할 수 있습니다.
 
-관리자 페이지의 최초 아이디는 `admin`, 최초 비밀번호는 `Code.gs`의 `ADMIN_INITIAL_PASSWORD`입니다. 최초 로그인 직후 새 비밀번호 변경이 강제되며 보호된 인증값은 Script Properties에 저장됩니다.
+관리자 페이지의 최초 아이디는 `admin`, 최초 비밀번호는 `Code.gs`의 `ADMIN_INITIAL_PASSWORD`입니다. `authorizeServices`가 `Admin` 탭에 이 임시 계정을 만들며, 최초 로그인 직후 새 비밀번호 변경이 강제됩니다. 변경 시 임시 비밀번호 셀은 비워지고 보호된 인증값만 같은 행에 저장됩니다.
 
 ## 9. GAS 단독 상태 확인
 
@@ -260,12 +260,10 @@ window.FMA_AUTH_SETTINGS = {
   appName: "APP_NAME",
   appMark: "APP_MARK",
   storagePrefix: "STORAGE_PREFIX",
-  gasWebAppUrl: "GAS_WEB_APP_URL",
   privacyPolicyUrl: "Auth/privacy_policy.html",
   privacyPolicyVersion: "PRIVACY_POLICY_VERSION",
   notificationRecipient: "NOTIFICATION_EMAIL",
-  serverServiceName: "SERVER_SERVICE_NAME",
-  serverVersion: "SERVER_VERSION"
+  serverServiceName: "SERVER_SERVICE_NAME"
 };
 </script>
 
@@ -298,9 +296,8 @@ window.FMA_AUTH_SETTINGS = {
 아래 네 조건은 자동 연결 검사에서 핵심입니다.
 
 ```text
-window.FMA_AUTH_SETTINGS.gasWebAppUrl  == 실제 앱 전용 /exec 주소
 window.FMA_AUTH_SETTINGS.serverServiceName == GAS health 응답의 service
-window.FMA_AUTH_SETTINGS.serverVersion     == GAS health 응답의 version
+Auth/gas/Code.gs의 SERVER_VERSION          == GAS health 응답의 version
 window.FMA_AUTH_SETTINGS.notificationRecipient == Code.gs의 NOTIFICATION_EMAIL
 ```
 
@@ -324,10 +321,8 @@ window.FMA_AUTH_SETTINGS = {
   appName: "APP_NAME",
   appMark: "APP_MARK",
   storagePrefix: "STORAGE_PREFIX",
-  gasWebAppUrl: "GAS_WEB_APP_URL",
   notificationRecipient: "NOTIFICATION_EMAIL",
-  serverServiceName: "SERVER_SERVICE_NAME",
-  serverVersion: "SERVER_VERSION"
+  serverServiceName: "SERVER_SERVICE_NAME"
 };
 </script>
 <script src="settings.js"></script>
@@ -412,7 +407,7 @@ window.FMA_AUTH_SETTINGS = {
 
 GAS 코드를 변경할 때마다 다음 절차를 반복합니다.
 
-1. 프로젝트의 `Auth/gas/Code.gs`와 클라이언트 `serverVersion`을 함께 갱신합니다.
+1. 프로젝트의 `Auth/gas/Code.gs`에서 `SERVER_VERSION`을 갱신합니다. 클라이언트 버전은 이 파일에서 자동으로 읽습니다.
 2. 최신 웹 파일을 배포해 관리자 화면이 새 `Code.gs`를 읽을 수 있게 합니다.
 3. `Auth/admin.html` 하단에서 코드 버전을 확인하고 **Code.gs 전체 복사**를 누릅니다.
 4. Apps Script의 `Code.gs` 전체를 복사한 코드로 교체하고 저장합니다.

@@ -1,6 +1,7 @@
-(function initializePasswordAdminAccess() {
+(async function initializePasswordAdminAccess() {
     "use strict";
 
+    if (window.FMAAuthSettingsReady) await window.FMAAuthSettingsReady;
     const settings = window.FMAAuthSettings || {};
     const configApi = window.FMAAdminConfig;
     if (!configApi) throw new Error("FMAAdminConfig is not available.");
@@ -21,6 +22,10 @@
     const newPasswordConfirmInput = document.getElementById("adminNewPasswordConfirm");
     const changeButton = document.getElementById("adminPasswordChangeButton");
     const logoutButton = document.getElementById("adminLogoutButton");
+    const connectionCheckButton = document.getElementById("adminConnectionCheckButton");
+    const expectedServerVersionLabel = document.getElementById("adminExpectedServerVersion");
+    const bootstrapGasUrlField = document.getElementById("adminBootstrapGasUrlField");
+    const bootstrapGasUrlInput = document.getElementById("adminBootstrapGasUrl");
     let adminLoaded = false;
     let pendingChangeSession = null;
 
@@ -29,6 +34,7 @@
         status.dataset.tone = tone;
         status.hidden = !message;
     }
+
 
     function setLoginBusy(busy) {
         adminIdInput.disabled = busy;
@@ -128,9 +134,27 @@
         return error;
     }
 
+    function normalizeServerVersion(value) {
+        return String(value || "")
+            .normalize("NFKC")
+            .replace(/[\u200B-\u200D\uFEFF]/g, "")
+            .trim();
+    }
+
     async function requestAdminActionAtUrl(gasWebAppUrl, payload) {
+        const expectedVersion = normalizeServerVersion(settings.serverVersion);
+        if (!expectedVersion) {
+            throw createAdminRequestError(
+                `Auth/gas/Code.gs 버전을 확인하지 못했습니다. ${String(settings.serverVersionError || "Code.gs 배포 상태를 확인해 주세요.")}`,
+                "CODE_VERSION_UNAVAILABLE"
+            );
+        }
+        const action = String(payload?.action || "");
+        const timeoutMs = action === "admin-login" || action === "admin-change-password"
+            ? 60000
+            : 30000;
         const controller = new AbortController();
-        const timeoutId = window.setTimeout(() => controller.abort(), 60000);
+        const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
         try {
             const response = await fetch(gasWebAppUrl, {
                 method: "POST",
@@ -152,18 +176,20 @@
             } catch (_) {
                 throw createAdminRequestError("관리자 인증 서버가 JSON을 반환하지 않았습니다.", "GAS_INVALID_JSON");
             }
-            const expectedVersion = String(settings.serverVersion || "");
-            if (expectedVersion && String(result.serverVersion || "") !== expectedVersion) {
-                const actualVersion = String(result.serverVersion || result.version || "확인 불가");
+            const actualVersion = normalizeServerVersion(result.serverVersion || result.version);
+            if (actualVersion !== expectedVersion) {
                 throw createAdminRequestError(
-                    `GAS 배포가 구버전입니다(${actualVersion}). 최신 Code.gs ${expectedVersion}을 새 버전으로 배포해 주세요.`,
+                    `GAS 배포가 구버전입니다(${actualVersion || "확인 불가"}). 최신 Code.gs ${expectedVersion}을 새 버전으로 배포해 주세요.`,
                     "GAS_VERSION_MISMATCH"
                 );
             }
             return result;
         } catch (error) {
             if (error?.name === "AbortError") {
-                throw createAdminRequestError("관리자 인증 서버 응답 시간이 초과되었습니다.", "GAS_TIMEOUT");
+                throw createAdminRequestError(
+                    `관리자 인증 서버가 ${Math.round(timeoutMs / 1000)}초 안에 응답하지 않았습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.`,
+                    "GAS_TIMEOUT"
+                );
             }
             throw error;
         } finally {
@@ -174,26 +200,27 @@
     async function postAdminAction(payload) {
         const config = configApi.load();
         const configuredUrl = String(config.gasWebAppUrl || "");
-        const defaultUrl = String(settings.gasWebAppUrl || "");
-        const candidates = Array.from(new Set([configuredUrl, defaultUrl].filter(Boolean)));
-        const errors = [];
+        if (!configuredUrl) throw new Error("먼저 GAS 웹 앱의 /exec 배포 URL을 입력하고 연결을 점검해 주세요.");
+        return requestAdminActionAtUrl(configuredUrl, payload);
+    }
 
-        for (const gasWebAppUrl of candidates) {
-            try {
-                const result = await requestAdminActionAtUrl(gasWebAppUrl, payload);
-                if (gasWebAppUrl !== configuredUrl) {
-                    configApi.save({ ...config, gasWebAppUrl }, { recordHistory: false });
-                }
-                return result;
-            } catch (error) {
-                errors.push(error);
-            }
-        }
+    function readBootstrapGasUrl() {
+        return configApi.normalizeGasWebAppUrl(bootstrapGasUrlInput.value);
+    }
 
-        const versionError = errors.find(error => error?.code === "GAS_VERSION_MISMATCH");
-        if (versionError) throw versionError;
-        const lastError = errors[errors.length - 1];
-        throw lastError || new Error("관리자 인증용 GAS 주소를 확인할 수 없습니다.");
+    function saveBootstrapGasUrl(gasWebAppUrl) {
+        const current = configApi.load();
+        const saved = configApi.save({ ...current, gasWebAppUrl }, { recordHistory: false });
+        bootstrapGasUrlInput.value = saved.gasWebAppUrl;
+        bootstrapGasUrlField.hidden = Boolean(saved.gasWebAppUrl);
+        return saved;
+    }
+
+    async function requestUsingBootstrapUrl(payload, saveAfterSuccess = true) {
+        const gasWebAppUrl = readBootstrapGasUrl();
+        const result = await requestAdminActionAtUrl(gasWebAppUrl, payload);
+        if (saveAfterSuccess) saveBootstrapGasUrl(gasWebAppUrl);
+        return result;
     }
 
     function loadAdminApplication(session) {
@@ -204,7 +231,7 @@
         if (adminLoaded) return;
         adminLoaded = true;
         const script = document.createElement("script");
-        script.src = "admin.js?v=20260805-2";
+        script.src = "admin.js?v=20260805-11";
         script.async = false;
         script.onerror = () => {
             adminLoaded = false;
@@ -230,12 +257,39 @@
     }
 
     async function refreshInitialPasswordNotice() {
+        if (!String(bootstrapGasUrlInput.value || "").trim()) {
+            initialPasswordNotice.hidden = true;
+            return;
+        }
         try {
-            const parameters = await postAdminAction({ action: "admin-login-params", adminId: "admin" });
+            const parameters = await requestUsingBootstrapUrl(
+                { action: "admin-login-params", adminId: "admin" },
+                false
+            );
             initialPasswordNotice.hidden = !parameters?.success || !parameters.bootstrapPasswordRequired;
         } catch (error) {
             initialPasswordNotice.hidden = true;
             setStatus(String(error?.message || error), "error");
+        }
+    }
+
+    async function checkAdminConnection() {
+        connectionCheckButton.disabled = true;
+        connectionCheckButton.textContent = "인증 서버 확인 중…";
+        setStatus("인증 서버 연결, 코드 버전과 Admin 시트를 확인하고 있습니다…", "success");
+        try {
+            const parameters = await requestUsingBootstrapUrl({ action: "admin-login-params", adminId: "admin" });
+            if (!parameters?.success) throw new Error(parameters?.message || "Admin 시트의 관리자 계정을 확인할 수 없습니다.");
+            initialPasswordNotice.hidden = !parameters.bootstrapPasswordRequired;
+            setStatus(
+                `연결 정상 · 서버 버전 ${String(settings.serverVersion || "확인 불가")} · Admin 시트 준비 완료`,
+                "success"
+            );
+        } catch (error) {
+            setStatus(String(error?.message || error), "error");
+        } finally {
+            connectionCheckButton.disabled = false;
+            connectionCheckButton.textContent = "인증 서버 연결 및 버전 점검";
         }
     }
 
@@ -263,7 +317,7 @@
         setLoginBusy(true);
         setStatus("관리자 로그인을 확인하고 있습니다…", "success");
         try {
-            const parameters = await postAdminAction({ action: "admin-login-params", adminId });
+            const parameters = await requestUsingBootstrapUrl({ action: "admin-login-params", adminId });
             if (!parameters?.success) throw new Error(parameters?.message || "관리자 계정이 아직 준비되지 않았습니다.");
             initialPasswordNotice.hidden = !parameters.bootstrapPasswordRequired;
 
@@ -376,11 +430,17 @@
         loginForm.addEventListener("submit", event => void login(event));
         changeForm.addEventListener("submit", event => void changePassword(event));
         logoutButton.addEventListener("click", () => void logout());
+        connectionCheckButton.addEventListener("click", () => void checkAdminConnection());
+        expectedServerVersionLabel.textContent = String(settings.serverVersion || "Code.gs 확인 실패");
+        const initialConfig = configApi.load();
+        bootstrapGasUrlInput.value = String(initialConfig.gasWebAppUrl || "");
+        bootstrapGasUrlField.hidden = Boolean(bootstrapGasUrlInput.value);
 
         const session = readSession();
         if (!session) {
             showLoginGate();
-            await refreshInitialPasswordNotice();
+            if (bootstrapGasUrlInput.value) await refreshInitialPasswordNotice();
+            else setStatus("처음 사용할 GAS 웹 앱의 /exec 배포 URL을 입력해 주세요.", "success");
             return;
         }
         setStatus("기존 관리자 세션을 확인하고 있습니다…", "success");

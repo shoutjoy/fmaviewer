@@ -13,7 +13,7 @@
 7. 클라이언트가 요구하는 서버 버전과 GAS 배포 버전이 다르면 구버전 배포 경고를 표시합니다.
 8. 관리자 페이지는 `admin` 아이디와 관리자 비밀번호로 로그인한 뒤에만 열립니다. 최초 비밀번호는 `a1234567890`이며 첫 로그인 직후 새 비밀번호 변경이 강제됩니다.
 
-현재 GAS 서버 버전은 `2026-08-05-admin-password-1`입니다.
+현재 GAS 서버 버전은 `2026-08-05-admin-sheet-account-v2`입니다.
 
 ## 문서 안내
 
@@ -27,7 +27,7 @@
 
 ## 파일 구성
 
-- `settings.js`: 앱 이름, 저장소 접두사, 기본 GAS URL, 서버 버전
+- `settings.js`: 앱 이름과 저장소 접두사. GAS 배포 URL은 하드코딩하지 않으며 서버 버전은 `gas/Code.gs`에서 자동으로 읽습니다.
 - `config.js`: 관리자 설정 저장 및 URL 매개변수로 전달된 최신 설정 가져오기
 - `modal.js`: 로그인·이메일 인증 팝업과 설정 푸터가 없는 독립 연동용 대체 로그아웃 버튼 생성
 - `client.js`: 로그인, 아이디 저장, 인증 신청·확인, 세션·차단 감시, 앱 설정 하단 로그아웃 처리
@@ -44,12 +44,17 @@
 2. 첫 적용은 `Auth/gas/Code.gs` 원본을 직접 열어 전체 복사합니다.
 3. Google Sheet의 `확장 프로그램 → Apps Script`에서 `Code.gs` 전체를 교체합니다.
 4. `authorizeServices`를 실행한 뒤 기존 웹 앱을 **새 버전**으로 재배포합니다.
-5. `Auth/admin.html`에서 `admin / a1234567890`으로 최초 로그인합니다.
-6. 표시되는 화면에서 새 관리자 비밀번호를 반드시 설정합니다.
-7. 일반 사용자용 `/exec` URL을 확인한 뒤 **배포 URL로 앱 최신화**를 누릅니다.
-8. 로그아웃 후 변경한 비밀번호로 다시 로그인되는지 테스트합니다.
+5. `Auth/admin.html`에서 새 `/exec` URL을 직접 입력하고 **인증 서버 연결 및 버전 점검**을 누릅니다.
+6. 점검이 통과하면 `admin / a1234567890`으로 최초 로그인합니다.
+7. 표시되는 화면에서 새 관리자 비밀번호를 반드시 설정합니다.
+8. 관리자 설정에서 **배포 URL로 앱 최신화**를 눌러 일반 앱에도 전달합니다.
+9. 로그아웃 후 변경한 비밀번호로 다시 로그인되는지 테스트합니다.
 
-관리자 인증값은 Google Sheet가 아니라 GAS Script Properties에 해시로 저장됩니다. 초기 비밀번호는 최초 변경 이후 즉시 폐기됩니다. 기존 `Admin` 탭의 비밀번호 행은 더 이상 읽지 않으므로 삭제해도 됩니다.
+`authorizeServices`를 실행하면 `Admin` 탭의 `Temporary` 행에 최초 계정 `admin / a1234567890`이 만들어집니다. 첫 로그인에서 비밀번호를 변경하면 임시 행의 PW가 지워지고 상태가 `inactive`로 바뀌며, `In fact` 행에 보호된 인증값이 저장되어 이후 로그인에 사용됩니다.
+
+로그인 화면의 **인증 서버 연결 및 버전 점검**은 새 인증 서버의 버전과 `Admin` 시트 준비 상태를 확인합니다. 로그인 후 `Google Apps Script 코드` 영역에서는 Sheet ID가 반영된 최신 `Code.gs` 전체를 복사할 수 있으며, `동기화 설정`의 **연결 및 버전 점검**은 입력한 GAS 배포 URL의 상세 응답과 서버 버전 일치 여부를 함께 확인합니다.
+
+`settings.js`는 같은 웹 배포의 `Auth/gas/Code.gs`를 읽어 버전을 결정합니다. `file://`에서 `.gs` 읽기가 차단되면 `gas/version.generated.js`를 사용하므로 로그인 초기화가 중단되지 않습니다. `Code.gs`의 버전을 바꾼 뒤에는 `node Auth/gas/sync-version.cjs`를 실행하면 로컬 fallback 파일도 같은 값으로 갱신됩니다. 자동 테스트에서도 두 버전의 일치를 검사합니다.
 
 `설정만 저장`은 현재 관리자 화면의 저장소만 갱신합니다. 관리자와 `index.html`의 저장 환경이 다르거나 `file://`로 열었다면 앱에는 이전 URL이 남을 수 있으므로, GAS URL을 바꾼 경우에는 **배포 URL로 앱 최신화**를 사용해야 합니다.
 
@@ -72,7 +77,6 @@ window.FMA_AUTH_SETTINGS = {
   privacyPolicyVersion: "2026-08-04-1",
   notificationRecipient: "operator@example.com",
   serverServiceName: "My App verified email registration",
-  serverVersion: "2026-08-05-admin-password-1",
   passwordIterations: 600000,
   sessionTtlMs: 8 * 60 * 60 * 1000
 };

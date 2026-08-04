@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>FMA Viewer 관리자 설정</title>
     <meta id="adminDescription" name="description" content="FMA Viewer Google Sheet, Apps Script와 GAS 배포 URL을 설정합니다.">
-    <link rel="stylesheet" href="admin.css?v=20260805-2">
+    <link rel="stylesheet" href="admin.css?v=20260805-12">
 </head>
 
 <body>
@@ -48,6 +48,15 @@
                 <button id="adminPasswordChangeButton" class="primary admin-auth-login" type="submit">비밀번호 변경 후 관리자 열기</button>
             </form>
             <p id="adminAuthStatus" class="admin-status" role="status" aria-live="polite" hidden></p>
+            <div class="admin-auth-connection-check">
+                <label id="adminBootstrapGasUrlField" for="adminBootstrapGasUrl">
+                    <span>GAS 웹 앱 배포 URL</span>
+                    <input id="adminBootstrapGasUrl" type="url" autocomplete="off" spellcheck="false"
+                        placeholder="https://script.google.com/macros/s/.../exec">
+                </label>
+                <button id="adminConnectionCheckButton" type="button">인증 서버 연결 및 버전 점검</button>
+                <small>처음 한 번 `/exec` 주소를 입력해 점검하면 이 브라우저에 저장됩니다. 필요 버전 <code id="adminExpectedServerVersion">확인 중…</code></small>
+            </div>
             <a class="text-link admin-auth-back" href="../index.html">FMA Viewer로 돌아가기</a>
         </div>
     </section>
@@ -121,6 +130,11 @@
                     <small>`/exec`로 끝나는 웹 앱 URL을 입력합니다. 새 URL을 입력한 뒤 <strong>배포 URL로 앱 최신화</strong>를 누르면 index.html에 전달됩니다.</small>
                 </label>
 
+                <div class="connection-version-row" aria-live="polite">
+                    <span>앱 요구 버전 <code id="expectedConnectionVersion">확인 중…</code></span>
+                    <strong id="connectionVersionBadge" data-tone="neutral">연결 점검 전</strong>
+                </div>
+
                 <div class="frequency-grid">
                     <label class="field" for="checksPerDay">
                         <span>하루 점검 횟수</span>
@@ -148,7 +162,7 @@
                 <div class="action-row">
                     <button id="applyDeploymentToAppButton" class="primary" type="button">배포 URL로 앱 최신화</button>
                     <button id="saveSettingsButton" type="submit">설정만 저장</button>
-                    <button id="testConnectionButton" type="button">서버 연결 테스트</button>
+                    <button id="testConnectionButton" type="button">연결 및 버전 점검</button>
                     <button id="resetSettingsButton" class="danger" type="button">기본값 복원</button>
                 </div>
             </form>
@@ -221,13 +235,14 @@
         </section>
 
         <footer>
-            <p>관리자 비밀번호 원문은 Google Sheet에 저장되지 않으며, 변경한 비밀번호의 보호된 인증값만 GAS Script Properties에 보관됩니다.</p>
+            <p>Admin 탭은 Temporary 임시 계정과 In fact 실제 계정을 구분합니다. 첫 비밀번호 변경 후에는 임시 계정을 비활성화하고 보호된 실제 계정만 사용합니다.</p>
         </footer>
     </main>
 
-    <script src="settings.js?v=20260805-2"></script>
-    <script src="config.js?v=20260805-2"></script>
-    <script src="admin-auth.js?v=20260805-2"></script>
+    <script src="gas/version.generated.js?v=20260805-9"></script>
+    <script src="settings.js?v=20260805-11"></script>
+    <script src="config.js?v=20260805-9"></script>
+    <script src="admin-auth.js?v=20260805-12"></script>
 </body>
 
 </html>

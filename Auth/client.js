@@ -47,6 +47,20 @@ function getAuthGasUrl() {
     return String(getRuntimeAdminConfig().gasWebAppUrl || FMA_DEFAULT_GAS_WEB_APP_URL);
 }
 
+function requireAuthGasUrl() {
+    const gasWebAppUrl = getAuthGasUrl();
+    if (!gasWebAppUrl) throw new Error("GAS_URL_NOT_CONFIGURED");
+    return gasWebAppUrl;
+}
+
+async function waitForAuthSettings() {
+    if (window.FMAAuthSettingsReady) await window.FMAAuthSettingsReady;
+    if (!String(FMA_AUTH_SETTINGS.serverVersion || "")) {
+        throw new Error("GAS_CODE_VERSION_UNAVAILABLE");
+    }
+    return FMA_AUTH_SETTINGS;
+}
+
 function getSessionSyncMs() {
     const config = getRuntimeAdminConfig();
     if (window.FMAAdminConfig?.getSyncIntervalMs) return window.FMAAdminConfig.getSyncIntervalMs(config);
@@ -432,7 +446,8 @@ async function fetchGasJson(url, options = {}) {
 }
 
 async function postAuthAction(payload) {
-    return fetchGasJson(getAuthGasUrl(), {
+    await waitForAuthSettings();
+    return fetchGasJson(requireAuthGasUrl(), {
         method: "POST",
         cache: "no-store",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
@@ -442,7 +457,7 @@ async function postAuthAction(payload) {
 
 function verifyServerVersion(result) {
     const expectedVersion = String(FMA_AUTH_SETTINGS.serverVersion || "");
-    if (!expectedVersion) return;
+    if (!expectedVersion) throw new Error("GAS_CODE_VERSION_UNAVAILABLE");
     const actualVersion = String(result?.serverVersion || result?.version || "");
     if (actualVersion !== expectedVersion) {
         throw new Error("GAS_SERVER_VERSION_MISMATCH");
@@ -457,6 +472,12 @@ function describeAuthError(error) {
     if (error?.message === "GAS_SERVER_VERSION_MISMATCH") {
         return "로그인 기능이 포함된 최신 GAS 코드가 아직 배포되지 않았습니다.";
     }
+    if (error?.message === "GAS_URL_NOT_CONFIGURED") {
+        return "인증 서버 주소가 설정되지 않았습니다. 관리자가 관리자 페이지에서 GAS /exec 배포 URL을 먼저 등록해야 합니다.";
+    }
+    if (error?.message === "GAS_CODE_VERSION_UNAVAILABLE") {
+        return "앱의 Auth/gas/Code.gs 버전을 확인하지 못했습니다. 웹 배포에 Code.gs가 포함되어 있는지 확인해 주세요.";
+    }
     if (error?.message === "WEB_CRYPTO_UNAVAILABLE") {
         return "이 환경에서는 안전한 비밀번호 처리를 사용할 수 없습니다. HTTPS 또는 localhost에서 최신 브라우저로 열어 주세요.";
     }
@@ -467,7 +488,8 @@ function describeAuthError(error) {
 }
 
 async function getLoginParameters(email) {
-    const url = new URL(getAuthGasUrl());
+    await waitForAuthSettings();
+    const url = new URL(requireAuthGasUrl());
     url.searchParams.set("action", "login-params");
     url.searchParams.set("email", email);
     url.searchParams.set("_", String(Date.now()));
@@ -660,7 +682,8 @@ async function verifyPendingRegistration(record) {
     if (!isCurrentPending(record)) return;
     clearVerificationPollTimer();
     try {
-        const url = new URL(getAuthGasUrl());
+        await waitForAuthSettings();
+        const url = new URL(requireAuthGasUrl());
         url.searchParams.set("action", "check");
         url.searchParams.set("email", record.email);
         url.searchParams.set("requestId", record.requestId);

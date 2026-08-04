@@ -32,11 +32,21 @@ https://docs.google.com/spreadsheets/d/1xNA955JIwe5cHETAMMMaCEfb1QtZnbuc9tKbEDQ5
 4. 함수 목록에서 `authorizeServices`를 선택해 한 번 실행합니다.
 5. Sheet 및 메일 권한을 승인합니다. 발신 계정이 다르면 함수가 오류로 중지됩니다.
 
-`authorizeServices`를 실행하면 기존 Token/RequestId 구조가 아래 구조로 변환되고 동일 이메일의 중복 행이 한 행으로 통합됩니다.
+`authorizeServices`를 실행하면 기존 Token/RequestId 구조가 아래 구조로 변환되고 동일 이메일의 중복 행이 한 행으로 통합됩니다. 비어 있는 `Admin` 탭에는 최초 관리자 계정도 자동으로 생성됩니다.
 
 ```text
 RequestedAt | Email | Status | LastVerifiedAt | VerifiedAt | NotifiedAt | NotificationError | Name | Organization | Purpose | PasswordSalt | PasswordHash | PasswordIterations | PasswordUpdatedAt
 ```
+
+`Admin` 탭의 최초 구조:
+
+```text
+Category | ID | PW | etc | status
+Temporary | admin | a1234567890 | init pw | active
+In fact |  |  | pbkdf2-sha256-v1 | inactive
+```
+
+첫 로그인에서 비밀번호를 바꾸면 `Temporary` 행의 PW는 즉시 비워지고 `inactive`가 됩니다. `In fact` 행에는 `v1$반복횟수$솔트$보호된해시` 형식의 인증값이 기록되고 `active`가 됩니다. 새 비밀번호 원문은 기록하지 않습니다.
 
 상태는 다음 두 값을 사용합니다.
 
@@ -57,7 +67,7 @@ RequestedAt | Email | Status | LastVerifiedAt | VerifiedAt | NotifiedAt | Notifi
 3. 배포 계정이 `shoutjoy1@gmail.com`인지 확인하고, 실행 사용자는 `나`, 액세스 권한은 `모든 사용자`로 설정합니다.
 4. 배포 후 `/exec` URL을 확인합니다.
 
-배포 후 `https://fmaviewer.vercel.app/Auth/admin.html`에서 `admin / a1234567890`으로 최초 로그인하고 새 비밀번호를 설정합니다. 관리자 비밀번호 해시는 Script Properties에 저장되며 `Users` 또는 `Admin` 시트에는 기록되지 않습니다.
+배포 후 `https://fmaviewer.vercel.app/Auth/admin.html`에서 `admin / a1234567890`으로 최초 로그인하고 새 비밀번호를 설정합니다. 관리자 계정은 `Admin` 탭을 기준으로 확인하며, 변경한 비밀번호 원문은 저장하지 않고 보호된 인증값만 같은 행에 기록합니다.
 
 새 URL이 발급되면 `admin.html`에 배포 URL을 입력하고 **배포 URL로 앱 최신화**를 누릅니다. **설정만 저장**은 관리자 저장소만 갱신하므로 `index.html`이 별도 저장 환경에 있으면 이전 URL이 계속 사용될 수 있습니다.
 
@@ -66,7 +76,7 @@ RequestedAt | Email | Status | LastVerifiedAt | VerifiedAt | NotifiedAt | Notifi
 정상 health 응답:
 
 ```json
-{"success":true,"service":"FMA Viewer verified email registration","version":"2026-08-05-admin-password-1","status":"OK","authMode":"email-password-session"}
+{"success":true,"service":"FMA Viewer verified email registration","version":"2026-08-05-admin-sheet-account-v2","status":"OK","authMode":"email-password-session"}
 ```
 
 ## 관리 함수

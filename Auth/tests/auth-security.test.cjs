@@ -7,6 +7,7 @@ const vm = require('node:vm');
 const values = new Map();
 let activeGoogleEmail = 'sheet.owner@gmail.com';
 let sheetOwnerEmail = 'sheet.owner@gmail.com';
+let adminSheet = null;
 const scriptProperties = {
   getProperty(key) {
     return values.has(key) ? values.get(key) : null;
@@ -28,6 +29,62 @@ function toSignedBytes(buffer) {
   return Array.from(buffer, (byte) => (byte > 127 ? byte - 256 : byte));
 }
 
+function createMockSheet() {
+  const cells = [];
+  function ensureCell(row, column) {
+    while (cells.length < row) cells.push([]);
+    while (cells[row - 1].length < column) cells[row - 1].push('');
+  }
+  return {
+    getLastRow() {
+      for (let row = cells.length; row > 0; row -= 1) {
+        if ((cells[row - 1] || []).some((value) => value !== '' && value != null)) return row;
+      }
+      return 0;
+    },
+    getRange(startRow, startColumn, numRows = 1, numColumns = 1) {
+      return {
+        getValues() {
+          return Array.from({ length: numRows }, (_, rowOffset) =>
+            Array.from({ length: numColumns }, (_, columnOffset) => {
+              ensureCell(startRow + rowOffset, startColumn + columnOffset);
+              return cells[startRow + rowOffset - 1][startColumn + columnOffset - 1];
+            })
+          );
+        },
+        setValues(rows) {
+          rows.forEach((row, rowOffset) => row.forEach((value, columnOffset) => {
+            ensureCell(startRow + rowOffset, startColumn + columnOffset);
+            cells[startRow + rowOffset - 1][startColumn + columnOffset - 1] = value;
+          }));
+          return this;
+        },
+        clearContent() {
+          for (let rowOffset = 0; rowOffset < numRows; rowOffset += 1) {
+            for (let columnOffset = 0; columnOffset < numColumns; columnOffset += 1) {
+              ensureCell(startRow + rowOffset, startColumn + columnOffset);
+              cells[startRow + rowOffset - 1][startColumn + columnOffset - 1] = '';
+            }
+          }
+          return this;
+        }
+      };
+    },
+    setFrozenRows() {},
+    snapshot() { return cells.map((row) => row.slice()); }
+  };
+}
+
+const mockSpreadsheet = {
+  getOwner: () => ({ getEmail: () => sheetOwnerEmail }),
+  getSheetByName: (name) => name === 'Admin' ? adminSheet : null,
+  insertSheet: (name) => {
+    if (name !== 'Admin') throw new Error(`Unexpected sheet: ${name}`);
+    adminSheet = createMockSheet();
+    return adminSheet;
+  }
+};
+
 const context = vm.createContext({
   console,
   Date,
@@ -43,9 +100,8 @@ const context = vm.createContext({
     getActiveUser: () => ({ getEmail: () => activeGoogleEmail })
   },
   SpreadsheetApp: {
-    openById: () => ({
-      getOwner: () => ({ getEmail: () => sheetOwnerEmail })
-    })
+    openById: () => mockSpreadsheet,
+    flush() {}
   },
   HtmlService: {
     createHtmlOutput: (html) => ({
@@ -124,6 +180,11 @@ const initialAdminParams = JSON.parse(
 );
 assert.equal(initialAdminParams.success, true);
 assert.equal(initialAdminParams.bootstrapPasswordRequired, true);
+assert.deepEqual(adminSheet.snapshot()[0].slice(0, 5), ['Category', 'ID', 'PW', 'etc', 'status']);
+assert.equal(adminSheet.snapshot()[1][0], 'Temporary');
+assert.equal(adminSheet.snapshot()[1][1], 'admin');
+assert.equal(adminSheet.snapshot()[1][2], 'a1234567890');
+assert.equal(adminSheet.snapshot()[1][4], 'active');
 assert.equal(
   Array.from(values.values()).some((value) => String(value).includes('a1234567890')),
   false,
@@ -153,6 +214,13 @@ const changedAdminPassword = JSON.parse(context.handleAdminChangePasswordPost_({
 }).getContent());
 assert.equal(changedAdminPassword.adminAuthenticated, true);
 assert.equal(changedAdminPassword.passwordChangeRequired, false);
+assert.equal(adminSheet.snapshot()[1][2], '', '비밀번호 변경 후 Admin 시트의 임시 비밀번호는 지워져야 합니다.');
+assert.equal(adminSheet.snapshot()[1][4], 'inactive');
+assert.equal(adminSheet.snapshot()[2][0], 'In fact');
+assert.equal(adminSheet.snapshot()[2][1], 'admin');
+assert.match(String(adminSheet.snapshot()[2][2]), /^v1\$600000\$[a-f0-9]{32,128}\$[a-f0-9]{64}$/);
+assert.equal(adminSheet.snapshot()[2][3], 'pbkdf2-sha256-v1');
+assert.equal(adminSheet.snapshot()[2][4], 'active');
 assert.equal(context.validateAdminSession_(initialAdminLogin.adminSessionToken), null);
 assert.equal(context.validateAdminSession_(changedAdminPassword.adminSessionToken).adminId, 'admin');
 
@@ -169,6 +237,17 @@ const changedAdminLogin = JSON.parse(context.handleAdminLoginPost_({
 assert.equal(changedAdminLogin.adminAuthenticated, true);
 context.revokeAdminSession_(changedAdminLogin.adminSessionToken);
 assert.equal(context.validateAdminSession_(changedAdminLogin.adminSessionToken), null);
+
+adminSheet = createMockSheet();
+adminSheet.getRange(1, 1, 3, 5).setValues([
+  ['Category', 'ID', 'PW', 'etc', 'status'],
+  ['Temporary', 'admin', 'a1234567890', 'init pw', 'active'],
+  ['In fact', '', '', '', '']
+]);
+const existingLayoutParams = JSON.parse(context.getAdminLoginParametersResponse_('admin').getContent());
+assert.equal(existingLayoutParams.success, true);
+assert.equal(existingLayoutParams.bootstrapPasswordRequired, true);
+assert.equal(adminSheet.snapshot()[1][2], 'a1234567890', '기존 Category/ID/PW 시트 구조를 덮어쓰면 안 됩니다.');
 
 for (let attempt = 0; attempt < 5; attempt += 1) {
   context.recordLoginFailure_('security.test@gmail.com');

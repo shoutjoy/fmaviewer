@@ -14,7 +14,7 @@
 | `gasWebAppUrl` | 앱 전용 GAS `/exec` URL |
 | `notificationRecipient` | 인증 완료 알림 수신 주소 |
 | `serverServiceName` | GAS health 응답과 비교할 서비스 이름 |
-| `serverVersion` | 클라이언트와 GAS가 함께 사용할 코드 버전 |
+| `SERVER_VERSION` | `Auth/gas/Code.gs`가 제공하며 클라이언트가 자동으로 읽는 코드 버전 |
 | `privacyPolicyVersion` | 사용자가 동의하는 처리방침 버전 |
 
 여러 앱이 같은 `storagePrefix`, Sheet, GAS 배포를 공유하지 않도록 합니다.
@@ -72,12 +72,10 @@ window.FMA_AUTH_SETTINGS = {
   appName: "APP_NAME",
   appMark: "APP",
   storagePrefix: "app_unique_prefix",
-  gasWebAppUrl: "https://script.google.com/macros/s/배포ID/exec",
   privacyPolicyUrl: "Auth/privacy_policy.html",
   privacyPolicyVersion: "2026-08-04-1",
   notificationRecipient: "operator@example.com",
   serverServiceName: "APP_NAME verified email registration",
-  serverVersion: "2026-08-05-admin-password-1",
   passwordIterations: 600000,
   sessionTtlMs: 8 * 60 * 60 * 1000
 };
@@ -98,11 +96,11 @@ window.FMA_AUTH_SETTINGS = {
 appName
 appMark
 storagePrefix
-gasWebAppUrl
 notificationRecipient
 serverServiceName
-serverVersion
 ```
+
+GAS `/exec` URL은 관리자 첫 화면에서 직접 입력하며, `settings.js`는 `Auth/gas/Code.gs`의 `SERVER_VERSION`을 자동으로 읽습니다.
 
 관리 Sheet 바로가기와 앱 열기 링크도 대상 앱 주소로 바꿉니다.
 

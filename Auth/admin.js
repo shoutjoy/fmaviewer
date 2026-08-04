@@ -34,7 +34,9 @@
     const openSpreadsheetButton = document.getElementById("openSpreadsheetButton");
     const openAppsScriptButton = document.getElementById("openAppsScriptButton");
     const spreadsheetIdValue = document.getElementById("spreadsheetIdValue");
-    const expectedServerVersion = String(window.FMAAuthSettings?.serverVersion || "2026-08-05-admin-password-1");
+    const expectedServerVersion = String(window.FMAAuthSettings?.serverVersion || "");
+    const expectedConnectionVersion = document.getElementById("expectedConnectionVersion");
+    const connectionVersionBadge = document.getElementById("connectionVersionBadge");
     const gasCodePreview = document.getElementById("gasCodePreview");
     const gasCodeStatus = document.getElementById("gasCodeStatus");
     const gasCodeVersionBadge = document.getElementById("gasCodeVersionBadge");
@@ -76,6 +78,11 @@
         gasCodeStatus.textContent = message;
         gasCodeStatus.dataset.tone = tone;
         gasCodeStatus.hidden = !message;
+    }
+
+    function setConnectionVersion(message, tone = "neutral") {
+        connectionVersionBadge.textContent = message;
+        connectionVersionBadge.dataset.tone = tone;
     }
 
     function readGasCodeVersion(source) {
@@ -408,11 +415,12 @@
         testUrl.searchParams.set("action", "health");
         testUrl.searchParams.set("_", String(Date.now()));
         const controller = new AbortController();
-        const timeoutMs = Number(window.FMAAuthSettings?.registrationTimeoutMs) || 60000;
+        const timeoutMs = Math.min(Number(window.FMAAuthSettings?.registrationTimeoutMs) || 20000, 20000);
         const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
         testButton.disabled = true;
-        testButton.textContent = "연결 확인 중...";
+        testButton.textContent = "연결·버전 확인 중...";
         healthResult.hidden = true;
+        setConnectionVersion("연결 확인 중…", "neutral");
         setStatus("GAS 서버 응답을 기다리고 있습니다…", "success");
 
         try {
@@ -440,25 +448,33 @@
             healthResult.hidden = false;
             const expectedService = String(window.FMAAuthSettings?.serverServiceName || "FMA Viewer verified email registration");
             if (String(payload?.service || "") !== expectedService) {
+                setConnectionVersion("인증 서버 확인 실패", "error");
                 throw new Error("현재 배포 URL은 이메일 인증 기능이 없는 이전 GAS 버전입니다. 새 Code.gs로 재배포하세요.");
             }
-            if (String(payload?.version || "") !== expectedServerVersion) {
-                throw new Error("현재 배포는 이전 이메일 인증 코드입니다. 최신 Code.gs를 저장한 뒤 새 버전으로 다시 배포하세요.");
+            const actualVersion = String(payload?.version || "버전 없음");
+            if (actualVersion !== expectedServerVersion) {
+                setConnectionVersion(`불일치 · 서버 ${actualVersion}`, "error");
+                throw new Error(`서버 버전(${actualVersion})과 앱 요구 버전(${expectedServerVersion})이 다릅니다. 최신 Code.gs를 저장한 뒤 새 버전으로 다시 배포하세요.`);
             }
             if (!response.ok || payload?.success !== true || String(payload?.status || "").toUpperCase() !== "OK") {
+                setConnectionVersion(`응답 오류 · ${actualVersion}`, "error");
                 throw new Error(payload?.message || `GAS HTTP ${response.status}`);
             }
 
-            setStatus("서버 연결이 정상입니다. 이 URL을 저장할 수 있습니다.", "success");
+            setConnectionVersion(`정상 · ${actualVersion}`, "success");
+            setStatus(`서버 연결과 버전이 모두 정상입니다. (${actualVersion}) 이 URL을 저장할 수 있습니다.`, "success");
         } catch (error) {
             const message = error?.name === "AbortError"
-                ? "서버가 60초 안에 응답하지 않았습니다."
+                ? `서버가 ${Math.round(timeoutMs / 1000)}초 안에 응답하지 않았습니다.`
                 : String(error?.message || error);
+            if (connectionVersionBadge.dataset.tone !== "error") {
+                setConnectionVersion("연결 실패", "error");
+            }
             setStatus(message, "error");
         } finally {
             clearTimeout(timeoutId);
             testButton.disabled = false;
-            testButton.textContent = "서버 연결 테스트";
+            testButton.textContent = "연결 및 버전 점검";
         }
     }
 
@@ -477,6 +493,7 @@
     spreadsheetInput.addEventListener("input", updateSpreadsheetPreview);
     appsScriptProjectInput.addEventListener("input", updateAppsScriptPreview);
     urlInput.addEventListener("input", () => {
+        setConnectionVersion("다시 점검 필요", "neutral");
         try {
             updateAppLink(readFormConfig());
         } catch (_) {}
@@ -532,6 +549,7 @@
     originValue.textContent = location.protocol === "file:"
         ? `로컬 파일 · ${decodeURIComponent(location.pathname)}`
         : location.origin;
+    expectedConnectionVersion.textContent = expectedServerVersion;
     renderConfig();
     renderHistory();
     void loadGasCode();

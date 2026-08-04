@@ -1,9 +1,13 @@
-/* FMA Viewer verified registration, password login, and status server (Google Apps Script) */
+/*
+ * FMA Viewer verified registration, password login, and status server
+ * CODE VERSION: 2026-08-05-admin-sheet-account-v2
+ * Google Apps Script의 함수 목록에서 version을 실행하면 현재 버전을 확인할 수 있습니다.
+ */
 
 const SHEET_NAME = 'Users';
 const NOTIFICATION_EMAIL = 'shoutjoy1@yonsei.ac.kr';
 const EXPECTED_SENDER_EMAIL = 'shoutjoy1@gmail.com';
-const SERVER_VERSION = '2026-08-05-admin-password-1';
+const SERVER_VERSION = '2026-08-05-admin-sheet-account-v2';
 const SPREADSHEET_ID = '1xNA955JIwe5cHETAMMMaCEfb1QtZnbuc9tKbEDQ573w';
 const VERIFICATION_TTL_MS = 30 * 60 * 1000;
 const VERIFICATION_GRANT_TTL_MS = 24 * 60 * 60 * 1000;
@@ -19,8 +23,14 @@ const LOGIN_LOCK_MS = 15 * 60 * 1000;
 const LOGIN_MAX_FAILURES = 5;
 const ADMIN_ID = 'admin';
 const ADMIN_INITIAL_PASSWORD = 'a1234567890';
+const ADMIN_SHEET_NAME = 'Admin';
+const ADMIN_SHEET_HEADERS = ['Category', 'ID', 'PW', 'etc', 'status'];
+const ADMIN_TEMP_CATEGORY = 'Temporary';
+const ADMIN_ACTUAL_CATEGORY = 'In fact';
+const ADMIN_ACTIVE_STATUS = 'active';
+const ADMIN_INACTIVE_STATUS = 'inactive';
+const ADMIN_PASSWORD_FORMAT = 'pbkdf2-sha256-v1';
 const ADMIN_SESSION_TTL_MS = 60 * 60 * 1000;
-const ADMIN_CREDENTIAL_KEY = 'fma_admin_credential_v1';
 const ADMIN_SESSION_PREFIX = 'fma_admin_session_v1_';
 const ADMIN_LOGIN_RATE_KEY = 'fma-admin-login:admin';
 const SHEET_HEADERS = [
@@ -39,6 +49,11 @@ const SHEET_HEADERS = [
   'PasswordIterations',
   'PasswordUpdatedAt'
 ];
+
+function version() {
+  console.log('FMA Viewer Code.gs version: ' + SERVER_VERSION);
+  return SERVER_VERSION;
+}
 
 function doPost(e) {
   try {
@@ -267,7 +282,6 @@ function handleAuthenticatedStatusPost_(requestData, action) {
 
 function getAdminLoginParametersResponse_(adminIdValue) {
   const adminId = String(adminIdValue || '').trim().toLowerCase();
-  if (!getAdminCredential_()) initializeAdminCredential_();
   const credential = getAdminCredential_();
   if (adminId !== ADMIN_ID) return adminFailureResponse_('관리자 아이디 또는 비밀번호가 올바르지 않습니다.');
   return json_({
@@ -295,7 +309,7 @@ function handleAdminLoginPost_(requestData) {
     if (credential.passwordChangeRequired) {
       const bootstrapPassword = String(requestData.bootstrapPassword || '');
       validCredential = bootstrapPassword.length >= 10 && bootstrapPassword.length <= 128 &&
-        constantTimeEquals_(hashAdminBootstrapPassword_(bootstrapPassword), credential.bootstrapHash);
+        constantTimeEquals_(bootstrapPassword, credential.initialPassword);
     } else {
       const verifier = String(requestData.passwordVerifier || '').trim().toLowerCase();
       validCredential = /^[a-f0-9]{64}$/.test(verifier) &&
@@ -330,16 +344,18 @@ function handleAdminChangePasswordPost_(requestData) {
     passwordVerifier: requestData.passwordVerifier,
     passwordIterations: requestData.passwordIterations
   });
-  const previous = getAdminCredential_();
-  PropertiesService.getScriptProperties().setProperty(ADMIN_CREDENTIAL_KEY, JSON.stringify({
-    adminId: ADMIN_ID,
-    passwordSalt: passwordCredential.salt,
-    passwordHash: passwordCredential.hash,
-    passwordIterations: passwordCredential.iterations,
-    passwordChangeRequired: false,
-    createdAt: previous && previous.createdAt || new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  }));
+  const adminSheet = ensureAdminSheet_().sheet;
+  adminSheet.getRange(2, 1, 2, ADMIN_SHEET_HEADERS.length).setValues([
+    [ADMIN_TEMP_CATEGORY, ADMIN_ID, '', 'init pw', ADMIN_INACTIVE_STATUS],
+    [
+      ADMIN_ACTUAL_CATEGORY,
+      ADMIN_ID,
+      serializeAdminProtectedPassword_(passwordCredential),
+      ADMIN_PASSWORD_FORMAT,
+      ADMIN_ACTIVE_STATUS
+    ]
+  ]);
+  SpreadsheetApp.flush();
 
   revokeAllAdminSessions_();
   const session = createAdminSession_(ADMIN_ID);
@@ -386,48 +402,128 @@ function adminFailureResponse_(message, extra) {
 }
 
 function getAdminCredential_() {
-  const raw = PropertiesService.getScriptProperties().getProperty(ADMIN_CREDENTIAL_KEY);
-  if (!raw) return null;
-  try {
-    const credential = JSON.parse(raw);
-    if (!credential || String(credential.adminId || '').toLowerCase() !== ADMIN_ID) return null;
-    if (credential.passwordChangeRequired) {
-      return /^[a-f0-9]{64}$/i.test(String(credential.bootstrapHash || '')) ? credential : null;
+  const adminSheet = ensureAdminSheet_().sheet;
+  const rows = readAdminSheetRows_(adminSheet).slice(1);
+  let temporaryCredential = null;
+  for (let index = 0; index < rows.length; index += 1) {
+    const row = rows[index] || [];
+    const category = String(row[0] || '').trim().toLowerCase();
+    const adminId = String(row[1] || '').trim().toLowerCase();
+    const passwordValue = String(row[2] || '').trim();
+    const status = String(row[4] || '').trim().toLowerCase();
+    if (adminId !== ADMIN_ID || status !== ADMIN_ACTIVE_STATUS) continue;
+
+    if (category === ADMIN_ACTUAL_CATEGORY.toLowerCase()) {
+      const protectedPassword = parseAdminProtectedPassword_(passwordValue);
+      if (!protectedPassword) continue;
+      return {
+        adminId: ADMIN_ID,
+        initialPassword: '',
+        passwordSalt: protectedPassword.salt,
+        passwordHash: protectedPassword.hash,
+        passwordIterations: protectedPassword.iterations,
+        passwordChangeRequired: false
+      };
     }
-    if (
-      !/^[a-f0-9]{32,128}$/i.test(String(credential.passwordSalt || '')) ||
-      !/^[a-f0-9]{64}$/i.test(String(credential.passwordHash || '')) ||
-      Number(credential.passwordIterations) !== PASSWORD_KDF_ITERATIONS
-    ) return null;
-    return credential;
-  } catch (_) {
-    return null;
+
+    if (category === ADMIN_TEMP_CATEGORY.toLowerCase() && passwordValue) {
+      temporaryCredential = {
+        adminId: ADMIN_ID,
+        initialPassword: passwordValue,
+        passwordSalt: '',
+        passwordHash: '',
+        passwordIterations: 0,
+        passwordChangeRequired: true
+      };
+    }
   }
+  return temporaryCredential;
 }
 
-function hashAdminBootstrapPassword_(password) {
-  return hmacSha256Hex_('admin-bootstrap:' + String(password), getCredentialPepper_());
+function serializeAdminProtectedPassword_(credential) {
+  return [
+    'v1',
+    credential.iterations,
+    credential.salt,
+    credential.hash
+  ].join('$');
+}
+
+function parseAdminProtectedPassword_(value) {
+  const parts = String(value || '').trim().split('$');
+  if (parts.length !== 4 || parts[0] !== 'v1') return null;
+  const iterations = Number(parts[1]);
+  const salt = String(parts[2] || '').trim().toLowerCase();
+  const hash = String(parts[3] || '').trim().toLowerCase();
+  if (
+    iterations !== PASSWORD_KDF_ITERATIONS ||
+    !/^[a-f0-9]{32,128}$/.test(salt) ||
+    !/^[a-f0-9]{64}$/.test(hash)
+  ) return null;
+  return { iterations: iterations, salt: salt, hash: hash };
 }
 
 function initializeAdminCredential_() {
-  getCredentialPepper_();
-  const bootstrapHash = hashAdminBootstrapPassword_(ADMIN_INITIAL_PASSWORD);
-  const properties = PropertiesService.getScriptProperties();
+  const currentSheet = getAdminSheet_();
+  const currentData = readAdminSheetRows_(currentSheet);
+  if (isAdminSheetReady_(currentData)) return { created: false, adminId: ADMIN_ID, sheet: currentSheet };
+
   const lock = LockService.getScriptLock();
+  let adminSheet;
   lock.waitLock(10000);
   try {
-    if (getAdminCredential_()) return { created: false, adminId: ADMIN_ID };
-    properties.setProperty(ADMIN_CREDENTIAL_KEY, JSON.stringify({
-      adminId: ADMIN_ID,
-      bootstrapHash: bootstrapHash,
-      passwordChangeRequired: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }));
+    adminSheet = getAdminSheet_();
+    const data = readAdminSheetRows_(adminSheet);
+    if (isAdminSheetReady_(data)) return { created: false, adminId: ADMIN_ID, sheet: adminSheet };
+    writeInitialAdminRow_(adminSheet);
   } finally {
     lock.releaseLock();
   }
-  return { created: true, adminId: ADMIN_ID };
+  return { created: true, adminId: ADMIN_ID, sheet: adminSheet };
+}
+
+function getAdminSheet_() {
+  const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = spreadsheet.getSheetByName(ADMIN_SHEET_NAME);
+  if (!sheet) sheet = spreadsheet.insertSheet(ADMIN_SHEET_NAME);
+  return sheet;
+}
+
+function readAdminSheetRows_(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 1) return [];
+  return sheet.getRange(1, 1, Math.max(lastRow, 3), ADMIN_SHEET_HEADERS.length).getValues();
+}
+
+function isAdminSheetReady_(data) {
+  if (!Array.isArray(data) || data.length < 2) return false;
+  const headers = data[0].map(function(value) { return String(value || '').trim(); });
+  if (!ADMIN_SHEET_HEADERS.every(function(value, index) { return headers[index] === value; })) return false;
+  return data.slice(1).some(function(row) {
+    const category = String(row[0] || '').trim().toLowerCase();
+    const adminId = String(row[1] || '').trim().toLowerCase();
+    const passwordValue = String(row[2] || '').trim();
+    const status = String(row[4] || '').trim().toLowerCase();
+    if (adminId !== ADMIN_ID || status !== ADMIN_ACTIVE_STATUS) return false;
+    if (category === ADMIN_TEMP_CATEGORY.toLowerCase()) return Boolean(passwordValue);
+    return category === ADMIN_ACTUAL_CATEGORY.toLowerCase() && Boolean(parseAdminProtectedPassword_(passwordValue));
+  });
+}
+
+function writeInitialAdminRow_(sheet) {
+  const clearRows = Math.max(sheet.getLastRow(), 3);
+  sheet.getRange(1, 1, clearRows, ADMIN_SHEET_HEADERS.length).clearContent();
+  sheet.getRange(1, 1, 3, ADMIN_SHEET_HEADERS.length).setValues([
+    ADMIN_SHEET_HEADERS,
+    [ADMIN_TEMP_CATEGORY, ADMIN_ID, ADMIN_INITIAL_PASSWORD, 'init pw', ADMIN_ACTIVE_STATUS],
+    [ADMIN_ACTUAL_CATEGORY, '', '', ADMIN_PASSWORD_FORMAT, ADMIN_INACTIVE_STATUS]
+  ]);
+  sheet.setFrozenRows(1);
+  SpreadsheetApp.flush();
+}
+
+function ensureAdminSheet_() {
+  return initializeAdminCredential_();
 }
 
 function initializeAdminAccount() {
@@ -442,14 +538,7 @@ function initializeAdminAccount() {
 }
 
 function resetAdminAccount() {
-  getCredentialPepper_();
-  PropertiesService.getScriptProperties().setProperty(ADMIN_CREDENTIAL_KEY, JSON.stringify({
-    adminId: ADMIN_ID,
-    bootstrapHash: hashAdminBootstrapPassword_(ADMIN_INITIAL_PASSWORD),
-    passwordChangeRequired: true,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  }));
+  writeInitialAdminRow_(getAdminSheet_());
   revokeAllAdminSessions_();
   clearLoginFailure_(ADMIN_LOGIN_RATE_KEY);
   console.log('관리자 계정을 임시 비밀번호 상태로 초기화했습니다.');
