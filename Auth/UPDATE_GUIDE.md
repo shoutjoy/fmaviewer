@@ -131,7 +131,7 @@ https://script.google.com/macros/s/배포ID/exec?action=health
 ### 6. 새 배포 URL을 `index.html`에 반영
 
 1. `https://fmaviewer.vercel.app/Auth/admin.html`을 엽니다.
-2. 로그인 화면의 **GAS 웹 앱 배포 URL**에 4단계의 `/exec` URL을 직접 입력합니다.
+2. 로그인 화면에 현재 기본 `/exec` URL이 자동 적용됩니다. 별도 새 배포를 만들어 URL이 바뀐 경우에만 **GAS 웹 앱 배포 URL**에 새 주소를 입력합니다.
 3. **인증 서버 연결 및 버전 점검**을 눌러 서버 버전과 Admin 시트 준비 상태를 확인합니다.
 4. 점검이 통과하면 `admin / a1234567890`으로 로그인합니다.
 5. 강제로 표시되는 새 비밀번호 설정 화면에서 앞으로 사용할 비밀번호를 입력합니다.
@@ -158,7 +158,7 @@ fmaBlockMinutes
 | **배포 URL로 앱 최신화** | 관리자 설정 저장 후 `index.html`로 전달하고 앱 설정까지 교체 | GAS `/exec` URL 변경, 관리자와 앱의 저장 환경이 다를 때 |
 | **설정만 저장** | 현재 관리자 페이지의 로컬 저장소에만 저장 | 같은 환경에서 점검 주기만 임시 조정할 때 |
 
-새 GAS URL을 입력했는데 `index.html`이 계속 예전 URL을 사용한다면 **설정만 저장**만 누른 경우가 가장 흔합니다.
+새 GAS URL을 입력했는데 `index.html`이 계속 예전 URL을 사용한다면 **설정만 저장**만 누른 경우가 가장 흔합니다. 새 브라우저는 `settings.js`의 기본 URL을 사용하고, 관리자에서 전달한 URL은 해당 브라우저의 override로 사용됩니다.
 
 ## 업데이트 후 확인
 

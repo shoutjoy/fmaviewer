@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>FMA Viewer 관리자 설정</title>
     <meta id="adminDescription" name="description" content="FMA Viewer Google Sheet, Apps Script와 GAS 배포 URL을 설정합니다.">
-    <link rel="stylesheet" href="admin.css?v=20260805-12">
+    <link rel="stylesheet" href="admin.css?v=20260805-13">
 </head>
 
 <body>
@@ -55,7 +55,7 @@
                         placeholder="https://script.google.com/macros/s/.../exec">
                 </label>
                 <button id="adminConnectionCheckButton" type="button">인증 서버 연결 및 버전 점검</button>
-                <small>처음 한 번 `/exec` 주소를 입력해 점검하면 이 브라우저에 저장됩니다. 필요 버전 <code id="adminExpectedServerVersion">확인 중…</code></small>
+                <small>배포 기본 주소가 자동 입력됩니다. 별도 새 배포를 만든 경우에만 URL을 바꾸세요. 필요 버전 <code id="adminExpectedServerVersion">확인 중…</code></small>
             </div>
             <a class="text-link admin-auth-back" href="../index.html">FMA Viewer로 돌아가기</a>
         </div>
@@ -239,10 +239,10 @@
         </footer>
     </main>
 
-    <script src="gas/version.generated.js?v=20260805-9"></script>
-    <script src="settings.js?v=20260805-11"></script>
-    <script src="config.js?v=20260805-9"></script>
-    <script src="admin-auth.js?v=20260805-12"></script>
+    <script src="gas/version.generated.js?v=20260805-13"></script>
+    <script src="settings.js?v=20260805-13"></script>
+    <script src="config.js?v=20260805-13"></script>
+    <script src="admin-auth.js?v=20260805-13"></script>
 </body>
 
 </html>

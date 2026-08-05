@@ -82,7 +82,7 @@ assert.equal(fallbackWindow.FMAAuthSettings.serverVersionError, '');
 
 vm.runInContext(fs.readFileSync(path.join(authDirectory, 'settings.js'), 'utf8'), context);
 await windowMock.FMAAuthSettingsReady;
-assert.equal(windowMock.FMAAuthSettings.gasWebAppUrl, '');
+assert.equal(windowMock.FMAAuthSettings.gasWebAppUrl, latestUrl);
 assert.equal(windowMock.FMAAuthSettings.serverVersion, '2026-08-05-admin-sheet-account-v2');
 assert.match(windowMock.FMAAuthSettings.serverVersionSourceUrl, /\/Auth\/gas\/Code\.gs$/);
 assert.equal(windowMock.FMAAuthSettings.spreadsheetUrl, spreadsheetUrl);
@@ -99,14 +99,14 @@ localStorage.setItem(legacyStorageKey, JSON.stringify({
 vm.runInContext(fs.readFileSync(path.join(authDirectory, 'config.js'), 'utf8'), context);
 
 const migrated = windowMock.FMAAdminConfig.load();
-assert.equal(migrated.gasWebAppUrl, '', '이전 하드코딩 GAS URL은 새 설정에서 자동 사용하면 안 됩니다.');
+assert.equal(migrated.gasWebAppUrl, latestUrl, '기존 저장소도 현재 배포 기본 URL로 자동 복구되어야 합니다.');
 assert.equal(migrated.spreadsheetUrl, spreadsheetUrl, '기존 설정에는 기본 Google Sheet 주소가 보완되어야 합니다.');
 assert.equal(migrated.appsScriptProjectUrl, appsScriptProjectUrl, '기존 설정에는 기본 Apps Script 편집기 주소가 보완되어야 합니다.');
 assert.equal(localStorage.getItem(storageKey), null);
 
 values.clear();
 const freshBrowserConfig = windowMock.FMAAdminConfig.load();
-assert.equal(freshBrowserConfig.gasWebAppUrl, '', '새 브라우저는 GAS URL을 직접 입력해야 합니다.');
+assert.equal(freshBrowserConfig.gasWebAppUrl, latestUrl, '새 브라우저도 배포 기본 GAS URL을 즉시 사용해야 합니다.');
 assert.equal(freshBrowserConfig.spreadsheetUrl, spreadsheetUrl);
 assert.equal(freshBrowserConfig.appsScriptProjectUrl, appsScriptProjectUrl);
 
