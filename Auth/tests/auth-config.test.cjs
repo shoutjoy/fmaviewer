@@ -88,8 +88,8 @@ assert.match(windowMock.FMAAuthSettings.serverVersionSourceUrl, /\/Auth\/gas\/Co
 assert.equal(windowMock.FMAAuthSettings.spreadsheetUrl, spreadsheetUrl);
 assert.equal(windowMock.FMAAuthSettings.appsScriptProjectUrl, appsScriptProjectUrl);
 
-const storageKey = 'fma_viewer_admin_config_v3';
-const legacyStorageKey = 'fma_viewer_admin_config_v2';
+const storageKey = 'fma_viewer_admin_config_v4';
+const legacyStorageKey = 'fma_viewer_admin_config_v3';
 localStorage.setItem(legacyStorageKey, JSON.stringify({
   gasWebAppUrl: previousUrl,
   checksPerDay: 1,
@@ -102,7 +102,7 @@ const migrated = windowMock.FMAAdminConfig.load();
 assert.equal(migrated.gasWebAppUrl, latestUrl, '기존 저장소도 현재 배포 기본 URL로 자동 복구되어야 합니다.');
 assert.equal(migrated.spreadsheetUrl, spreadsheetUrl, '기존 설정에는 기본 Google Sheet 주소가 보완되어야 합니다.');
 assert.equal(migrated.appsScriptProjectUrl, appsScriptProjectUrl, '기존 설정에는 기본 Apps Script 편집기 주소가 보완되어야 합니다.');
-assert.equal(localStorage.getItem(storageKey), null);
+assert.equal(JSON.parse(localStorage.getItem(storageKey)).gasWebAppUrl, latestUrl);
 
 values.clear();
 const freshBrowserConfig = windowMock.FMAAdminConfig.load();

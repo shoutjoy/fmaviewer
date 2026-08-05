@@ -3,8 +3,11 @@
 
     const authSettings = global.FMAAuthSettings || {};
     const storagePrefix = String(authSettings.storagePrefix || "fma_viewer");
-    const STORAGE_KEY = `${storagePrefix}_admin_config_v3`;
-    const LEGACY_STORAGE_KEY = `${storagePrefix}_admin_config_v2`;
+    const STORAGE_KEY = `${storagePrefix}_admin_config_v4`;
+    const LEGACY_STORAGE_KEYS = [
+        `${storagePrefix}_admin_config_v3`,
+        `${storagePrefix}_admin_config_v2`
+    ];
     const HISTORY_KEY = `${storagePrefix}_admin_config_history_v1`;
     const DEFAULT_CONFIG = Object.freeze({
         gasWebAppUrl: String(authSettings.gasWebAppUrl || ""),
@@ -137,10 +140,13 @@
     function load() {
         try {
             const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
-            const legacy = stored ? null : JSON.parse(localStorage.getItem(LEGACY_STORAGE_KEY) || "null");
+            const legacy = stored ? null : LEGACY_STORAGE_KEYS
+                .map(key => JSON.parse(localStorage.getItem(key) || "null"))
+                .find(Boolean);
             let loaded = normalizeConfig(stored || legacy || DEFAULT_CONFIG);
             if (!stored) {
                 loaded.gasWebAppUrl = DEFAULT_CONFIG.gasWebAppUrl;
+                if (legacy) localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
             }
             const migrated = migrateDeprecatedGasWebAppUrl(loaded);
             if (migrated !== loaded) {
