@@ -83,7 +83,7 @@ assert.equal(fallbackWindow.FMAAuthSettings.serverVersionError, '');
 vm.runInContext(fs.readFileSync(path.join(authDirectory, 'settings.js'), 'utf8'), context);
 await windowMock.FMAAuthSettingsReady;
 assert.equal(windowMock.FMAAuthSettings.gasWebAppUrl, latestUrl);
-assert.equal(windowMock.FMAAuthSettings.serverVersion, '2026-08-05-admin-sheet-account-v2');
+assert.equal(windowMock.FMAAuthSettings.serverVersion, '2026-08-05-admin-recovery-v3');
 assert.match(windowMock.FMAAuthSettings.serverVersionSourceUrl, /\/Auth\/gas\/Code\.gs$/);
 assert.equal(windowMock.FMAAuthSettings.spreadsheetUrl, spreadsheetUrl);
 assert.equal(windowMock.FMAAuthSettings.appsScriptProjectUrl, appsScriptProjectUrl);

@@ -76,7 +76,7 @@ In fact |  |  | pbkdf2-sha256-v1 | inactive
 정상 health 응답:
 
 ```json
-{"success":true,"service":"FMA Viewer verified email registration","version":"2026-08-05-admin-sheet-account-v2","status":"OK","authMode":"email-password-session"}
+{"success":true,"service":"FMA Viewer verified email registration","version":"2026-08-05-admin-recovery-v3","status":"OK","authMode":"email-password-session"}
 ```
 
 ## 관리 함수

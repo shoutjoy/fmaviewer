@@ -28,7 +28,6 @@
     const bootstrapGasUrlInput = document.getElementById("adminBootstrapGasUrl");
     let adminLoaded = false;
     let pendingChangeSession = null;
-    let serverHealthCache = null;
 
     function setStatus(message, tone = "success") {
         status.textContent = message || "";
@@ -178,37 +177,6 @@
         }
     }
 
-    async function assertAdminServerReady(gasWebAppUrl) {
-        if (
-            serverHealthCache?.gasWebAppUrl === gasWebAppUrl &&
-            Date.now() - serverHealthCache.checkedAt < 5 * 60 * 1000
-        ) return;
-
-        const healthUrl = new URL(gasWebAppUrl);
-        healthUrl.searchParams.set("action", "health");
-        healthUrl.searchParams.set("_", String(Date.now()));
-        const controller = new AbortController();
-        const timeoutId = window.setTimeout(() => controller.abort(), 30000);
-        try {
-            const response = await fetch(healthUrl.toString(), {
-                method: "GET",
-                cache: "no-store",
-                signal: controller.signal
-            });
-            const result = await readJsonResponse(response);
-            assertExpectedServerVersion(result);
-            if (!result?.success) throw new Error(result?.message || "인증 서버 상태를 확인할 수 없습니다.");
-            serverHealthCache = { gasWebAppUrl, checkedAt: Date.now() };
-        } catch (error) {
-            if (error?.name === "AbortError") {
-                throw createAdminRequestError("인증 서버 상태 점검이 30초 안에 끝나지 않았습니다.", "GAS_TIMEOUT");
-            }
-            throw error;
-        } finally {
-            window.clearTimeout(timeoutId);
-        }
-    }
-
     async function requestAdminActionAtUrl(gasWebAppUrl, payload) {
         const action = String(payload?.action || "");
         const timeoutMs = action === "admin-login" || action === "admin-change-password"
@@ -303,8 +271,6 @@
         setGateBusy("connection");
         setStatus("인증 서버 연결, 코드 버전과 Admin 시트를 확인하고 있습니다…", "success");
         try {
-            const gasWebAppUrl = readBootstrapGasUrl();
-            await assertAdminServerReady(gasWebAppUrl);
             const parameters = await requestUsingBootstrapUrl({ action: "admin-login-params", adminId: "admin" });
             if (!parameters?.success) throw new Error(parameters?.message || "Admin 시트의 관리자 계정을 확인할 수 없습니다.");
             initialPasswordNotice.hidden = !parameters.bootstrapPasswordRequired;
@@ -344,7 +310,6 @@
         setStatus("관리자 로그인을 확인하고 있습니다…", "success");
         try {
             const gasWebAppUrl = readBootstrapGasUrl();
-            await assertAdminServerReady(gasWebAppUrl);
             const parameters = await requestUsingBootstrapUrl({ action: "admin-login-params", adminId });
             if (!parameters?.success) throw new Error(parameters?.message || "관리자 계정이 아직 준비되지 않았습니다.");
             initialPasswordNotice.hidden = !parameters.bootstrapPasswordRequired;

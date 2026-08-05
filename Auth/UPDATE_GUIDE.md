@@ -20,7 +20,7 @@
 현재 기대 서버 버전:
 
 ```text
-2026-08-05-admin-sheet-account-v2
+2026-08-05-admin-recovery-v3
 ```
 
 ## 전체 업데이트 순서
@@ -57,7 +57,7 @@ https://fmaviewer.vercel.app/Auth/gas/Code.gs
 ```
 
 1. 원본 전체를 선택해 복사합니다.
-2. 코드 상단 주석과 `SERVER_VERSION`이 `2026-08-05-admin-sheet-account-v2`인지 확인합니다. Apps Script 함수 목록에서 `version`을 실행해도 확인할 수 있습니다.
+2. 코드 상단 주석과 `SERVER_VERSION`이 `2026-08-05-admin-recovery-v3`인지 확인합니다. Apps Script 함수 목록에서 `version`을 실행해도 확인할 수 있습니다.
 
 이미 관리자 비밀번호 로그인이 설정된 이후 업데이트라면 관리자 화면 하단의 다음 기능도 사용할 수 있습니다.
 
@@ -120,7 +120,7 @@ https://script.google.com/macros/s/배포ID/exec?action=health
 {
   "success": true,
   "service": "FMA Viewer verified email registration",
-  "version": "2026-08-05-admin-sheet-account-v2",
+  "version": "2026-08-05-admin-recovery-v3",
   "status": "OK",
   "authMode": "email-password-session"
 }
@@ -191,7 +191,7 @@ fmaBlockMinutes
 
 ## 완료 체크리스트
 
-- [ ] 원본 `Code.gs` 버전이 `2026-08-05-admin-sheet-account-v2`이다.
+- [ ] 원본 `Code.gs` 버전이 `2026-08-05-admin-recovery-v3`이다.
 - [ ] Apps Script의 `Code.gs` 전체를 최신 코드로 교체했다.
 - [ ] `authorizeServices`를 실행했다.
 - [ ] 웹 앱을 **새 버전**으로 재배포했다.

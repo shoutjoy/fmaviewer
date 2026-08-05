@@ -1,13 +1,13 @@
 /*
  * FMA Viewer verified registration, password login, and status server
- * CODE VERSION: 2026-08-05-admin-sheet-account-v2
+ * CODE VERSION: 2026-08-05-admin-recovery-v3
  * Google Apps Script의 함수 목록에서 version을 실행하면 현재 버전을 확인할 수 있습니다.
  */
 
 const SHEET_NAME = 'Users';
 const NOTIFICATION_EMAIL = 'shoutjoy1@yonsei.ac.kr';
 const EXPECTED_SENDER_EMAIL = 'shoutjoy1@gmail.com';
-const SERVER_VERSION = '2026-08-05-admin-sheet-account-v2';
+const SERVER_VERSION = '2026-08-05-admin-recovery-v3';
 const SPREADSHEET_ID = '1xNA955JIwe5cHETAMMMaCEfb1QtZnbuc9tKbEDQ573w';
 const VERIFICATION_TTL_MS = 30 * 60 * 1000;
 const VERIFICATION_GRANT_TTL_MS = 24 * 60 * 60 * 1000;
@@ -466,7 +466,10 @@ function parseAdminProtectedPassword_(value) {
 function initializeAdminCredential_() {
   const currentSheet = getAdminSheet_();
   const currentData = readAdminSheetRows_(currentSheet);
-  if (isAdminSheetReady_(currentData)) return { created: false, adminId: ADMIN_ID, sheet: currentSheet };
+  if (isAdminSheetReady_(currentData)) {
+    if (clearLegacyAdminColumns_(currentSheet)) resetAdminRuntimeState_();
+    return { created: false, adminId: ADMIN_ID, sheet: currentSheet };
+  }
 
   const lock = LockService.getScriptLock();
   let adminSheet;
@@ -474,12 +477,35 @@ function initializeAdminCredential_() {
   try {
     adminSheet = getAdminSheet_();
     const data = readAdminSheetRows_(adminSheet);
-    if (isAdminSheetReady_(data)) return { created: false, adminId: ADMIN_ID, sheet: adminSheet };
+    if (isAdminSheetReady_(data)) {
+      if (clearLegacyAdminColumns_(adminSheet)) resetAdminRuntimeState_();
+      return { created: false, adminId: ADMIN_ID, sheet: adminSheet };
+    }
     writeInitialAdminRow_(adminSheet);
+    resetAdminRuntimeState_();
   } finally {
     lock.releaseLock();
   }
   return { created: true, adminId: ADMIN_ID, sheet: adminSheet };
+}
+
+function clearLegacyAdminColumns_(sheet) {
+  const legacyColumnCount = Math.max(Number(sheet.getLastColumn() || 0) - ADMIN_SHEET_HEADERS.length, 0);
+  if (!legacyColumnCount) return false;
+  const rowCount = Math.max(sheet.getLastRow(), 3);
+  const legacyRange = sheet.getRange(1, ADMIN_SHEET_HEADERS.length + 1, rowCount, legacyColumnCount);
+  const hasLegacyContent = legacyRange.getValues().some(function(row) {
+    return row.some(function(value) { return value !== '' && value != null; });
+  });
+  if (!hasLegacyContent) return false;
+  legacyRange.clearContent();
+  SpreadsheetApp.flush();
+  return true;
+}
+
+function resetAdminRuntimeState_() {
+  revokeAllAdminSessions_();
+  clearLoginFailure_(ADMIN_LOGIN_RATE_KEY);
 }
 
 function getAdminSheet_() {
@@ -512,7 +538,8 @@ function isAdminSheetReady_(data) {
 
 function writeInitialAdminRow_(sheet) {
   const clearRows = Math.max(sheet.getLastRow(), 3);
-  sheet.getRange(1, 1, clearRows, ADMIN_SHEET_HEADERS.length).clearContent();
+  const clearColumns = Math.max(sheet.getLastColumn(), ADMIN_SHEET_HEADERS.length);
+  sheet.getRange(1, 1, clearRows, clearColumns).clearContent();
   sheet.getRange(1, 1, 3, ADMIN_SHEET_HEADERS.length).setValues([
     ADMIN_SHEET_HEADERS,
     [ADMIN_TEMP_CATEGORY, ADMIN_ID, ADMIN_INITIAL_PASSWORD, 'init pw', ADMIN_ACTIVE_STATUS],
@@ -539,8 +566,7 @@ function initializeAdminAccount() {
 
 function resetAdminAccount() {
   writeInitialAdminRow_(getAdminSheet_());
-  revokeAllAdminSessions_();
-  clearLoginFailure_(ADMIN_LOGIN_RATE_KEY);
+  resetAdminRuntimeState_();
   console.log('관리자 계정을 임시 비밀번호 상태로 초기화했습니다.');
   console.log('관리자 아이디: ' + ADMIN_ID);
   console.log('초기 비밀번호: ' + ADMIN_INITIAL_PASSWORD);

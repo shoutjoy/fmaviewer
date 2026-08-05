@@ -42,6 +42,14 @@ function createMockSheet() {
       }
       return 0;
     },
+    getLastColumn() {
+      return cells.reduce((lastColumn, row) => {
+        for (let column = row.length; column > 0; column -= 1) {
+          if (row[column - 1] !== '' && row[column - 1] != null) return Math.max(lastColumn, column);
+        }
+        return lastColumn;
+      }, 0);
+    },
     getRange(startRow, startColumn, numRows = 1, numColumns = 1) {
       return {
         getValues() {
@@ -239,15 +247,33 @@ context.revokeAdminSession_(changedAdminLogin.adminSessionToken);
 assert.equal(context.validateAdminSession_(changedAdminLogin.adminSessionToken), null);
 
 adminSheet = createMockSheet();
-adminSheet.getRange(1, 1, 3, 5).setValues([
-  ['Category', 'ID', 'PW', 'etc', 'status'],
-  ['Temporary', 'admin', 'a1234567890', 'init pw', 'active'],
-  ['In fact', '', '', '', '']
+adminSheet.getRange(1, 1, 3, 7).setValues([
+  ['Category', 'ID', 'PW', 'etc', 'status', 'passwordChangeRequired', 'updatedAt'],
+  ['Temporary', 'admin', 'a1234567890', 'init pw', 'active', true, new Date()],
+  ['In fact', '', '', 'pbkdf2-sha256-v1', 'inactive', '', '']
 ]);
+for (let attempt = 0; attempt < 5; attempt += 1) {
+  context.recordLoginFailure_('fma-admin-login:admin');
+}
+const staleAdminSession = context.createAdminSession_('admin');
+assert.equal(context.getLoginRateLimit_('fma-admin-login:admin').locked, true);
 const existingLayoutParams = JSON.parse(context.getAdminLoginParametersResponse_('admin').getContent());
 assert.equal(existingLayoutParams.success, true);
 assert.equal(existingLayoutParams.bootstrapPasswordRequired, true);
 assert.equal(adminSheet.snapshot()[1][2], 'a1234567890', '기존 Category/ID/PW 시트 구조를 덮어쓰면 안 됩니다.');
+assert.deepEqual(
+  adminSheet.snapshot().slice(0, 3).map((row) => row.slice(5, 7)),
+  [['', ''], ['', ''], ['', '']],
+  '이전 관리자 스키마의 passwordChangeRequired/updatedAt 열 값은 자동 정리되어야 합니다.'
+);
+assert.equal(context.getLoginRateLimit_('fma-admin-login:admin').locked, false, '스키마 복구 시 관리자 로그인 잠금도 해제해야 합니다.');
+assert.equal(context.validateAdminSession_(staleAdminSession.token), null, '스키마 복구 시 이전 관리자 세션을 폐기해야 합니다.');
+const recoveredAdminLogin = JSON.parse(context.handleAdminLoginPost_({
+  adminId: 'admin',
+  bootstrapPassword: 'a1234567890'
+}).getContent());
+assert.equal(recoveredAdminLogin.adminAuthenticated, true, '복구 후 초기 관리자 비밀번호로 로그인할 수 있어야 합니다.');
+context.revokeAdminSession_(recoveredAdminLogin.adminSessionToken);
 
 for (let attempt = 0; attempt < 5; attempt += 1) {
   context.recordLoginFailure_('security.test@gmail.com');
