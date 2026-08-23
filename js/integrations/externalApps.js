@@ -43,6 +43,20 @@ const EXTERNAL_IMAGE_APPS = {
         version: "20260731-5",
         currentLabel: "현재 누끼 넣기",
         allLabel: "보관소 모두 넣기"
+    },
+    imageExtend: {
+        title: "imageExtend",
+        description: "FMA API 키를 사용하는 내장 Gemini 이미지 확장 앱입니다.",
+        path: "App_src/ai_image_extend/ai_image_studio_pro/dist/index.html",
+        version: "20260824-1",
+        currentLabel: "최근 결과 넣기",
+        allLabel: "결과 모두 넣기"
+    },
+    imageExtendGemini: {
+        title: "이미지확장 Gemini",
+        description: "공유 Gemini 이미지확장 앱을 별도 창에서 실행합니다.",
+        path: "https://share.gemini.google/6PqUcWBt5kPe",
+        external: true
     }
 };
 
@@ -67,6 +81,8 @@ function initExternalAppsFeature() {
     dom.btnOpenAuraGeminiApp.onclick = () => openExternalImageApp("auraGemini");
     dom.btnOpenBackgroundGeminiApp.onclick = () => openExternalImageApp("backgroundGemini");
     dom.btnOpenBgApp.onclick = () => openExternalImageApp("bg");
+    dom.btnOpenImageExtendApp.onclick = () => openExternalImageApp("imageExtend");
+    dom.btnOpenImageExtendGeminiApp.onclick = () => openExternalImageApp("imageExtendGemini");
     dom.btnCloseExternalApp.onclick = closeExternalImageApp;
     dom.btnReloadExternalApp.onclick = reloadExternalImageApp;
     dom.btnDockExternalApp.onclick = toggleExternalAppDock;
@@ -316,7 +332,9 @@ function refreshExternalAppButtons() {
         aura: typeof isAuraAppEnabled === "function" && isAuraAppEnabled(),
         auraGemini: typeof isAuraGeminiAppEnabled === "function" && isAuraGeminiAppEnabled(),
         backgroundGemini: typeof isBackgroundGeminiAppEnabled === "function" && isBackgroundGeminiAppEnabled(),
-        bg: typeof isBgRemoverAppEnabled === "function" && isBgRemoverAppEnabled()
+        bg: typeof isBgRemoverAppEnabled === "function" && isBgRemoverAppEnabled(),
+        imageExtend: typeof isImageExtendAppEnabled === "function" && isImageExtendAppEnabled(),
+        imageExtendGemini: typeof isImageExtendGeminiAppEnabled === "function" && isImageExtendGeminiAppEnabled()
     };
     dom.btnOpenStoryApp.style.display = visibility.story ? "inline-flex" : "none";
     dom.btnOpenStoryHtmlApp.style.display = visibility.storyHtml ? "inline-flex" : "none";
@@ -324,6 +342,8 @@ function refreshExternalAppButtons() {
     dom.btnOpenAuraGeminiApp.style.display = visibility.auraGemini ? "inline-flex" : "none";
     dom.btnOpenBackgroundGeminiApp.style.display = visibility.backgroundGemini ? "inline-flex" : "none";
     dom.btnOpenBgApp.style.display = visibility.bg ? "inline-flex" : "none";
+    dom.btnOpenImageExtendApp.style.display = visibility.imageExtend ? "inline-flex" : "none";
+    dom.btnOpenImageExtendGeminiApp.style.display = visibility.imageExtendGemini ? "inline-flex" : "none";
     dom.externalAppButtons.style.display =
         Object.values(visibility).some(Boolean) ? "flex" : "none";
 }
@@ -453,8 +473,8 @@ async function handleExternalAppMessage(event) {
         return;
     }
     if (data.type === "fma-app-request-source-images" &&
-        ["aura", "bg", "storyHtml"].includes(data.app)) {
-        if (["bg", "storyHtml"].includes(data.app) && data.mode === "picker") {
+        ["aura", "bg", "storyHtml", "imageExtend"].includes(data.app)) {
+        if (["bg", "storyHtml", "imageExtend"].includes(data.app) && data.mode === "picker") {
             openExternalAppFmaPicker(data.requestId, data.app);
         } else {
             sendFmaSourceImagesToExternalApp(data.app, data.requestId, data.mode);
@@ -614,7 +634,9 @@ function openExternalAppFmaPicker(requestId, appKey = externalAppState.key || "b
     externalAppState.sourcePickerRequestId = requestId || `${appKey}-picker-${Date.now()}`;
     externalAppState.sourcePickerApp = appKey;
     externalAppState.sourcePickerIndex = -1;
-    const label = appKey === "storyHtml" ? "Story Image 참고 이미지" : "BG Remover";
+    const label = appKey === "storyHtml"
+        ? "Story Image 참고 이미지"
+        : appKey === "imageExtend" ? "imageExtend" : "BG Remover";
     const title = document.getElementById("externalAppFmaPickerTitle");
     const description = title?.parentElement?.querySelector("p");
     if (title) title.innerText = "FMA 갤러리에서 이미지 선택";
@@ -731,7 +753,8 @@ async function importExternalAppImages(payload, appKey) {
         story: "story-app",
         storyHtml: "story-html-app",
         aura: "aura-app",
-        bg: "bg-remover-app"
+        bg: "bg-remover-app",
+        imageExtend: "image-extend-app"
     }[appKey] || "app-import";
     images.slice(firstIndex).forEach((item, index) => {
         item.group = sourceGroup;

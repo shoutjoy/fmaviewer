@@ -32,6 +32,7 @@ GAS는 웹 앱 하나만 배포합니다. 인증 메일 발신 계정인 `shoutj
 인증 모듈 관련 문서는 다음 위치에서 확인할 수 있습니다.
 
 - [Auth 모듈 안내](Auth/README.md)
+- [개발자 인증 ON/OFF 모드](AuthData/README.md)
 - [최신 Code.gs 적용 및 GAS 재배포](Auth/UPDATE_GUIDE.md)
 - [다른 앱 연결 빠른 가이드](Auth/connect/README.md)
 - [다른 앱 연결 상세 가이드](Auth/connect/connet.md)

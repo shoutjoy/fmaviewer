@@ -17,6 +17,8 @@ const AURA_APP_ENABLED_STORAGE = "fma_aura_app_enabled";
 const AURA_GEMINI_APP_ENABLED_STORAGE = "fma_aura_gemini_app_enabled";
 const BACKGROUND_GEMINI_APP_ENABLED_STORAGE = "fma_background_gemini_app_enabled";
 const BG_REMOVER_APP_ENABLED_STORAGE = "fma_bg_remover_app_enabled";
+const IMAGE_EXTEND_APP_ENABLED_STORAGE = "fma_image_extend_app_enabled";
+const IMAGE_EXTEND_GEMINI_APP_ENABLED_STORAGE = "fma_image_extend_gemini_app_enabled";
 const DEFAULT_AI_UPSCALE_PROMPT =
     "Upscale this exact image to a higher resolution. Preserve the original composition, identity, " +
     "facial features, body proportions, text, colors, lighting, textures, and every visible detail. " +
@@ -239,6 +241,14 @@ function isBgRemoverAppEnabled() {
     return readUpscaleSetting(BG_REMOVER_APP_ENABLED_STORAGE, "true") === "true";
 }
 
+function isImageExtendAppEnabled() {
+    return readUpscaleSetting(IMAGE_EXTEND_APP_ENABLED_STORAGE, "true") === "true";
+}
+
+function isImageExtendGeminiAppEnabled() {
+    return readUpscaleSetting(IMAGE_EXTEND_GEMINI_APP_ENABLED_STORAGE, "false") === "true";
+}
+
 function getAiUpscalePrompt() {
     return readUpscaleSetting(AI_UPSCALE_PROMPT_STORAGE, DEFAULT_AI_UPSCALE_PROMPT)
         || DEFAULT_AI_UPSCALE_PROMPT;
@@ -264,6 +274,8 @@ function openUpscaleSettings() {
     dom.enableAuraGeminiApp.checked = isAuraGeminiAppEnabled();
     dom.enableBackgroundGeminiApp.checked = isBackgroundGeminiAppEnabled();
     dom.enableBgRemoverApp.checked = isBgRemoverAppEnabled();
+    dom.enableImageExtendApp.checked = isImageExtendAppEnabled();
+    dom.enableImageExtendGeminiApp.checked = isImageExtendGeminiAppEnabled();
     dom.aiUpscaleResolution.value = getAiUpscaleResolution();
     dom.aiStudioApiKey.type = "password";
     dom.btnToggleApiKey.innerText = "표시";
@@ -354,6 +366,8 @@ function saveUpscaleSettings() {
     writeUpscaleSetting(AURA_GEMINI_APP_ENABLED_STORAGE, String(dom.enableAuraGeminiApp.checked));
     writeUpscaleSetting(BACKGROUND_GEMINI_APP_ENABLED_STORAGE, String(dom.enableBackgroundGeminiApp.checked));
     writeUpscaleSetting(BG_REMOVER_APP_ENABLED_STORAGE, String(dom.enableBgRemoverApp.checked));
+    writeUpscaleSetting(IMAGE_EXTEND_APP_ENABLED_STORAGE, String(dom.enableImageExtendApp.checked));
+    writeUpscaleSetting(IMAGE_EXTEND_GEMINI_APP_ENABLED_STORAGE, String(dom.enableImageExtendGeminiApp.checked));
     writeUpscaleSetting(AI_RESOLUTION_STORAGE, dom.aiUpscaleResolution.value === "4K" ? "4K" : "2K");
     closeUpscaleSettings();
 

@@ -1,0 +1,2 @@
+# Developer-only authentication control panel. Runtime mode files remain deployable.
+AuthData/AuthSwitch.html

@@ -7,7 +7,7 @@
     <title>FMA Viewer Ultra</title>
 
     <!-- Project Styles -->
-    <link rel="stylesheet" href="css/styles.css?v=20260804-4">
+    <link rel="stylesheet" href="css/styles.css?v=20260824-1">
     <link rel="stylesheet" href="Auth/auth.css?v=20260804-6">
 
     <!-- JSZip CDN -->
@@ -145,6 +145,10 @@
             style="display:none;" title="공유 Gemini Aura 앱을 새 탭에서 열기"><span class="app-icon">G</span><span class="app-label">Aura Gemini ↗</span></button>
         <button id="btnOpenBackgroundGeminiApp" class="external-app-button background-gemini" type="button"
             style="display:none;" title="공유 Gemini 배경생성 앱을 새 탭에서 열기"><span class="app-icon">B</span><span class="app-label">배경생성 Gemini ↗</span></button>
+        <button id="btnOpenImageExtendApp" class="external-app-button image-extend" type="button"
+            style="display:none;" title="내장 imageExtend 이미지 확장 앱 열기"><span class="app-icon">↔</span><span class="app-label">imageExtend</span></button>
+        <button id="btnOpenImageExtendGeminiApp" class="external-app-button image-extend-gemini" type="button"
+            style="display:none;" title="공유 Gemini 이미지확장 앱을 새 탭에서 열기"><span class="app-icon">E</span><span class="app-label">이미지확장 Gemini ↗</span></button>
     </nav>
 
     <div class="layout">
@@ -325,6 +329,7 @@
                         <span>FMA Viewer</span>
                         <span>Aura Image</span>
                         <span>BG Remover</span>
+                        <span>imageExtend</span>
                     </div>
                     <div class="shared-api-actions">
                         <button id="btnApplySharedApiKey" class="shared-api-apply" type="button">AI API Key 적용</button>
@@ -383,6 +388,13 @@
                     </span>
                 </label>
                 <label class="settings-check">
+                    <input id="enableImageExtendApp" type="checkbox">
+                    <span>
+                        <strong>imageExtend 내장 앱 버튼 표시</strong>
+                        <small>로컬 이미지 확장 앱을 내부 창에서 열고 FMA API 키로 생성한 결과를 가져옵니다.</small>
+                    </span>
+                </label>
+                <label class="settings-check">
                     <input id="enableStoryApp" type="checkbox">
                     <span>
                         <strong>Story Gemini 앱 버튼 표시</strong>
@@ -401,6 +413,13 @@
                     <span>
                         <strong>배경생성 Gemini 앱 버튼 표시</strong>
                         <small>공유 Gemini 배경생성 앱을 새 탭에서 엽니다. FMA API 키를 사용하지 않습니다.</small>
+                    </span>
+                </label>
+                <label class="settings-check">
+                    <input id="enableImageExtendGeminiApp" type="checkbox">
+                    <span>
+                        <strong>이미지확장 Gemini 앱 버튼 표시</strong>
+                        <small>공유 Gemini 이미지확장 앱을 새 탭에서 엽니다. FMA API 키를 사용하지 않습니다.</small>
                     </span>
                 </label>
 
@@ -1948,26 +1967,24 @@
     </div>
 
     <!-- Project Scripts (Modularized) -->
-    <script src="js/core/globals.js?v=20260804-1"></script>
+    <script src="js/core/globals.js?v=20260824-1"></script>
     <script src="js/storage/database.js?v=20260804-2"></script>
     <script src="js/gallery/gallery.js?v=20260804-1"></script>
     <script src="js/image/imageMetadata.js?v=20260802-1"></script>
     <script src="js/gallery/preview.js?v=20260802-1"></script>
     <script src="js/video/videoEditor.js?v=20260802-1"></script>
     <script src="js/image/crop.js?v=20260802-1"></script>
-    <script src="js/image/imageUpscale.js?v=20260802-2"></script>
+    <script src="js/image/imageUpscale.js?v=20260824-1"></script>
     <script src="js/ai/aiJena.js?v=20260802-1"></script>
     <script src="js/image/imageEditor.js?v=20260802-1"></script>
     <script src="js/image/backgroundMaskEditor.js?v=20260802-1"></script>
     <script src="js/image/backgroundRemove.js?v=20260802-1"></script>
     <script src="js/files/fileHandlers.js?v=20260804-2"></script>
-    <script src="js/integrations/externalApps.js?v=20260804-1"></script>
+    <script src="js/integrations/externalApps.js?v=20260824-1"></script>
     <script src="js/core/interaction.js?v=20260802-1"></script>
-    <script src="Auth/gas/version.generated.js?v=20260805-15"></script>
-    <script src="Auth/settings.js?v=20260805-15"></script>
-    <script src="Auth/config.js?v=20260805-15"></script>
-    <script src="Auth/modal.js?v=20260804-7"></script>
-    <script src="Auth/client.js?v=20260805-15"></script>
+    <script src="AuthData/deployment-mode.js?v=20260805-1"></script>
+    <script src="AuthData/auth-mode.js?v=20260805-1"></script>
+    <script src="AuthData/auth-bootstrap.js?v=20260805-1"></script>
     <script src="js/core/navigationGuard.js?v=20260802-1"></script>
     <script src="js/core/app.js?v=20260804-1"></script>
 </body>

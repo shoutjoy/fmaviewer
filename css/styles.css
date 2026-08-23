@@ -311,6 +311,18 @@ header button.active {
     background: rgba(65, 165, 225, .1);
 }
 
+.external-app-button.image-extend {
+    color: #f0d7ff;
+    border-color: rgba(205, 130, 255, .38);
+    background: rgba(160, 80, 225, .12);
+}
+
+.external-app-button.image-extend-gemini {
+    color: #ffe4b5;
+    border-color: rgba(255, 184, 92, .36);
+    background: rgba(235, 145, 55, .11);
+}
+
 html[data-theme="light"] .external-app-buttons {
     border-color: rgba(26, 42, 64, .16);
     background: rgba(247, 249, 252, .9);

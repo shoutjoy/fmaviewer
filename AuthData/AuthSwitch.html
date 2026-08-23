@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex,nofollow,noarchive">
+    <title>FMA 개발자 인증 스위치</title>
+    <style>
+        :root { color-scheme: dark; font-family: Inter, Pretendard, "Noto Sans KR", sans-serif; }
+        * { box-sizing: border-box; }
+        body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #0b1020; color: #eef3ff; }
+        main { width: min(560px, calc(100% - 32px)); padding: 32px; border: 1px solid #26314e; border-radius: 20px; background: #131a2d; box-shadow: 0 24px 80px #0008; }
+        h1 { margin: 0 0 10px; font-size: 26px; }
+        p { margin: 0 0 22px; color: #aebad3; line-height: 1.65; }
+        fieldset { display: grid; gap: 12px; margin: 0; padding: 0; border: 0; }
+        label { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; align-items: center; padding: 16px; border: 1px solid #33405e; border-radius: 14px; cursor: pointer; }
+        label:has(input:checked) { border-color: #68a5ff; background: #17294a; }
+        input { width: 20px; height: 20px; accent-color: #68a5ff; }
+        strong { font-size: 17px; }
+        small { grid-column: 2; color: #9ba8c4; line-height: 1.45; }
+        .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+        button, a { min-height: 44px; padding: 0 18px; border-radius: 11px; font: inherit; font-weight: 700; }
+        button { border: 0; background: #68a5ff; color: #071226; cursor: pointer; }
+        a { display: inline-flex; align-items: center; border: 1px solid #3a4868; color: #dce7ff; text-decoration: none; }
+        #status { min-height: 24px; margin: 18px 0 0; color: #83e6af; }
+        .warning { margin-top: 20px; padding-top: 18px; border-top: 1px solid #293650; font-size: 13px; color: #8996b2; }
+    </style>
+</head>
+
+<body>
+    <main>
+        <h1>개발자 인증 스위치</h1>
+        <p>로컬 개발 환경에서 FMA Viewer의 사용자 인증을 켜거나 끕니다. 기본 배포 상태는 인증 ON입니다.</p>
+
+        <fieldset aria-label="인증 상태 선택">
+            <label>
+                <input type="radio" name="authMode" value="on" checked>
+                <strong>ON — 인증 사용</strong>
+                <small>현재와 동일하게 로그인·이메일 인증·세션 검사를 실행합니다.</small>
+            </label>
+            <label>
+                <input type="radio" name="authMode" value="off">
+                <strong>OFF — 인증 사용 안 함</strong>
+                <small>로그인 화면과 인증 서버 통신 없이 앱을 바로 실행합니다.</small>
+            </label>
+        </fieldset>
+
+        <div class="actions">
+            <button id="saveButton" type="button">선택 적용</button>
+            <button id="deploymentButton" type="button">배포 설정 파일 저장</button>
+            <a href="../index.html">앱 열기</a>
+        </div>
+        <p id="status" role="status" aria-live="polite"></p>
+        <p class="warning">이 페이지는 개발 전용이며 Vercel 배포 파일에서 제외됩니다. 배포 모드는 생성된 <code>deployment-mode.js</code>를 현재 <code>AuthData</code> 폴더에 저장해 확정합니다.</p>
+    </main>
+
+    <script src="auth-mode.js"></script>
+    <script>
+        (function initializeDeveloperSwitch() {
+            "use strict";
+
+            const modeInfo = window.FMAAuthMode || {};
+            const status = document.getElementById("status");
+            const selected = document.querySelector(`input[name="authMode"][value="${modeInfo.mode === "off" ? "off" : "on"}"]`);
+            if (selected) selected.checked = true;
+
+            if (!modeInfo.localDevelopment) {
+                document.getElementById("saveButton").disabled = true;
+                status.textContent = "안전상 이 스위치는 localhost 또는 file:// 환경에서만 변경할 수 있습니다.";
+                return;
+            }
+
+            document.getElementById("saveButton").addEventListener("click", () => {
+                const mode = getSelectedMode();
+                try {
+                    localStorage.setItem(modeInfo.storageKey || "fma_developer_auth_mode_v1", mode);
+                    status.textContent = `인증 ${mode.toUpperCase()}가 적용되었습니다. 앱을 새로 열거나 새로고침하세요.`;
+                } catch (error) {
+                    status.textContent = `설정을 저장하지 못했습니다: ${error.message}`;
+                }
+            });
+
+            function getSelectedMode() {
+                return document.querySelector('input[name="authMode"]:checked')?.value === "off" ? "off" : "on";
+            }
+
+            document.getElementById("deploymentButton").addEventListener("click", async () => {
+                const mode = getSelectedMode();
+                const source = `// AuthSwitch.html에서 생성하는 배포 기본값입니다. "on"이 안전한 기본 상태입니다.\nwindow.FMA_AUTH_DEFAULT_MODE = "${mode}";\n`;
+                const blob = new Blob([source], { type: "text/javascript;charset=utf-8" });
+
+                try {
+                    if (typeof window.showSaveFilePicker === "function") {
+                        const handle = await window.showSaveFilePicker({
+                            suggestedName: "deployment-mode.js",
+                            types: [{ description: "JavaScript", accept: { "text/javascript": [".js"] } }]
+                        });
+                        const writable = await handle.createWritable();
+                        await writable.write(blob);
+                        await writable.close();
+                        status.textContent = `배포 기본값 ${mode.toUpperCase()} 파일을 저장했습니다. AuthData/deployment-mode.js를 선택했는지 확인하세요.`;
+                        return;
+                    }
+
+                    const url = URL.createObjectURL(blob);
+                    const anchor = document.createElement("a");
+                    anchor.href = url;
+                    anchor.download = "deployment-mode.js";
+                    anchor.click();
+                    setTimeout(() => URL.revokeObjectURL(url), 0);
+                    status.textContent = `배포 기본값 ${mode.toUpperCase()} 파일을 다운로드했습니다. AuthData/deployment-mode.js를 교체하세요.`;
+                } catch (error) {
+                    if (error?.name !== "AbortError") status.textContent = `배포 설정 파일을 저장하지 못했습니다: ${error.message}`;
+                }
+            });
+        })();
+    </script>
+</body>
+
+</html>
